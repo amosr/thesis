@@ -1,0 +1,294 @@
+% ********************************************************************
+% BUTCHERED FROM
+% classicthesis.sty
+%
+% Copyright (C) 2015 André Miede http://www.miede.de
+%
+% If you like the style then I would appreciate a postcard. My address
+% can be found in the file ClassicThesis.pdf. A collection of the
+% postcards I received so far is available online at
+% http://postcards.miede.de
+%
+% License:
+% This program is free software; you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation; either version 2 of the License, or
+% (at your option) any later version.
+%
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+%
+% You should have received a copy of the GNU General Public License
+% along with this program; see the file COPYING.  If not, write to
+% the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+% Boston, MA 02111-1307, USA.
+%
+% ********************************************************************
+% Important:
+%
+% This style can also be used without the thesis template.
+% It works with both LaTeX and PDFLaTeX now. XeLaTeX should also work.
+%
+% * You must not use "u etc. in strings/commands that will be spaced out
+%   (use \"u or real umlauts instead)
+% * There is a problem with the case of math text in part-,
+%   chapter-, and section titles (either the case or the spacing breaks).
+%   => this can be fixed by using pdftex 1.40 or later and enabling the
+%      option pdfspacing of this package
+%
+% ********************************************************************
+
+\RequirePackage{ifthen}
+    \newboolean{@drafting} % print version information on pages
+    \newboolean{@manychapters} % additional space in ToC after chapter number (if two digits are needed)
+    \newboolean{@floatperchapter} % numbering per chapter for all floats (i.e., Figure 1.1)
+
+% ********************************************************************
+% Options
+% ********************************************************************
+\DeclareOption{drafting}{\setboolean{@drafting}{true}}
+\DeclareOption{manychapters}{\setboolean{@manychapters}{true}}
+\DeclareOption{floatperchapter}{\setboolean{@floatperchapter}{true}}
+\ProcessOptions\relax
+
+
+% ********************************************************************
+% Colors
+% ********************************************************************
+\PassOptionsToPackage{dvipsnames}{xcolor}
+  \RequirePackage{xcolor}
+\definecolor{halfgray}{gray}{0.55}
+
+% ********************************************************************
+% Font Stuff
+% ********************************************************************
+\PassOptionsToPackage{osf,sc}{mathpazo}%
+  \RequirePackage{mathpazo} % Palatino with real small caps and old style figures
+  \linespread{1.05} % a bit more for Palatino
+
+% ********************************************************************
+% Textblock size
+%*******************************************************
+\@ifpackageloaded{typearea}%
+    {\relax}{%
+        \RequirePackage{typearea}%
+    }
+
+\PackageInfo{classicthesis}{A4 paper, Palatino or other}
+\areaset[5mm]{160mm}{250mm} % ~ 336 * factor 2 + 33 head + 42 \the\footskip
+
+% ********************************************************************
+% Own Stuff
+% ********************************************************************
+% Disable single lines at the start of a paragraph (Schusterjungen)
+\clubpenalty = 10000
+% Disable single lines at the end of a paragraph (Hurenkinder)
+\widowpenalty = 10000
+\displaywidowpenalty = 10000 % formulas
+
+% Enumeration environment with small caps
+\newenvironment{aenumerate}
+    {\def\theenumi{\textsc{\alph{enumi}}}%
+     \enumerate}
+    {\endenumerate}
+
+% ********************************************************************
+% Fancy Stuff
+% ********************************************************************
+\RequirePackage{booktabs} % for better rules in tables
+\RequirePackage{textcase} % for \MakeTextUppercase
+\RequirePackage{microtype}
+
+\microtypesetup{expansion=false}%
+\DeclareRobustCommand{\spacedallcaps}[1]{\textls[160]{\MakeTextUppercase{#1}}}%
+\DeclareRobustCommand{\spacedallcapsX}[1]{\textls[480]{\MakeTextUppercase{#1}}}%
+\DeclareRobustCommand{\spacedlowsmallcaps}[1]{\textls[80]{\scshape\MakeTextLowercase{#1}}}%
+
+% ********************************************************************
+% headlines
+% ********************************************************************
+\PassOptionsToPackage{automark}{scrlayer-scrpage}
+    \RequirePackage{scrlayer-scrpage} % provides headers and footers (KOMA Script)
+    \clearscrheadings
+    \renewcommand{\chaptermark}[1]{\markboth{\footnotesize #1}{\footnotesize #1}}
+    \renewcommand{\sectionmark}[1]{\markright{\footnotesize \thesection\enspace\spacedallcaps{#1}}}
+    \lehead{\mbox{\llap{\footnotesize\thepage\kern2em}\headmark\hfil}}
+    \rohead{\mbox{\hfil{\headmark}\rlap{\footnotesize\kern2em\thepage}}}
+    \renewcommand{\headfont}{}
+    % hack to get the content headlines right (thanks, Lorenzo!)
+        \def\toc@heading{%
+            \chapter*{\contentsname}%chapters
+            \@mkboth{\contentsname}{\contentsname}}
+
+% disable on plain pagestyle
+  \let\ps@plain\ps@empty
+
+
+
+% ********************************************************************
+% layout of the chapter-, section-, subsection-, subsubsection-,
+% paragraph and description-headings
+% ********************************************************************
+\RequirePackage{titlesec}
+        % parts
+    % chapters
+    \titleformat{\chapter}[display]%
+        {\titlerule}
+        { \center{\color{halfgray}\spacedallcaps{\Large CHAPTER \thechapter}} }
+        {0pt}%
+        {\large \center\spacedallcapsX}
+        [\normalsize\vspace*{.6\baselineskip}\titlerule]%
+    % sections \FloatBarrier
+    \titleformat{\section}
+        {\relax}{\textsc{\MakeTextLowercase{\thesection}}}{1em}{\spacedallcaps}
+    % subsections
+    \titleformat{\subsection}
+        {\relax}{\textsc{\MakeTextLowercase{\thesubsection}}}{1em}{\normalsize\itshape}
+    % subsubsections
+    \titleformat{\subsubsection}
+        {\relax}{\textsc{\MakeTextLowercase{\thesubsubsection}}}{1em}{\normalsize\itshape}
+    % paragraphs
+    \titleformat{\paragraph}[runin]
+        {\normalfont\normalsize}{\theparagraph}{0pt}{\spacedlowsmallcaps}
+    % descriptionlabels
+        \renewcommand{\descriptionlabel}[1]{\hspace*{\labelsep}\spacedlowsmallcaps{#1}}   % spacedlowsmallcaps textit textsc
+    % spacing
+        \titlespacing*{\chapter}{0pt}{1\baselineskip}{1.2\baselineskip}
+    \titlespacing*{\section}{0pt}{1.25\baselineskip}{1\baselineskip}
+    \titlespacing*{\subsection}{0pt}{1.25\baselineskip}{1\baselineskip}
+    \titlespacing*{\paragraph}{0pt}{1\baselineskip}{1\baselineskip}
+
+% ********************************************************************
+% layout of the TOC, LOF and LOT (LOL-workaround see next section)
+% ********************************************************************
+\PassOptionsToPackage{titles}{tocloft}
+    \RequirePackage{tocloft}
+    % avoid page numbers being right-aligned in fixed-size box
+    \newlength{\newnumberwidth}
+    \settowidth{\newnumberwidth}{999} % yields overfull hbox warnings for pages > 999
+    \cftsetpnumwidth{\newnumberwidth}
+
+    % have the bib neatly positioned after the rest
+    \newlength{\beforebibskip}
+    \setlength{\beforebibskip}{0em}
+
+    % space for more than nine chapters
+    \newlength{\newchnumberwidth}
+    \settowidth{\newchnumberwidth}{.} % <--- tweak here if more space required
+    \ifthenelse{\boolean{@manychapters}}% <--- many chapters option
+    {%
+        \addtolength{\cftchapnumwidth}{\newchnumberwidth}%
+        \addtolength{\cftsecnumwidth}{\newchnumberwidth}
+        \addtolength{\cftsecindent}{\newchnumberwidth}
+        \addtolength{\cftsubsecnumwidth}{\newchnumberwidth}
+        \addtolength{\cftsubsecindent}{2\newchnumberwidth}
+        \addtolength{\cftsubsubsecnumwidth}{\newchnumberwidth}
+      }{\relax}%
+
+    % pagenumbers right after the titles
+    % parts
+    % chapters
+    \renewcommand{\cftchappresnum}{\scshape\MakeTextLowercase}%
+    \renewcommand{\cftchapfont}{\normalfont}%
+    \renewcommand{\cftchappagefont}{\normalfont}%
+            %\setlength{\cftbeforechapskip}{.1em}%
+    % sections
+        \renewcommand{\cftsecpresnum}{\scshape\MakeTextLowercase}%
+        \renewcommand{\cftsecfont}{\normalfont}%
+      \renewcommand{\cftsecpagefont}{\normalfont}%
+    % subsections
+        \renewcommand{\cftsubsecpresnum}{\scshape\MakeTextLowercase}%
+        \renewcommand{\cftsubsecfont}{\normalfont}%
+    % subsubsections
+        \renewcommand{\cftsubsubsecpresnum}{\scshape\MakeTextLowercase}%
+        \renewcommand{\cftsubsubsecfont}{\normalfont}%
+    % figures
+        \renewcommand{\cftfigpresnum}{\scshape\MakeTextLowercase}%
+        \renewcommand{\cftfigfont}{\normalfont}%
+      \renewcommand{\cftfigpresnum}{\figurename~}%Fig.~}
+      \newlength{\figurelabelwidth}
+      \settowidth{\figurelabelwidth}{\cftfigpresnum~999}
+      \addtolength{\figurelabelwidth}{2.5em}
+      \cftsetindents{figure}{0em}{\figurelabelwidth}
+    % tables
+        \renewcommand{\cfttabpresnum}{\scshape\MakeTextLowercase}%
+        \renewcommand{\cfttabfont}{\normalfont}%
+      \renewcommand{\cfttabpresnum}{\tablename~}%Tab.~}
+      \newlength{\tablelabelwidth}
+      \settowidth{\tablelabelwidth}{\cfttabpresnum~999}
+      \addtolength{\tablelabelwidth}{2.5em}
+      %\cftsetindents{table}{0em}{\tablelabelwidth}
+      \cftsetindents{table}{0em}{\figurelabelwidth}
+    % listings
+
+    % dirty work-around to get the spacing after the toc/lot/lof-titles right
+            \AtBeginDocument{\addtocontents{toc}{\protect\vspace{-\cftbeforechapskip}}}
+
+    % another dirty work-around to get the spaced low small caps into the toc ;-(
+%% use modified \chapter (thanks to Hinrich Harms)
+         \let\oldchap=\chapter
+         \renewcommand*{\chapter}{%
+                 \secdef{\Chap}{\ChapS}%
+         }
+         \newcommand\ChapS[1]{\oldchap*{#1}}%
+         \newcommand\Chap[2][]{%
+                 \oldchap[\texorpdfstring{\spacedallcaps{#1}}{#1}]{#2}%
+         }%
+
+    % yet another dirty work-around to get the spaced low small caps into the toc ;-(
+
+    \newcommand{\tocEntry}[1]{% for bib, etc.
+        \texorpdfstring{\spacedallcaps{#1}}{#1}%
+    }
+
+% ********************************************************************
+% footnotes setup
+% ********************************************************************
+\ifdefined\deffootnote
+  % KOMA-command, footnotemark not superscripted at the bottom
+  \deffootnote{0em}{0em}{\thefootnotemark\hspace*{.5em}}%
+  \message{Using KOMA-command "deffootnote" for footnote setup}%
+\else
+    \PassOptionsToPackage{flushmargin}{footmisc}%
+    \RequirePackage{footmisc}%
+    \setlength{\footnotemargin}{-.5em}%
+    \PackageWarningNoLine{classicthesis}{Using package "footmisc" with option %
+        "flushmargin" for footnote setup (not 100\% the same as with KOMA)}%
+\fi
+
+% ********************************************************************
+% Drafting Stuff
+% ********************************************************************
+\RequirePackage{scrtime} % time access
+\newcommand{\finalVersionString}{\relax}
+\providecommand{\myVersion}{$\!\!$} % w/o classicthesis-config.tex
+\ifthenelse{\boolean{@drafting}}{%
+        \PassOptionsToPackage{draft}{prelim2e}
+        \RequirePackage{prelim2e}
+        \renewcommand{\PrelimWords}{\relax}
+        \renewcommand{\PrelimText}{\footnotesize[\,\today\ at \thistime]}
+}{\renewcommand{\finalVersionString}{\emph{Final Version} as of \today\ (\texttt{classicthesis}~\myVersion).}}
+
+% ********************************************************************
+% Caption numbering now w/o chapter number
+% ********************************************************************
+\ifthenelse{\boolean{@floatperchapter}}{%
+\relax
+}{%
+    \RequirePackage{remreset}%
+    \makeatletter%
+            \@removefromreset{table}{chapter}  % requires remreset package
+        \renewcommand{\thetable}{\arabic{table}}%
+    \makeatother%
+    \makeatletter%
+            \@removefromreset{figure}{chapter}  % requires remreset package
+        \renewcommand{\thefigure}{\arabic{figure}}%
+    \makeatother%
+    \makeatletter%
+            \@removefromreset{equation}{chapter}  % requires remreset package
+        \renewcommand{\theequation}{\arabic{equation}}%
+    \makeatother%
+}
+

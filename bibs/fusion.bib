@@ -1,58 +1,66 @@
 % -- A --
+@inproceedings{ashby2006iterative,
+  author    = {Thomas J. Ashby and
+               Michael F. P. O'Boyle},
+  title     = {Iterative Collective Loop Fusion},
+  booktitle = {CC: Compiler Construction},
+  year      = {2006}
+}
 
 % -- B --
 
 % -- C --
-@inproceedings{chakravarty2001functional,
-  title={Functional array fusion},
-  author={Chakravarty, M.M.T. and Keller, G.},
-  booktitle={ACM SIGPLAN Notices},
-  volume={36},
-  number={10},
-  pages={205--216},
-  year={2001},
-  organization={ACM}
-}
-
 @article{chakravarty2003approach,
   title={An approach to fast arrays in {H}askell},
   author={Chakravarty, M. and Keller, G.},
   journal={Advanced Functional Programming},
-  pages={1948--1948},
   year={2003},
   publisher={Springer}
 }
 
-@INPROCEEDINGS{coutts2007streamfusion,
-    author = {Duncan Coutts and Roman Leshchinskiy and Don Stewart},
-    title = {Stream Fusion: From Lists to Streams to Nothing at All},
-    booktitle = {Proceedings of the International Conference of Functional Programming 2007},
-    year = {2007},
-    publisher = {}
+% Stream fusion paper, uses pull streams, relies on inlining, cannot do splits
+@inproceedings{coutts2007stream,
+  title={Stream fusion: From lists to streams to nothing at all},
+  author={Coutts, Duncan and Leshchinskiy, Roman and Stewart, Don},
+  booktitle={ACM SIGPLAN Notices},
+  year={2007},
 }
 
+
 % -- D --
+
+@inproceedings{darte2002contraction,
+  author    = {Alain Darte and
+               Guillaume Huard},
+  title     = {New Results on Array Contraction},
+  booktitle = {ASAP},
+  year      = {2002},
+}
+
+@inproceedings{darte1999complexity,
+  author    = {Alain Darte},
+  title     = {On the Complexity of Loop Fusion},
+  booktitle = {PACT: Parallel Architectures and Compilation Techniques},
+  year      = {1999}
+}
+
+
 
 % -- E --
 
 % -- F --
 
 % -- G --
-@inproceedings{gill1993shortcut,
+
+% Original short-cut fusion paper using foldr/build
+% Actually push-based, but inlining is inherently pull-based so ends up with worst of both.
+@inproceedings{gill1993short,
  author = {Gill, Andrew and Launchbury, John and Peyton Jones, Simon L.},
  title = {A short cut to deforestation},
  booktitle = {Proceedings of the conference on Functional programming languages and computer architecture},
  series = {FPCA '93},
  year = {1993},
- isbn = {0-89791-595-X},
- location = {Copenhagen, Denmark},
- pages = {223--232},
- numpages = {10},
- url = {http://doi.acm.org/10.1145/165180.165214},
- doi = {10.1145/165180.165214},
- acmid = {165214},
  publisher = {ACM},
- address = {New York, NY, USA},
 }
 
 % -- H --
@@ -60,6 +68,8 @@
 % -- I --
 
 % -- J --
+
+% Foldr/build fusion by implementing rewrite rules
 @MISC{jones2001playingby,
     author = {Peyton Jones, Simon L. and Andrew Tolmach and Tony Hoare},
     title = {Playing by the rules: rewriting as a practical optimisation technique in {GHC} },
@@ -68,8 +78,27 @@
 
 % -- K --
 
+% Pull-based stream fusion with staged computation.
+% Uses staged computation to ensure that inlining happens, but this causes duplication of work.
+@inproceedings{kiselyov2016stream,
+ author = {Kiselyov, Oleg and Biboudis, Aggelos and Palladinos, Nick and Smaragdakis, Yannis},
+ title = {Stream Fusion, to Completeness},
+ booktitle = {Proceedings of the 44th ACM SIGPLAN Symposium on Principles of Programming Languages},
+ year = {2017}
+}
+
+% A push-based database query thing. Running example is split, but does not deal with joins.
+@article{klonatos2014building,
+  title={Building efficient query engines in a high-level language},
+  author={Klonatos, Yannis and Koch, Christoph and Rompf, Tiark and Chafi, Hassan},
+  journal={Proceedings of the VLDB Endowment},
+  year={2014},
+}
+
+
+
 % -- L --
-@inproceedings{lippmeier2013flow,
+@inproceedings{lippmeier2013data,
     author = {Ben Lippmeier and Manuel M. T. Chakravarty and Gabrielle Keller and Amos Robinson},
     title = {Data Flow Fusion with Series Expressions in {H}askell},
     year = {2013},
@@ -84,6 +113,16 @@
   year={2013}
 }
 
+@inproceedings{mainland2013exploiting,
+  author    = {Geoffrey Mainland and
+               Roman Leshchinskiy and
+               Simon L. Peyton Jones},
+  title     = {Exploiting vector instructions with generalized stream fusion},
+  booktitle = {ICFP: International Conference on Functional Programming},
+  year      = {2013}
+}
+
+
 % -- N --
 
 % -- O --
@@ -95,6 +134,24 @@
 % -- R --
 
 % -- S --
+
+% Push-based: supports zips, explains that gill1993short doesn't
+@inproceedings{svenningsson2002shortcut,
+  title={Shortcut fusion for accumulating parameters \& zip-like functions},
+  author={Svenningsson, Josef},
+  booktitle={ACM SIGPLAN Notices},
+  year={2002},
+}
+
+% Support both pull and push arrays.
+% Rather than supporting arbitrary push arrays, they allow a limited set of combinators which can be easily implemented on push arrays (including those that can't be easily implemented as pull, for example append).
+@inproceedings{svensson2014defunctionalizing,
+  title={Defunctionalizing push arrays},
+  author={Svensson, Bo Joel and Svenningsson, Josef},
+  booktitle={Proceedings of the 3rd ACM SIGPLAN workshop on Functional high-performance computing},
+  year={2014},
+}
+
 
 % -- T --
 

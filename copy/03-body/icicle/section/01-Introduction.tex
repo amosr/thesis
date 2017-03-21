@@ -1,0 +1,56 @@
+%!TEX root = ../Main.tex
+\section{Introduction}
+\label{icicle:s:Introduction}
+
+At Ambiata we perform feature generation for machine learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2016 this was a lot of data.}
+For such applications we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
+We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
+Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion or incremental update then the cost of the computation would begin to exceed the salaries of the developers.
+
+For example queries, suppose we have a table, @stocks@, containing daily open and close prices for a set of companies. We want to compute the number of days where the open price exceeded the close price, and vice versa. We also want the mean of the open price for days in which the open price exceeded the close price. In Icicle we write the three queries as follows:
+
+\begin{code}
+table stocks { open : Int, close : Int }
+query 
+  more = filter open > close of count;
+  less = filter open < close of count;
+  mean = filter open > close of sum open / count;
+\end{code}
+
+In the above code, @open > close@ and @close < open@ are filter predicates, and @count@ counts how many times the predicate is true.
+
+Such a joint query can be converted to a back-end language like SQL, but doing so by hand is tedious and error prone. As the three queries use different filter predicates we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter. We must instead lift each predicate to an expression-level conditional and compute the count by summing the conditional:
+\begin{code}
+  SELECT SUM(IF(open > close, 1,    0))
+       , SUM(IF(open < close, 1,    0))
+       , SUM(IF(open > close, open, 0))
+       / SUM(IF(open > close, 1,    0))
+  FROM stocks;
+\end{code}
+
+As we see, the result of query fusion tends to have many common sub expressions, and we wish to guarantee that the duplicates in the fused result are eliminated.
+
+Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data. As a counter example, suppose we have a table with two fields @key@ and @value@, and we wish to find the mean of values whose key matches the last one in the table. We might try something like:
+\begin{code}
+  table kvs { key : Date; value : Real }
+  query avg = let k = last key
+              in  filter (key == k) of mean value;
+\end{code}
+
+Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally. While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start. We need a better solution. The contributions of this paper are:
+\begin{itemize}
+\item
+We present a domain specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received\sref{icicle:s:IcicleSource};
+
+\item
+We present a fold-based intermediate language, which allows the query fusion transformation to be a simple matter of appending two intermediate programs\sref{icicle:s:IcicleCore};
+
+\item
+We present production benchmarks of Icicle compiled code which outperforms an existing R feature generation system by several orders of magnitude\sref{icicle:s:Benchmarks}. 
+\end{itemize}
+
+% , and are on par with standard Unix utilities.
+% that conceptually perform less work.
+%\ben{I think this clause confuses the contribution. If if Icicle is "on par" with standard unix utilities, then why not just use those standard utilities? The point is that with Icicle we can also fuse multiple queries, and the fused code should be at least as good as the unix utils. However, fusing two instances of 'wc' won't be exactly 2x fast then running them sequentially, but still better than actually running them sequentially. There's no space to discuss the details in the intro.
+
+Icicle is related to stream processing languages such as Lucy~\cite{mandel2010lucy} and Streamit~\cite{thies2002streamit}, except we forgo the need for clock and deadlock analysis. Icicle is also related to work on continuous queries~\cite{arasu2003cql}, where query results are updated as rows are inserted into the source table, except we can also compute arbitrary reductions and do not need to handle deleted source rows. Our implementation is available at \url{https://github.com/ambiata/icicle}.

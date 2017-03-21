@@ -1,0 +1,191 @@
+%!TEX root = ../Main.tex
+
+\begin{figure*}
+
+$$
+\boxed{\SourceStepX{\RawMode}{\Sigma}{e}{V'}}
+$$
+$$
+\ruleAx
+{
+    \SourceStepX{n}{\Sigma}{V'}{V'}
+}{EVal}
+\ruleIN
+{
+    x~=~V'~\in~\Sigma
+}
+{
+    \SourceStepX{n}{\Sigma}{x}{V'}
+}{EVar}
+\ruleIN
+{
+  \SourceStepX{n'}{\Sigma}{e}{v}
+  \quad
+  \SourceStepX{n}{\Sigma,~x=v}{e'}{v'}
+}
+{
+  \SourceStepX
+    {n}
+    {\Sigma}
+    {@let@~(x~:~n'~\tau')~=~e~@in@~e'}
+    {v'}
+}{ELet}
+$$
+
+$$
+\ruleIN
+{
+    \SourceStepXP{\Sigma}{e}{\VValue{v}}
+}
+{
+    \SourceStepXE{\Sigma}{e}{\VStream{(\lam{\store} v)}}
+}{EBoxStream}
+\ruleIN
+{
+    \SourceStepXP{\Sigma}{e}{\VValue{v}}
+}
+{
+    \SourceStepXA{\Sigma}{e}{\VFold{()}{(\lam{\store~()} ())}{(\lam{()} v)}}
+}{EBoxFold}
+$$
+
+$$
+\ruleIN
+{
+  \{ \SourceStepXP{\Sigma}{e_i}{\VValue{v_i}} \}
+}
+{
+  \SourceStepXP
+    {\Sigma}
+    {p~\{ e_i \} }
+    {\VValue{(p~\{v_i\})}}
+}{EPrimValue}
+\ruleIN
+{
+  \{ \SourceStepXE{\Sigma}{e_i}{\VStream{v_i}} \}
+}
+{
+  \SourceStepXE
+    {\Sigma}
+    {p~\{ e_i \} }
+    {\VStream{(\lam{\store} p~\{v_i~\store\})}}
+}{EPrimStream}
+$$
+
+$$
+\ruleIN
+{
+  \{ \SourceStepXA{\Sigma}{e_i}{\VFold{z_i}{k_i}{j_i}} \}
+}
+{
+  \SourceStepXA{\Sigma}
+    {p~\{ e_i \} }
+    {\VFold
+      {(z_0 \times \cdots \times z_i)}
+      {(\lam{\store~(v_0 \times \cdots \times v_i)}
+        k_0~\store~v_0 \times \cdots \times k_i~\store~v_i)}
+      {(\lam{(v_0 \times \cdots \times v_i)}
+        p~\{j_i~v_i\})}}
+}{EPrimFold}
+$$
+
+$$
+\ruleIN
+{
+  \SourceStepXE{\Sigma}{e}{\VStream{f}}
+  \quad
+  \SourceStepXA{\Sigma}{e'}{\VFold{z}{k}{j}}
+}
+{
+  \SourceStepXA{\Sigma}
+    {@filter@~e~@of@~e'}
+    {\VFold
+      {z}
+      {(\lam{\store~v}
+         @if@~f~\store~@then@~k~\store~v~@else@~v)}
+      {j}}
+}{EFilter}
+$$
+
+$$
+\ruleIN
+{
+  \SourceStepXE{\Sigma}{e}{\VStream{f}}
+  \quad
+  \SourceStepXA{\Sigma}{e'}{\VFold{z}{k}{j}}
+}
+{
+  \SourceStepXA{\Sigma}
+    {@group@~e~@of@~e'}
+    {\VFold
+      {\{\_~\Rightarrow~z\}}
+      {(\lam{\store~m}
+% \{ k_i~\Rightarrow~k~\store~v_i ~|~ k_i \Rightarrow v_i~\in~m~\wedge~k_i~=~f~\store \} \cup m)}
+        m[f~\store~\Rightarrow~k~\store~(m[f~\store])])}
+      {(\lam{m}
+        \{k_i~\Rightarrow~j~v_i~|~k_i~\Rightarrow~v_i~\in~m\})}}
+}{EGroup}
+$$
+
+$$
+\ruleIN
+{
+  \SourceStepXP{\Sigma}{z}{\VValue{z'}}
+  \quad
+  \SourceStepXE{\{x_i~=~\VStream{(f_i \cdot @snd@)}~|~x_i=\VStream{f_i}~\in~\Sigma\},~x~=~\VStream{@fst@},~\Sigma}{k}{\VStream{k'}}
+}
+{
+  \SourceStepXA{\Sigma}
+    {@fold@~x~=~z~@then@~k}
+    {\VFold
+      {z'}
+      {(\lam{\store~v} k'~(v,~\store))}
+      {(\lam{v} v)}}
+}{EFold}
+$$
+
+$$
+\boxed{\{x~\Rightarrow~\ov{V}\}~|~e~\Downarrow~V}
+$$
+$$
+\ruleIN
+{
+  \SourceStepX
+    {@Aggregate@}
+    %% Review #1
+    %% Figure 3, rule ETable: Should “vs_i” read “v_i”?
+    {\{x_i~=~\VStream{(@fst@~\cdot~@snd@^i)}~|~x_i~\Rightarrow~\mi{v}_i~\in~t\}}
+    {e}
+    {\VFold{z}{k}{j}}
+  \quad
+}
+{
+  t~|~e~\Downarrow~
+  j~(\mi{fold}~k~z~\{v_0 \times \cdots \times v_i \times ()~|~x_i~\Rightarrow~v_i~\in~t\})
+}{ETable}
+$$
+
+$$
+V'~     ::=~\VValue{V}
+        ~|~\VStream {(V \stackrel{\bullet}{\to} V)}
+        ~|~\VFold{V}{(V \stackrel{\bullet}{\to} V \stackrel{\bullet}{\to} V)}
+                    {(V \stackrel{\bullet}{\to} V)}
+$$
+$$
+\begin{array}{ll}
+
+\RawMode~::=~@Pure@~|~@Element@~|~@Aggregate@
+
+&
+
+\Sigma~::=~\cdot~|~\Sigma,~x~=~V'
+
+\end{array}
+$$
+
+
+\caption{Evaluation rules}
+\label{icicle:fig:source:eval}
+\end{figure*}
+
+

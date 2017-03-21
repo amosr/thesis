@@ -1,0 +1,113 @@
+%!TEX root = ../Main.tex
+\section{Intermediate Language}
+\label{icicle:s:IcicleCore}
+
+\begin{figure}
+
+\begin{tabbing}
+MMM \= MM \= MMMM \= MM \= MMMMMM \= \kill
+$\mi{PlanX}$
+\GrammarDefTab
+  $x~|~V~|~\mi{PlanP}~\ov{\mi{PlanX}}~|~\lam{x}\mi{PlanX}$
+\\
+$\mi{PlanP}$
+\GrammarDefTab
+  $\mi{Prim}~|~@mapUpdate@~|~@mapEmpty@~|~@mapMap@~|~@mapZip@$
+\\
+\\
+$\mi{Plan}$
+\GrammarDefTab
+  $@plan@~x$ \> $\{~\ov{x~:~T;}~\}$
+\\
+  \> \> $@before@$ \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
+  \> \> $@folds@$  \> $\{~\ov{x~:~T~=~\mi{PlanX}~@then@~\mi{PlanX};}~\}$ \\
+  \> \> $@after@$  \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
+  \> \> $@return@$ \> $\{~\ov{x~:~T~=~x;}~\}$ \\
+\end{tabbing}
+
+
+
+\caption{Query Plan Grammar}
+\label{icicle:fig:core:grammar}
+\end{figure}
+
+The Icicle intermediate language is similar to a physical query plan for a database system. We convert each source level query to a query plan, then fuse together the plans for queries on the same table. Once we have the fused query plan we then perform standard optimisations such as common subexpression elimination and partial evaluation.
+
+The grammar for the Icicle intermediate language is given in Figure~\ref{icicle:fig:core:grammar}.
+Expressions $PlanX$ include variables, values, applications of primitives and anonymous functions.
+% Function definitions and uses are not allowed in expressions here, as their definitions are inlined before converting to query plans.
+% Anonymous functions are only allowed as arguments to primitives: they cannot be applied or stored in variables.
+The $\mi{Plan}$ itself is split into a five stage \emph{loop anatomy}~\cite{shivers2005anatomy}. First we have the name of the table and the names and element types of each column. The @before@ stage then defines pure values which do not depend on any table data. The @folds@ stage defines element computations and how they are converted to aggregate results. The @after@ stage defines aggregate computations that combine multiple aggregations after the entire table has been processed. Finally, the @return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusion can have many outputs.
+
+Before we discuss an example query plan we first define the @count@, @sum@, @mean@ and @last@ functions used in earlier sections. Both @count@ and @sum@ are simple folds:
+\begin{code}
+    function count
+     = fold c = 0 then c + 1;
+
+    function sum (e : Element Real)
+     = fold s = 0 then s + e;
+\end{code}
+The @mean@ function then divides the @sum@ by the @count@.
+\begin{code}
+    function mean (e : Element Real)
+     = sum e / count;
+\end{code}
+
+The @last@ function uses a @fold@ that initializes the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream.
+\begin{code}
+    function last (d : Element Date)
+     = fold l = NO_DATE then d;
+\end{code}
+
+% \begin{code}
+%   query avg = let k    = last key in
+%               let avgs = group key of mean value
+%               in  lookup k avgs
+% \end{code}
+
+Inlining the above functions into the query from \S\ref{icicle:s:ElementsAndAggregates} yields the following:
+% This is guaranteed to terminate because no recursion is allowed in function definitions.
+\begin{code}
+  query avg
+   =    let lst = (fold l = NO_DATE then key)
+     in let map = group key of
+                  ( (fold s = 0 then s + value)
+                  / (fold c = 0 then c + 1) )
+     in let ret = lookup lst map
+     in     ret
+\end{code}
+
+To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then simply concatenate the corresponding parts of the loop anatomy. The @lst@ binding becomes a single fold, initialized to @NO_DATE@ and updated with the current @key@.
+\begin{code}
+  plan kvs { key : Date; value : Real;      }
+  folds    { fL  : Date = NO_DATE then key  }
+  after    { lst : Date = fL                }
+\end{code}
+
+For the @map@ binding, each fold accumulator inside the body of the @group@ construct is associated with its own finite map. The @s@ accumulator is associated with map @gS@, and the @c@ accumulator with @gC@. Each time we receive a row from the table the accumulator associated with the @key@ is updated, using the default value @0@ if an entry for that key is not yet present. After we have processed the entire table we divide each sum with its corresponding count to yield a map of means for each key.
+\begin{alltt}
+  folds  \string{ gS  : Map Date Real = mapEmpty
+           then mapUpdate gS key 0 (\(\lambda\)s. s + value)
+
+         ; gC  : Map Date Real = mapEmpty
+           then mapUpdate gC key 0 (\(\lambda\)c. c + 1) \string}
+
+  after  \string{ map : Map Date Real
+            = mapMap (\(\lambda\)s c. s / c) (mapZip gS gC) \string}
+\end{alltt}
+
+% It would be possible to convert this as a map of pairs of the sum and count.
+% Keeping this as two separate maps rather than a map of pairs exposes more opportunities for common subexpression elimination when fusion occurs.
+% For example, another query @group key of count@ can reuse the already constructed @gC@ map.
+
+Finally, the @ret@ binding from the original query is evaluated in the @after@ stage. In the @return@ stage we specify that the result of the overall query @avg@ is the result of the @ret@ binding.
+\begin{code}
+  after  { ret : Real = lookup lst map }
+  return { avg : Real = ret }
+\end{code}
+
+
+To combine the plans from each binding we simply concatenate the corresponding parts of the anatomy. To fuse multiple plans we freshen the names of each binding and also concatenate the corresponding parts of the anatomy. The single-pass restriction on queries makes the fusion process so simple, because it ensures that there are no fusion-preventing dependencies between any two query plans. 
+
+Given a fused query plan we then convert it to an imperative loop nest in a similar way to our prior work on flow fusion~\cite{lippmeier2013data}.
+

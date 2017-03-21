@@ -1,0 +1,407 @@
+%!TEX root = ../Main.tex
+\section{Elimination}
+\label{icicle:s:Elimination}
+
+
+Horizontal fusion for imperative loops is relatively easily, when the loops have the same number of iterations.
+The problem with imperative loops occurs when trying to remove duplicate computations.
+Firstly, the `definition' of a computation is split across multiple places: because the initial value of an accumulator and its update expression are in separate parts of the program, some analysis must be done to recover these.
+For example, in the following loop, @a@ and @b@ have equivalent `update' expressions, but could denote very different computations depending on the implementation of @function@.
+\begin{code}
+a = 0;
+b = 1;
+for (...) {
+  a = function(a);
+  b = function(b);
+}
+\end{code}
+
+Secondly, the order of statements in a loop affects the meaning: when accumulators are mutually dependent on each other, one can reorder the statements to produce a different, but still valid program.
+These two loops are not equivalent:
+\begin{code}
+a = 0;
+b = 1;
+for (...) {
+  a = a + b;
+  b = a - b;
+}
+for (...) {
+  b = a - b;
+  a = a + b;
+}
+\end{code}
+
+Neither of these problems are insurmountable, but the analysis required certainly complicates our goal of removing duplicate computation after fusion.
+
+With this in mind, we will introduce our intermediate language based on what we call ``fold nests'', as opposed to loop nests.
+Firstly, each accumulator should be defined in one place: this means that if two accumulators are alpha equivalent, they are equivalent.
+Secondly, reordering statements (or accumulators) should not affect the meaning: two programs are equivalent if they contain equivalent sets of bindings, regardless of ordering.
+
+We now convert the first example to folds:
+\begin{code}
+a = 0;
+b = 1;
+for (...) {
+  a = function(a);
+  b = function(b);
+}
+
+==>
+loop ... {
+  stage {
+    fold a = 0
+        then function(a);
+  }
+  stage {
+    fold b = 1
+        then function(b);
+  }
+}
+\end{code}
+
+Each fold binding must be grouped inside a @stage@ block, which allows mutual recursion across folds.
+In this case, there is no mutual recursion, so the stages only contain one binding each.
+The first fold is given the name @a@ with @fold a@.
+Its initial value comes straight after the equals sign, so @a@ starts with a value of @0@.
+The update or `kons' expression comes after @then@, and in the update expression any reference to @a@ refers to the current value of the fold.
+
+It now becomes easier to see that the two folds are not equivalent, as the entire definitions are in one place.
+
+The next example requires mutual recursion.
+\begin{code}
+a = 0;
+b = 1;
+for (...) {
+  a = a + b;
+  b = a - b;
+}
+
+==>
+loop ... {
+  stage {
+    fold a = 0
+        then a + b;
+    fold b = 1
+        then new a - b;
+  }
+}
+\end{code}
+
+Here, the update expression for @a@ refers to a later fold, @b@.
+Update expressions can refer to later fold bindings in the same stage, as well as all earlier fold bindings.
+The value referred to is the value of the binding at the start of the iteration, before any updates have occurred.
+The new value of earlier folds, after being updated, can be referred to by suffixing a prime to the name: in the binding for @b@, the updated @a@ is referred to by @new a@.
+This restriction of only accessing the new value of earlier folds is akin to the causality restriction in dataflow languages\cite{mandel2010lucy}.
+
+Another way to think of the new value restriction above is disallowing cycles in the references to new values:
+when @b@ references @new a@, the new value of @a@, it means that @new a@ must be computed before @new b@ can be.
+If there were a cycle where @new a@ also depended upon @new b@, there would be no order to compute them in.
+Disallowing cycles ensures an execution order.
+
+By making the distinction between `old value' and `new value' explicit, the ordering in the program no longer has any effect on the semantics.
+After converting the reordered loop with different semantics, the two programs are no longer alpha-equivalent:
+\begin{code}
+a = 0;
+b = 1;
+for (...) {
+  b = a - b;
+  a = a + b;
+}
+
+==>
+loop ... {
+  stage {
+    fold b = 1
+        then a - b;
+    fold a = 0
+        then a + new b;
+  }
+}
+\end{code}
+
+\subsection{Preliminary transforms}
+
+A-normalisation is relatively easy, however any expressions in the initialiser of each fold can be lifted out as a separate fold with initialiser and an identity expression (that is, the name of the fold).
+Any expressions to be lifted out from the update expression should be created as new @let@ bindings.
+They cannot necessarily be created as @fold@ bindings because the expression will not work for the initial expression, if it refers to other lets or loop iterators.
+
+Some simple forwarding can be applied, such as lets of variables, and folds where the initial and update expressions are the same.
+Fold initials could be forwarded to other initials, but fold updates cannot always be forwarded to other updates, as the first evaluation of the other update will refer to the forwarder's initial.
+
+So-called ``melting'' can be performed, splitting apart pairs into multiple bindings, arrays of pairs into pairs of arrays, and so on.
+Key-value maps can be similarly split into a special map from key to index, and an array for the values.
+Splitting these complex structures into their constituent parts exposes more opportunities for elimination removal.
+The following program computes the mean of the loop elements. Here, the sum and count are both computed, and stored in a pair.
+
+\begin{code}
+loop item {
+  stage {
+    fold sumcount
+     = (0, 0)
+     then
+       ( fst sumcount + item
+       , snd sumcount + 1);
+
+    fold mean
+     = fst sumcount / snd sumcount
+     then
+       fst sumcount / snd sumcount;
+  }
+}
+\end{code}
+
+If another query were to compute the sum as well, it is not obvious looking at the two expressions that @sum@ and @fst sumcount@ are equivalent:
+\begin{code}
+loop item {
+  stage {
+    fold sum
+     = 0
+     then
+       sum + item;
+  }
+}
+\end{code}
+
+Now, by splitting the @sumcount@ pair into two bindings named @sumcount1@ and @sumcount2@, it becomes easier to see that the definitions of @sum@ and @sumcount1@ are equivalent.
+\begin{code}
+loop item {
+  stage {
+    fold sumcount1
+     = 0
+     then
+       sumcount1 + item;
+
+    fold sumcount2
+     = 0
+     then
+       sumcount2 + 1;
+
+    fold mean
+     = sumcount1 / sumcount2
+     then
+       sumcount1 / sumcount2;
+  }
+}
+\end{code}
+
+
+\subsection{Stage-local duplicate removal}
+Here is an example of a stage with two counters.
+\begin{code}
+stage {
+  fold a = 0 then c + 1
+  fold b = 0 then c + 1
+  fold c = 0 then a + b
+}
+Execution:
+[ a = 0, b = 0, c = 0 ]
+[ a = 1, b = 1, c = 0 ]
+[ a = 1, b = 1, c = 2 ]
+[ a = 3, b = 3, c = 2 ]
+[ a = 3, b = 3, c = 6 ]
+[ a = 7, b = 7, c = 6 ]
+[ a = 7, b = 7, c = 14 ]
+\end{code}
+
+The bindings for @a@ and @b@ here are identical, and so one can be replaced with the other, by substituting @b := a@ and removing the binding for @b@.
+\begin{code}
+stage {
+  fold a = 0 then c + 1
+  fold c = 0 then a + a
+}
+\end{code}
+
+Another example is a single count, spread across two recursive bindings.
+Here, @a@ and @b@ depend on each other, but both have the same body modulo alpha.
+\begin{code}
+stage {
+  fold a = 0 then b + 1
+  fold b = 0 then a + 1
+}
+Execution:
+[ a = 0, b = 0 ]
+[ a = 1, b = 1 ]
+[ a = 2, b = 2 ]
+\end{code}
+
+One can place them into equivalence groups based on their bodies: @a@ and @b@ go in the same equivalence group, and so any reference to @a@ or @b@ refers to the equivalence group containing both.
+Equivalence groups are then squashed together, with a single binding for each equivalence group.
+\begin{code}
+stage {
+  fold a = 0 then a + 1
+}
+\end{code}
+
+
+
+
+\subsection{Strongly connected components}
+Up to now, the reason for the stages has only been briefly mentioned.
+The idea is that each stage should contain a single set of mutually recursive folds.
+Then, each set of mutually recursive folds becomes a single unit to be operated on for removing duplicates.
+
+The type system enforces that mutually recursive folds must be in the same stage, but not that each stage can only contain one set of mutually recursive folds.
+We find the strongly connected components of the program graph, so that each strongly connected component.
+When treating the program as a graph, each binding is a node and references to a fold @f@ as either @f@ for the current value, or @new f@ for the new value, both count as edges to @f@.
+
+As a contrived example, we have bindings @sum@ and @count@ on their own, and another pair of bindings @a@ and @b@ which depend on each other, as well as on @sum@ and @count@.
+\begin{code}
+loop item {
+  stage {
+    fold count = 0 then count + 1;
+
+    fold sum   = 0 then sum   + item;
+
+    fold a     = 1 then count + b;
+    fold b     = 0 then sum + new a;
+  }
+}
+\end{code}
+
+The graph looks something like this.
+\begin{code}
+  count     sum
+    |        |
+    V        V
+    a <----> b
+\end{code}
+
+The strongly connected components are found, and ripped out into separate stages.
+The bindings of each stage are sorted topologically, but this time only @new@ references count as edges in the graph.
+This is because @new@ references require the new, updated value of the fold, but other references use the value that is already available at the start of the iteration.
+Hence, only @new@ references impose an ordering constraint.
+\begin{code}
+loop item {
+  stage {
+    fold count = 0 then count + 1;
+  }
+  stage {
+    fold sum   = 0 then sum   + item;
+  }
+  stage {
+    fold a     = 1 then count + b;
+    fold b     = 0 then sum + new a;
+  }
+}
+\end{code}
+
+\subsection{Stage layers}
+Once we have a list or set of stages, we can perform a topological ordering over the stages themselves.
+In this case, a whole stage becomes a node in the graph, and edges are any references between stages.
+
+The topological ordering is used for denoting execution order between the stages, but also tells us which stages need to be checked against each other, to remove duplicates.
+Each stage could be checked against all other stages, but this would be wasteful.
+
+We can look at the topological ordering of stages as layers of the same depth.
+In the @count/sum/ab@ example, @count@ and @sum@ are together on the top layer, while the stage containing @a@ and @b@ is on the second layer.
+
+When checking for duplicates, each stage need only be compared with those on the same layer, and those on the layer directly above.
+In fact, of those on the layer above, it only needs to be compared with those it refers to.
+It is not necessary to check more two layers above, for example, because we know two things:
+this stage refers to a binding in the layer above, while any stage two layers above cannot possibly refer to a lower stage.
+However, in order to be duplicates, they must refer to the same things, or duplicates of the same things.
+
+
+\subsection{Inter-stage duplicate removal}
+To check if one stage is a duplicate of another, we go through each binding of the first stage, checking if there is an alpha-equivalent binding in the other stage.
+We also create a substitution between the two stages.
+This substitution is later performed on the rest of the program, so that after the duplicate is removed, references to the duplicate are updated to refer to the first stage.
+
+During the process of checking, there may be multiple possible substitutions that appear to work.
+The following program defines three mutually recursive counters; two of the counters increment by one, and the last increments by two.
+Because of the mutual recursion, this ends up making each counter increment by a repeating pattern: one, one, two.
+\begin{code}
+stage {
+  fold a = 0 then b + 1
+  fold b = 0 then c + 1
+  fold c = 0 then a + 2
+}
+Execution:
+[ a = 0, b = 0, c = 0 ]
+[ a = 1, b = 1, c = 2 ]
+[ a = 2, b = 3, c = 3 ]
+[ a = 4, b = 4, c = 4 ]
+[ a = 5, b = 5, c = 6 ]
+[ a = 6, b = 7, c = 7 ]
+\end{code}
+
+Now, suppose we wish to check if the following stage is a duplicate of the previous counters.
+Note that these bindings are actually in a different order to the previous bindings, whereas the equivalent order would be @x@, @y@ then @z@.
+\begin{code}
+stage {
+  fold y = 0 then z + 1
+  fold x = 0 then y + 1
+  fold z = 0 then x + 2
+}
+\end{code}
+
+We start by inpsecting @y@, the first binding, and check against all bindings in the other set.
+We wish to find a substitution from the names @x@, @y@ and @z@ to the names @a@, @b@ and @c@.
+The substitution cannot mention any names other than those bound by the two stages.
+
+There appear to be two possibilities for @y@: it is alpha-equivalent to both @a@ and @b@, producing two different substitutions:
+\begin{code}
+(Y1)
+y := a
+z := b
+(Y2)
+y := b
+z := c
+\end{code}
+
+We continue checking the remaining bindings, by producing substitutions for @x@.
+Like @y@, @x@ fits both @a@ and @b@, with two possible substitutions:
+\begin{code}
+(X1)
+x := a
+y := b
+(X2)
+x := b
+z := c
+\end{code}
+
+We can cross-product these substitutions together, composing (Y1) with (X1) and so on, producing four possible substitutions.
+The first two contain contradictions and are discarded immediately.
+The next two seem plausible, so far.
+\begin{code}
+(Y1X1)
+y := a
+y := b
+(Y1X2)
+z := b
+z := c
+(Y2X1)
+x := a
+y := b
+z := c
+(Y2X2)
+x := b
+y := b
+z := c
+\end{code}
+
+Now we check the final binding, @z@, which produces only one possible substitution:
+\begin{code}
+(Z1)
+z := c
+x := a
+\end{code}
+
+Composing (Z1) with (Y2X1) and (Y2X2), we find that (Y2X1Z1) is the only remaining possibility, since (Z1) and (Y2X2) are contradictory.
+\begin{code}
+(Y2X1Z1)
+x := a
+y := b
+z := c
+(Y2X2Z1)
+x := a
+x := b
+\end{code}
+
+We can now remove the stage containing @x@, @y@ and @z@, while performing this substitution over the remainder of the program, so that any references to @x@ become references to @a@, and so on.
+
+If, for a different pair of stages, there were multiple possible substitutions after checking all bindings against the others, we could have chosen any of the substitutions.
+They are all equivalent.
+
+
+

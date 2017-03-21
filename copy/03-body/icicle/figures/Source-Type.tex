@@ -1,0 +1,233 @@
+%!TEX root = ../Main.tex
+
+\begin{figure*}
+
+$$
+\boxed{\Typecheck{\Gamma}{e}{\TauMode}}
+$$
+$$
+\ruleIN
+{
+}
+{ 
+    \Typecheck{\Gamma}{\mathbb{N}}{\NN}
+}{TcNat}
+\ruleIN
+{
+}
+{ 
+    \Typecheck{\Gamma}{\mathbb{B}}{\BB}
+}{TcBool}
+\ruleIN
+{
+  \{ \Typecheck{\Gamma}{v_i}{T} \}
+  \quad
+  \{ \Typecheck{\Gamma}{v_i'}{T'} \}
+}
+{ 
+    \Typecheck{\Gamma}{\{v_i \Rightarrow v_i'\}}{@Map@~T~T'}
+}{TcMap}
+\ruleIN
+{
+  \Typecheck{\Gamma}{v}{T}
+  \quad
+  \Typecheck{\Gamma}{v'}{T'}
+}
+{ 
+    \Typecheck{\Gamma}{v~\times~v'}{T~\times~T'}
+}{TcPair}
+$$
+
+$$
+\ruleIN
+{
+    (x~:~T)~\in~\Gamma
+}
+{ 
+    \Typecheck{\Gamma}{x}{T}
+}{TcVar}
+\ruleIN
+{
+  \Typecheck{\Gamma}{e}{T}
+  \quad
+  m~\in~\{@Element@,~@Aggregate@\}
+}
+{ 
+    \Typecheck{\Gamma}{e}{m~T}
+}{TcBox}
+$$
+
+$$
+\ruleIN
+{
+    \TypecheckP{p}{F}
+    \quad
+    \{ \Typecheck{\Gamma}{e_i}{M_i} \}
+    \quad
+    \TypecheckApp{F}{\{M_i\}}{M'}
+}
+{ 
+    \Typecheck{\Gamma}{p~\{e_i\}}{M'}
+}{TcPrimApp}~~~~
+\ruleIN
+{
+    (x~:~F)~\in~\Gamma
+    \quad
+    \{ \Typecheck{\Gamma}{e_i}{M_i} \}
+    \quad
+    \TypecheckApp{F}{\{M_i\}}{M'}
+}
+{ 
+    \Typecheck{\Gamma}{x~\{e_i\}}{M'}
+}{TcFunApp}
+$$
+
+$$
+\ruleIN
+{
+  \Typecheck{\Gamma}{e}{M}
+  \quad
+  \Typecheck{\Gamma,~x:M}{e'}{M'}
+}
+{
+  \Typecheck{\Gamma}{@let@~x~=~e~@in@~e'}{M'}
+}{TcLet}~~~~
+\ruleIN
+{
+  \Typecheck{\Gamma}{e_z}{T}
+  \quad
+  \Typecheck{\Gamma,~x:@Element@~T}{e_k}{@Element@~T}
+}
+{
+  \Typecheck{\Gamma}{@fold@~x~=~e_z~@then@~e_k}{@Aggregate@~T}
+}{TcFold}
+$$
+
+$$
+\ruleIN
+{
+  \Typecheck{\Gamma}{e}{@Element@~\BB}
+  \quad
+  \Typecheck{\Gamma}{e'}{@Aggregate@~T}
+}
+{
+  \Typecheck{\Gamma}{@filter@~e~@of@~e'}{@Aggregate@~T}
+}{TcFilter}~~~~
+\ruleIN
+{
+  \Typecheck{\Gamma}{e}{@Element@~T}
+  \quad
+  \Typecheck{\Gamma}{e'}{@Aggregate@~T'}
+}
+{
+  \Typecheck{\Gamma}{@group@~e~@of@~e'}{@Aggregate@~(@Map@~T~T')}
+}{TcGroup}
+$$
+
+
+$$
+\boxed{\TypecheckP{\mi{p}}{\TauFun}}
+$$
+$$
+\ruleIN
+{
+  p~\in~\{@+@,~@-@,~@*@,~@/@\}
+}
+{
+  \TypecheckP{p}{(\NN,~\NN)~\to~\NN}
+}{PrimArith}
+\ruleIN
+{
+  p~\in~\{@==@,~@/=@,~@<@,~@>@\}
+}
+{
+  \TypecheckP{p}{(\NN,~\NN)~\to~\BB}
+}{PrimRel}
+$$
+
+$$
+\ruleAx
+{
+  \TypecheckP{@lookup@}{(@Map@~T~T',~T)~\to~T'}
+}{PrimLookup}
+\ruleAx
+{
+  \TypecheckP{@fst@}{(T~\times~T')~\to~T}
+}{PrimFst}
+\ruleAx
+{
+  \TypecheckP{@snd@}{(T~\times~T')~\to~T'}
+}{PrimSnd}
+$$
+
+
+
+$$
+\boxed{\TypecheckApp{\TauFun}{\ov{\TauMode}}{\TauMode}}
+$$
+$$
+\ruleIN
+{
+}
+{
+  \TypecheckApp{(\{M_i\}~\to~M')}{\{M_i\}}{M'}
+}{AppArgs}
+\ruleIN
+{
+}
+{
+  \TypecheckApp{(\{T_i\}~\to~T')}{\{m~T_i\}}{m~T'}
+}{AppRebox}
+$$
+
+
+$$
+\boxed{\TypecheckS{\Gamma}{\mi{Def}}{\Gamma}}
+$$
+$$
+\ruleIN
+{
+  \Typecheck{\Gamma~\cup~\{x_i:M_i\}}{e}{M'}
+  \quad
+  F~=~\{M_i\}~\to~M'
+}
+{
+  \TypecheckS{\Gamma}{@function@~x~\{x_i~:~M_i\}~=~e}{\Gamma,~x:F}
+}{CheckFun}~~~~
+\ruleIN
+{
+  \Typecheck{\Gamma}{e}{@Aggregate@~T}
+}
+{
+  \TypecheckS{\Gamma}{@query@~x~=~e}{\Gamma,~x:~@Aggregate@~T}
+}{CheckQuery}
+$$
+
+
+$$
+\boxed{\TypecheckS{}{\mi{Top}}{\Gamma}}
+$$
+$$
+\ruleIN
+{
+  \Gamma_0~=~\{x_i:@Element@~T_i\}
+  \quad
+  \{~\TypecheckS{\Gamma_{j-1}}{d_j}{\Gamma_j}~\}
+}
+{
+  \TypecheckS
+    {}
+    {
+      @table@
+      ~x~\{x_i~:~T_i\};
+      ~\{~d_j~\}
+    }
+    {\Gamma_j}
+}{CheckTop}
+$$
+
+
+\caption{Types of expressions}
+\label{icicle:fig:source:type:exp}
+\end{figure*}
+

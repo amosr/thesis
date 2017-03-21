@@ -1,0 +1,71 @@
+%!TEX root = ../Main.tex
+
+\begin{figure}
+
+\begin{tabbing}
+MMMM \= MM \= MMM \= MM \= MMMMMM \= \kill
+$\mi{T}$
+\GrammarDefTab
+  $@Int@~|~@Bool@~|~@Map@~T~T~|~(T~\times~T)$
+\\
+$\mi{\TauMode}$
+\GrammarDefTab
+  $T~|~@Element@~T~|~@Aggregate@~T$
+\\
+$\mi{\TauFun}$
+\GrammarDefTab
+  $\ov{(\TauMode)}~\to~\TauMode$
+\\
+\\
+
+$\mi{Table}$
+\GrammarDefTab
+  $@table@~x~@{@~\ov{(x~:~T;)}~@}@$
+\\
+\\
+
+$\mi{Exp}$, $e$
+\GrammarDefTab
+  $x~|~V~|~\mi{Prim}~\ov{\mi{Exp}}~|~x~\ov{\mi{Exp}}$
+\GrammarAlt
+  $@let@$   \> $x~=$ \> $\mi{Exp}~@  in@~\mi{Exp}$
+\GrammarAlt
+  $@fold@$  \> $x~=$ \> $\mi{Exp}~@then@~\mi{Exp}$
+\GrammarAlt
+  $@filter@$\> \> $\mi{Exp}~@  of@~\mi{Exp}$
+\GrammarAlt
+  $@group@$ \> \> $\mi{Exp}~@  of@~\mi{Exp}$
+\\
+\\
+
+$\mi{Prim}$, $p$
+\GrammarDefTab
+  $(@+@)~|~(@-@)~|~(@*@)~|~(@/@)~|~(@==@)~|~(@/=@)~|~(@<@)~|~(@>@)$
+\GrammarAlt
+  $@lookup@~|~@fst@~|~@snd@$
+\\
+\\
+
+$V$, $v$
+\GrammarDefTab
+ $\mathbb{N}~|~\mathbb{B}~|~\{V \Rightarrow V\}~|~(V~\times~V)$
+\\
+\\
+
+
+$\mi{Def}$
+\GrammarDefTab
+  $@function@~f~\ov{(x~:~\TauMode)}~=~\mi{Exp}$
+\GrammarAlt
+  $@query@~x~=~\mi{Exp}$
+\\
+\\
+$\mi{Top}$
+\GrammarDefTab
+  $\mi{Table};~\ov{\mi{Def};}$
+\end{tabbing}
+
+\caption{Icicle Grammar}
+\label{icicle:fig:source:grammar}
+\end{figure}
+

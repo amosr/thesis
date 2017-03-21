@@ -71,13 +71,11 @@
 % ********************************************************************
 % Textblock size
 %*******************************************************
-\@ifpackageloaded{typearea}%
-    {\relax}{%
-        \RequirePackage{typearea}%
-    }
+\RequirePackage{typearea}%
 
 \PackageInfo{classicthesis}{A4 paper, Palatino or other}
 \areaset[5mm]{160mm}{250mm} % ~ 336 * factor 2 + 33 head + 42 \the\footskip
+\setlength\headheight{20pt}
 
 % ********************************************************************
 % Own Stuff
@@ -109,7 +107,7 @@
 % ********************************************************************
 % headlines
 % ********************************************************************
-\PassOptionsToPackage{automark}{scrlayer-scrpage}
+%\PassOptionsToPackage{automark}{scrlayer-scrpage}
     \RequirePackage{scrlayer-scrpage} % provides headers and footers (KOMA Script)
     \clearscrheadings
     \renewcommand{\chaptermark}[1]{\markboth{\footnotesize #1}{\footnotesize #1}}
@@ -254,8 +252,8 @@
     \PassOptionsToPackage{flushmargin}{footmisc}%
     \RequirePackage{footmisc}%
     \setlength{\footnotemargin}{-.5em}%
-    \PackageWarningNoLine{classicthesis}{Using package "footmisc" with option %
-        "flushmargin" for footnote setup (not 100\% the same as with KOMA)}%
+%    \PackageWarningNoLine{classicthesis}{Using package "footmisc" with option %
+%        "flushmargin" for footnote setup (not 100\% the same as with KOMA)}%
 \fi
 
 % ********************************************************************

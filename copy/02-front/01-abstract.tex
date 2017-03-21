@@ -1,7 +1,7 @@
 \chapter*{Abstract}
 \ADDTOC{\tocEntry{abstract}}
 
-Fusion is an essential part of optimising high-level array and streaming computations, as it reduces memory traffic and intermediate arrays~\cite{chakravarty2001functional}.
+Fusion is an essential part of optimising high-level array and streaming computations, as it reduces memory traffic and intermediate arrays.
 The benefits of removing intermediate arrays are even more important as data sizes approach the size of memory.
 When comparing fusion systems, three important criteria to consider are: whether the system supports splits, where a stream is used multiple times; whether it supports joins, where a combinator has multiple inputs; and whether arbitrary combinators such as @merge@ and segmented appends can be encoded.
 Existing fusion systems support one or two of these, but not three.

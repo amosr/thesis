@@ -6,9 +6,6 @@
 \newcommand{\CITEME}[1] {\textbf{CITE: {#1}}}
 \newcommand{\REF}	{\textbf{REF }}
 
-\newcommand{\simon}[1]	{\emph{\textbf{SLPJ:} #1}}
-\newcommand{\ben}[1]	{\emph{\textbf{BL:} #1}}
-\newcommand{\gabi}[1]	{\emph{\textbf{GABI:} #1}}
-\newcommand{\manuel}[1]	{\emph{\textbf{MMTC:} #1}}
-\newcommand{\amos}[1]	{\emph{\textbf{AR:} #1}}
+\newcommand{\refT}[2]	{\hyperref[#2]{#1~\ref*{#2},~page~\pageref{#2}}}
+\newcommand{\refChapter}[1]	{\refT{Chapter}{#1}}
 

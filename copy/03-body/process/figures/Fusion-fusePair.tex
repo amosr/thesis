@@ -1,0 +1,41 @@
+%!TEX root = ../Main.tex
+
+\begin{figure}
+
+\begin{tabbing}
+\ti{fusePair}~@M M@   \TABDEF \kill
+
+\ti{fusePair} \> $~:$ \> $\Proc \to \Proc \to  \Maybe~\Proc$ \\
+$\ti{fusePair}~p~q$ \> $=$ \\
+@    process@ \\
+@        ins: @ $\sgl{c~|~c=t \in \cs,~t \in \sgl{@in1@,@in2@}} $ \\
+@       outs: @ $\sgl{c~|~c=t \in \cs,~t \in \sgl{@in1out1@,@out1@}} $ \\
+@       heap: @ $p[@heap@]~\cup~q[@heap@]$ \\
+@      label: @ $l_0$ \\
+@     instrs: @ $\ti{go}~\sgl{}~l_0$ \\
+@ where@ \\
+MM\=MM\=~=~\=\kill
+ \> \cs \> $=$ \> $\ti{channels}~p~q$ \\
+ \> $l_0$   \> $=$ \> $
+      \big( 
+      (p[@label@],~\sgl{c=none_S~|~c~\in~p[@ins@]}),~
+      (q[@label@],~\sgl{c=none_S~|~c~\in~q[@ins@]})
+      \big)$ \\
+ \\
+ \> $\ti{go}~\ti{bs}~(l_p,l_q)$ \\
+ \> \> $~|$ \> $(l_p,l_q)~\in~\ti{bs}$ \\
+ \> \> $=$  \> $\ti{bs}$ \\
+ \> \> $~|$ \>
+        $b~\in~\ti{tryStepPair}~\cs~l_p~p[@instrs@][l_p]~l_q~q[@instrs@][l_q]$ \\ 
+ \> \> $=$ \> $\ti{fold}~\ti{go}~(\ti{bs}~\cup~\sgl{(l_p,l_q)=b})~(\ti{outlabels}~b)$
+\end{tabbing}
+
+\caption{Fusion of pairs of processes}
+
+% Two processes are fused together by starting at the initial label for each process and computing the instruction based on one of the original process' instructions at that label. Instructions are added recursively until all reachable instructions are included.
+
+\label{fig:Fusion:Def:Top}
+\end{figure}
+
+
+

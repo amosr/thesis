@@ -1,0 +1,141 @@
+%!TEX root = ../Main.tex
+
+% -----------------------------------------------------------------------------
+\begin{figure}
+\begin{tabbing}
+MM \= MMMMMMM \= MM \= MMMMMMMMM\kill
+\end{tabbing}
+
+
+% -----------------------------
+$$
+  \boxed{
+    \ProcBlockShake
+      {\Instr}
+      {\ChannelStates}
+      {\Heap}
+      {\Action}
+      {\Label}
+      {\ChannelStates}
+      {\Updates}
+  }
+$$
+
+$$
+\ruleIN{
+  is[c] = @pending@~v
+}{
+  \ProcBlockShake
+        {@pull@~c~x~(l,us)}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l}
+        {is[c \mapsto @have@]}
+        {(us, x = v)}
+}{Pull}
+$$
+
+$$
+\ruleIN{
+  \ExpEval{\Sigma}{e}{v}
+}{
+  \ProcBlockShake
+        {@push@~c~e~(l,us)}
+        {is}
+        {\Sigma}
+        {\Push~c~v}
+        {l}
+        {is}
+        {us}
+}{Push}
+$$
+
+$$
+\ruleIN{
+  is[c] = @have@
+}{
+  \ProcBlockShake
+        {@drop@~c~(l,us)}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l}
+        {is[c \mapsto @none@]}
+        {us}
+}{Drop}
+\ruleIN{
+}{
+  \ProcBlockShake
+        {@jump@~(l,us)}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l}
+        {is}
+        {us}
+}{Jump}
+$$
+
+$$
+\ruleIN{
+  \ExpEval{\Sigma}{e}{@True@}
+}{
+  \ProcBlockShake
+        {@case@~e~(l_t,us_t)~(l_f,us_f)}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l_t}
+        {is}
+        {us_t}
+}{CaseT}
+\ruleIN{
+  \ExpEval{\Sigma}{e}{@False@}
+}{
+  \ProcBlockShake
+        {@case@~e~(l_t,us_t)~(l_f,us_f)}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l_f}
+        {is}
+        {us_f}
+}{CaseF}
+$$
+
+\vspace{2em}
+
+% ----------------
+$$
+  \boxed{\ProcShake{\Proc}{\Action}{\Proc}}
+$$
+$$
+\ruleIN{
+  \ProcBlockShake
+    {p[@instrs@][p[@label@]]} 
+    {p[@ins@]}
+    {p[@heap@]}
+    {a}
+    {l}
+    {is}
+    {us}
+  \quad
+    \ExpEval{p[@heap@]}{us}{bs}
+}{
+  \ProcShake
+        {p}
+        {a}
+        {p~[    @label@~ \mapsto ~l
+           , ~~ @heap@~  \mapsto (p[@heap@] \lhd bs)
+           , ~~ @ins@~   \mapsto ~is]}
+}{Advance}
+$$
+
+
+\caption{Advancing processes}
+
+% Evaluation: shaking allows proceses to take a step from one label to another as well as produce an output message. If the message is a push, the value is injected to all other processes in the network; otherwise it is an internal step.}
+\label{fig:Process:Eval:Shake}
+\end{figure}
+

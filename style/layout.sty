@@ -31,3 +31,15 @@
 }
 
 
+% -- Make the reversed \vdash using the graphicx package
+\makeatletter
+\providecommand*{\dashv}{%
+  \mathrel{%
+    \mathpalette\@dashv\vdash
+  }%
+}
+\newcommand*{\@dashv}[2]{%
+  \reflectbox{$\m@th#1#2$}%
+}
+\makeatother
+

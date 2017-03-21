@@ -9,7 +9,7 @@
 \usepackage{makeidx}
 \usepackage{mathptmx}
 \usepackage{mathtools}
-\usepackage{stmaryrd}
+% \usepackage{stmaryrd}
 \usepackage{textcase}
 \usepackage{url}
 \usepackage{style/utils}
@@ -18,6 +18,16 @@
 \usepackage{style/keywords}
 \usepackage{style/layout}
 \usepackage{style/judgements}
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat/show suggested version=false}
+\pgfplotsset{compat=1.12}
+\usetikzlibrary{shapes,arrows}
+
+\usepackage{natbib}
+% \citestyle{acmauthoryear}
+\let \cite = \citep
 
 \makeatactive
 \makeindex

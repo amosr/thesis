@@ -1,4 +1,5 @@
 \chapter{Introduction}
+\label{C:introduction}
 
 Today, the ATM swallowed my card and put my balance in arrears.
 Or perhaps yesterday, I don't remember.
@@ -7,10 +8,10 @@ Machines don't just take people's money for no reason.
 I must have chosen the wrong option.
 Perhaps it was yesterday.
 
-For me, it is hard to imagine spending a day without interacting with software in some way.
+It is hard to imagine spending a day without interacting with software in some way.
 Most of the software I touch is fairly innocuous, where an error might cause a few minutes' grumbling, but no real heartache.
 For other software, such as the banking server at my building society, or the cruise control on my car, errors can be disastrous.
-Unfortunately, the level of \emph{trust} provided to software does not generally coincide with the level of \emph{effort} to ensure correctness of that software.
+Unfortunately, the level of \emph{trust} provided to software does not generally coincide with the \emph{effort} taken to ensure correctness of that software.
 When banking software goes awry, people suffer financially.
 When debt recovery software goes awry, people suffer emotionally.
 When car software goes awry, people suffer physically.
@@ -22,17 +23,54 @@ With formal methods we can prove that a program acts in accordance with some hig
 With type systems we can rule out whole classes of bugs and vulnerabilities just by compiling and typechecking the program.
 With high-level languages and high-level abstractions we can write programs that are more ``obviously correct'' and easier to reason about.
 
-So why do these problems persist?
-Part of this is the effort required: there is a non-trivial cost to proving programs correct using formal methods.
-Another part is certainly a lack of education and inertia.
+Why do these problems persist?
+Part is the effort required: there is a real cost to proving programs correct using formal methods.
+Another part is lack of education and inertia.
 However, the part I wish to focus on is the performance costs associated with high-level abstractions.
 
 Compared to traditional imperative languages such as C, Java or Go, high-level languages with static type systems (Haskell being a notable example) reach a sweet middle ground in terms of effort to correctness.
 While they do not ensure the complete correctness that formal methods promise, they still provide valuable guarantees about the absence of particular errors.
 
-The goal of this thesis is to explore and ameliorate the performance issues with a particular set of programs: streaming combinator programs.
+While my motivation for this thesis is born of a deep discontent with computing, the actual goal of this thesis is to improve the performance of certain programs.
+If we were able to rule out a large class of errors and offer competitive performance, surely this would reduce at least \emph{one} of the barriers to writing correct programs.
+Still, one can hope.
 
-\section{Streaming combinators}
+\section{Fusion}
 
-Streaming combinator programs are 
+One of the largest benefits of functional languages is the ability to decompose problems into smaller parts. 
+
+\begin{code}
+rle :: Eq a => [a] -> [(Int,a)]
+
+> rle "aabcc"
+[(2, 'a'), (1, 'b'), (2, 'c')]
+\end{code}
+
+\section{Contributions}
+
+The contributions of this thesis are:
+
+\begin{itemize}
+\item
+A method for fusing combinators: the first that allows splits, joins, and arbitrary combinators.
+This is achieved by treating each combinator as a sequential process, and the combinators together as a concurrent process network.
+Processes are then fused together using an extension of synchronised product.
+(\refChapter{C:process-fusion})
+
+\item
+A proof of correctness for Process Fusion, mechanised in the proof assistant Coq.
+This ensures that if two processes are fused together, the fused process computes the same result as the original processes.
+% (\refChapter{C:process-correct})
+
+\item
+When not all combinators can be fused into a single loop, the decision of how to group the combinators together becomes important.
+This is called clustering.
+(\refChapter{C:clustering})
+
+\item
+When fusion is a requirement rather than an added bonus for optimisation, type systems can be used to enure that only fusible programs can be expressed.
+The streaming query language Icicle uses modal types to ensure only fusible programs are valid, and that the stream program has the same semantics as if it were operating over lists.
+(\refChapter{C:icicle})
+\end{itemize}
+
 

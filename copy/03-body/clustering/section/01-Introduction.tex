@@ -1,0 +1,84 @@
+%!TEX root = ../Main.tex
+\section{Introduction}
+\label{clustering:s:Introduction}
+A collection-oriented programming model is ideal for expressing data-parallel computations, as it exposes the communication patterns to the compiler without requiring complicated loop analysis.
+It is essential, however, that the compiler combines these operations into a small number of efficient loops, as a naive translation leads to high memory traffic and poor performance.
+This is a well known problem, and techniques to fuse subsequent array operations together have been presented in~\cite{gill1993short, coutts2007stream, keller2010repa}, to name just a few.
+This type of fusion alone is not generally sufficient to minimise memory traffic.
+% : first, we often need to re-arrange the array operations and cluster those that iterate over the same structures.
+As shown in Megiddo~\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}, Integer Linear Programming can be used to find good clusterings.
+Unfortunately, they cannot handle operations like filter, where the output size differs from the input size.
+We present a technique that can handle both multi-loop fragments as well as size-altering operations. 
+
+To compile the clusters found by our clustering technique into sequential loops, we use data flow fusion~\cite{lippmeier2013data}.
+It improved on existing array fusion approaches~\cite{coutts2007stream, keller2010repa} as it guarantees fusion into a single loop for programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. 
+% Our clustering technique is also applicable to parallel loops.
+
+
+% To compile collection-oriented array functional array programs, which play a particular important role in parallel programming, into efficient code, it is essential that we can compile the array operations to a small number of imperative loops. Data flow fusion~\cite{lippmeier2013data} addressed this problem by presenting a technique to compile a specific class of data flow programs into single, efficient imperative loops. It improved on existing related array fusion approaches (~\cite{coutts2007stream}, ~\cite{keller2010repa} as it 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) guarantees complete fusion into a single loop for all programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. However, it can only fuse code fragments into one loop that produce a single output array. Approaches based on Integer Linear Programming (\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}) do not suffer from this shortcoming. On the other hand, they cannot handle operations like filter, which produce arrays whose size differs from the input arrays.  The technique we present in this paper can handle both multi-loop fragments as well as size-altering operations. 
+
+To see the effect of clustering, consider the following program:
+\begin{code}
+ normalize2 :: Array Int -> (Array Int, Array Int)
+ normalize2 xs
+  = let sum1 = fold   (+)  0   xs
+        gts  = filter (>   0)  xs
+        sum2 = fold   (+)  0   gts
+        ys1  = map    (/ sum1) xs
+        ys2  = map    (/ sum2) xs
+    in (ys1, ys2)
+\end{code}
+
+The function @normalize2@ computes two sums, one of all the elements of @xs@, the other of only elements greater than zero. Since we need to fully evalute the sums to proceed with the maps, it is clear that we need at least two separate loops. These folds are examples of fusion-preventing dependencies, as fold cannot be fused with subsequent operations. Figure~\ref{clustering:f:normalize2-clusterings} shows the data-flow graph of @normalize2@. In the leftmost diagram we can see the effect of applying stream fusion to the program: we end up with four loops (denoted by the dotted lines): only the filter operation is combined with the subsequent fold. The best existing ILP approach results in the rightmost graph: it combines the @sum1@ fold and @sum2@ filter in one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations. Our approach, in the middle, produces the optimal solution in this case: one loop for the sums, another for the maps.
+
+% Data flow fusion~\cite{lippmeier2013data} is a technique to compile a specific class of data flow programs into single, efficient imperative loops. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators.
+
+% Fusion-preventing dependencies express the fact that some operators simply must wait for others to complete before they can produce their own output. For example, in the following:
+% \begin{code}
+%   normalize :: Array Int -> Array Int
+%   normalize xs = let sum = fold (+) 0 xs
+%                  in  map (/ sum) xs
+% \end{code}
+
+% If we wish to divide every element of an array by the sum of all elements, then it seems we are forever destined to compute the result using at least two loops: one to determine the sum, and one to divide the elements. The evaluation of @fold@ demands all elements of its source array, and we cannot produce any elements of the result array until we know the value of @sum@. 
+
+% However, many programs \emph{do} contain opportunities for fusion, if we only knew which opportunities to take. The following example offers \emph{several} unique, but mutually exclusive approaches to fusion. Figure~\ref{clustering:f:normalize2-clusterings} on the next page shows some of the possibilities.
+% \begin{code}
+%  normalize2 :: Array Int -> Array Int
+%  normalize2 xs
+%   = let sum1 = fold   (+)  0   xs
+%         gts  = filter (> 0)    xs
+%         sum2 = fold   (+)  0   gts
+%         ys1  = map    (/ sum1) xs
+%         ys2  = map    (/ sum2) xs
+%     in (ys1, ys2)
+% \end{code}
+
+% In Figure~\ref{clustering:f:normalize2-clusterings}, the dotted lines show possible clusterings of operators. Stream fusion implicitly choses the solution on the left as its compilation process cannot fuse a produced array into multiple consumers. The best existing ILP approach will chose the solution on the right as it cannot cluster operators that consume arrays of different sizes. Our system choses the solution in the middle, which is also optimal for this example. 
+
+% NOTE: This set of bullets needs to fit on the first page, without spilling to the second.
+Our contributions are as follows:
+\begin{itemize}
+\item   
+We extend prior work by Megiddo~\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}, with support for size changing operators.
+Size changing operators can be clustered with operations on both their source array and output array, and compiled naturally with data-flow fusion (\S\ref{clustering:s:ILP}).
+
+\item
+We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:
+constraints between two nodes need not be generated if there is a fusion-preventing path between the two (\S\ref{clustering:s:OptimisedConstraints}).
+
+\item
+Our constraint system encodes a total ordering on the cost of clusterings, expressed using weights on the integer linear program.
+For example, we encode that memory traffic is more expensive than loop overheads, so given a choice between the two, memory traffic will be reduced (\S\ref{clustering:s:ObjectiveFunction}).
+
+\item
+We present benchmarks of our algorithm applied to several common programming patterns.
+Our algorithm is complete and yields good results in practice, though an optimal solution is uncomputable in general (\S\ref{clustering:s:Benchmarks}).
+\end{itemize}
+
+An implementation of our clustering algorithm is available at \url{https://github.com/amosr/clustering}.
+
+% We must also decide which clustering is the `best' or most optimal. One obvious criterion for this is the minimum number of loops, but there may even be multiple clusterings with the minimum number of loops. In this case, the number of required manifest arrays must also be taken into account. 
+
+% As real programs contain tens or hundreds of individual operators, performing an exhaustive search for an optimal clustering is not feasible, and greedy algorithms tend to produce poor solutions. 
+

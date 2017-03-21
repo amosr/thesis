@@ -11,5 +11,12 @@
 \bibliographystyle{apalike}
 
 \newcommand\ADDTOC[1] {
-  \addcontentsline{toc}{chapter}{\tocEntry{#1}} % \textls[80]{\scshape #1}}
+  \addcontentsline{toc}{chapter}{\tocEntry{#1}}
+  % Clear chapter and section from headers
+  \markboth{}{}
+}
+
+\newcommand\CHAPTERX[1] {
+  \chapter*{#1}
+  \ADDTOC{#1}
 }

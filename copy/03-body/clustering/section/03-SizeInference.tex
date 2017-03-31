@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\section{Size Inference}
+\chapter{Size Inference}
 Before performing fusion proper, we must infer the relative sizes of each array in the program. We achieve this with a simple constraint based inference algorithm, which we discuss in this section. Size inference has been previously described in the context of array fusion by Chatterjee~\cite{chatterjee1991size}. In constrast to our algorithm, \cite{chatterjee1991size} does not support size changing functions such as filter.
 If size inference fails, the programs may still be compiled, but fusion is not performed.
 
@@ -39,7 +39,7 @@ MMMMMMMM \= MM  \= MM \= MMMMMM \= \kill
 
 
 % -----------------------------------------------------------------------------
-\subsection{Size Types, Constraints and Schemes}
+\section{Size Types, Constraints and Schemes}
 \label{clustering:s:SizeTypes}
 Figure~\ref{clustering:f:constraints} shows the grammar for size types, constraints and schemes. A size scheme is like a type constraint from Hindley-Milner type systems, except that it only mentions the size of each input array, instead of the element types as well.
 
@@ -70,7 +70,7 @@ However, the type inference systems for fully higher order dependently typed lan
 
 
 % -----------------------------------------------------------------------------
-\subsection{Constraint Generation}
+\section{Constraint Generation}
 The rules for constraint generation are shown in Figure~\ref{clustering:f:ConstraintGeneration}. The top level judgment ~~$\SizeF{\program}{\sigma}$~~ assigns a size scheme to a program. It does this by extracting size constraints and then solving them. This rule, along with the constraint solving process is discussed in the next section. The judgment ~~$\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$ reads: ``Under environment~$\Gamma_1$, array variable $zs$ binds the result of $b$, producing a result environment $\Gamma_2$ and size constraints $C$''. The remaining judgment that extracts constraints from a list of bindings is similar. The environment $\Gamma$ has the following grammar:
 $$
 \Gamma~ @::=@ ~~\cdot ~~|~~ \Gamma,~ \Gamma ~~|~~ zs : k ~~|~~ k ~~|~~ \exists k
@@ -102,7 +102,7 @@ $$
 Rule~(SProgram) also characterises the programs we accept: a program is \emph{valid} if and only if $\exists \sigma.\ \SizeF{\program}{\sigma}$. 
 
 % -------------------------------------------------------------------
-\subsection{Constraint Solving and Generalization}
+\section{Constraint Solving and Generalization}
 The top-level rule in Figure~\ref{clustering:f:ConstraintGeneration} assigns a size scheme to a program by first extracting size constraints, before solving them and generalizing the result. In the rule, the solving process is indicated by $\textrm{SOLVE}$, and takes an environment and a constraint set, and produces a solved environment and constraint set. As the constraint solving process is both standard and straightforward, we only describe it informally.
 
 Recall from the previous section that in our generated constraints all the size variables named after program variables are on the left of atomic equality constraints, while all the unification and existential variables are on the right. To solve the constraints, we keep finding pairs of atomic equality constraints where the same variable appears on the left, unify the right of both of these constraints, and apply the resulting substitution to both the environment and original constraints. When there are no more pairs of constraints with the same variable on the left, the constraints are in solved form and we are finished.
@@ -143,7 +143,7 @@ $$
 
 
 % -----------------------------------------------------------------------------
-\subsection{Rigid Sizes}
+\section{Rigid Sizes}
 When the environment of our size constraints contains rigid variables (indicated by $\exists k$), we introduce existential quantifiers instead of universal quantifiers into the size scheme. Consider the @filterLeft@ program from Section~\ref{clustering:s:SizeTypes}
 \begin{code}
       filterLeft xs
@@ -267,7 +267,7 @@ At this stage we are stuck, because the constraints are not yet in solved form, 
 
 
 % -----------------------------------------------------------------------------
-\subsection{Iteration Size}
+\section{Iteration Size}
 After inferring the size of each array variable, each operator is assigned an \emph{iteration size}, which is the number of iterations needed in the loop which evaluates that operator. For @filter@ and other size changing operators, the iteration and result sizes are in general different. For such an operator, we say that the result size is a \emph{descendant} of the iteration size. Conversely, the iteration size is a \emph{parent} of the result size. 
 
 This descendant--parent size relation is transitive, so if we filter an array, then filter it again, the size of the result is a descendant of the iteration size of the initial filter. This relation arises naturally from Data Flow Fusion~\cite{lippmeier2013data}, as such an operation would be compiled into a single loop --- with an iteration size identical to the size of the input array, and containing two nested if-expressions to perform the two layers of filtering.
@@ -322,7 +322,7 @@ $\iiter_{\Gamma,C}$
 
 
 % -----------------------------------------------------------------------------
-\subsection{Transducers}
+\section{Transducers}
 %     we've said that several times before
 % Unlike previous work, we do allow combinators with different iteration sizes to be fused together. For example, an operation on filtered data may be fused with the filter operation that generates the data, even though the iteration sizes are different.
 

@@ -10,7 +10,7 @@
 
 
 % -----------------------------------------------------------------------------
-\section{Integer Linear Programming}
+\chapter{Integer Linear Programming}
 \label{clustering:s:ILP}
 It is usually possible to cluster a program graph in multiple ways. For example, consider the following simple function:
 \begin{code}
@@ -32,7 +32,7 @@ To deal with the combinatorial explosion in the number of potential clusterings,
 
 
 % -----------------------------------------------------------------------------
-\subsection{Dependency Graphs}
+\section{Dependency Graphs}
 A dependency graph represents the data dependencies of the program to be fused, and we use it as an intermediate stage when producing linear constraints for the ILP problem. The dependency graph contains enough information to determine the possible clusterings of the input program, while abstracting away from the exact operators used to compute each intermediate array. The rules for producing dependency graphs are in Figure~\ref{clustering:f:DependencyGraph}.
 
 Each binding in the source program becomes a node in the dependency graph. For each intermediate variable, we add a directed edge from the binding that produces a value to all bindings that consume it. Each edge is also marked as either \emph{fusible} or \emph{fusion preventing}. Fusion preventing edges are used when the producer must finish its execution before the consumer node can start. For example, a @fold@ operation must complete execution before it can produce the scalar value needed by its consumers. Conversely, the @map@ operation produces an output value for each value it consumes, so is marked as fusible. 
@@ -87,7 +87,7 @@ $inedge(bs,to,\from)$ \\
 
 
 % -----------------------------------------------------------------------------
-\subsection{ILP Variables}
+\section{ILP Variables}
 After generating the dependency graph, the next step is to produce a set of linear constraints from this graph. The variables involved in these constraints are split into three groups:
 \begin{tabbing}
 M   \= MM \= MMMMMMM \= MM \= \kill
@@ -118,7 +118,7 @@ The final group of variables is used to help define the cost model encoded by th
 
 
 % -----------------------------------------------------------------------------
-\subsection{Linear Constraints}
+\section{Linear Constraints}
 \label{clustering:s:LinearConstraints}
 The constraints we place on the ILP variables are split into four groups: constraints that ensure the clustering is acyclic; constraints that encode fusion preventing edges; constraints on nodes with different iteration sizes, and constraints involving array contraction. 
 
@@ -209,7 +209,7 @@ Recall that an array is fully contracted when all of the consumers are fused wit
 
 
 % -----------------------------------------------------------------------------
-\subsection{Objective Function}
+\section{Objective Function}
 \label{clustering:s:ObjectiveFunction}
 The objective function defines the cost model of the program, and the ILP solver will find the clustering that minimizes this function while satisfying the constraints defined in the previous section. The cost model we use in this paper has three components:
 \begin{itemize}
@@ -246,7 +246,7 @@ Minimise   \>     $\Sigma_{(i,j) \in E} W_{i,j} \cdot x_{i,j}$
 
 
 % -----------------------------------------------------------------------------
-\subsection{Fusion-preventing Path Optimisation}
+\section{Fusion-preventing Path Optimisation}
 \label{clustering:s:OptimisedConstraints}
 The integer linear program defined in the previous section includes more constraints than strictly necessary to define the valid clusterings. If two nodes have a path between them which includes a fusion preventing edge, then we know up front that they must be placed in different clusters. The following function $possible(a,b)$ determines whether there is any possibility that the two nodes $a$ and $b$ can be fused. Similarly the function $possible'(a, b)$ checks whether there is any possibility that the parents of $a$ and $b$ may be fused.
 %

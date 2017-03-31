@@ -11,7 +11,7 @@
 \bibliographystyle{apalike}
 
 \newcommand\ADDTOC[1] {
-  \addcontentsline{toc}{chapter}{\tocEntry{#1}}
+  \addcontentsline{toc}{chapter}{\hspace{\cftchapnumwidth}\tocEntry{#1}}
   % Clear chapter and section from headers
   \markboth{}{}
 }

@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\section{Elimination}
+\chapter{Elimination}
 \label{icicle:s:Elimination}
 
 
@@ -119,7 +119,7 @@ loop ... {
 }
 \end{code}
 
-\subsection{Preliminary transforms}
+\section{Preliminary transforms}
 
 A-normalisation is relatively easy, however any expressions in the initialiser of each fold can be lifted out as a separate fold with initialiser and an identity expression (that is, the name of the fold).
 Any expressions to be lifted out from the update expression should be created as new @let@ bindings.
@@ -185,7 +185,7 @@ loop item {
 \end{code}
 
 
-\subsection{Stage-local duplicate removal}
+\section{Stage-local duplicate removal}
 Here is an example of a stage with two counters.
 \begin{code}
 stage {
@@ -235,7 +235,7 @@ stage {
 
 
 
-\subsection{Strongly connected components}
+\section{Strongly connected components}
 Up to now, the reason for the stages has only been briefly mentioned.
 The idea is that each stage should contain a single set of mutually recursive folds.
 Then, each set of mutually recursive folds becomes a single unit to be operated on for removing duplicates.
@@ -285,7 +285,7 @@ loop item {
 }
 \end{code}
 
-\subsection{Stage layers}
+\section{Stage layers}
 Once we have a list or set of stages, we can perform a topological ordering over the stages themselves.
 In this case, a whole stage becomes a node in the graph, and edges are any references between stages.
 
@@ -302,7 +302,7 @@ this stage refers to a binding in the layer above, while any stage two layers ab
 However, in order to be duplicates, they must refer to the same things, or duplicates of the same things.
 
 
-\subsection{Inter-stage duplicate removal}
+\section{Inter-stage duplicate removal}
 To check if one stage is a duplicate of another, we go through each binding of the first stage, checking if there is an alpha-equivalent binding in the other stage.
 We also create a substitution between the two stages.
 This substitution is later performed on the rest of the program, so that after the duplicate is removed, references to the duplicate are updated to refer to the first stage.

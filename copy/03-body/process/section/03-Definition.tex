@@ -1,7 +1,7 @@
 %!TEX root = ../Main.tex
 
 % -----------------------------------------------------------------------------
-\section{Process definitions}
+\chapter{Process definitions}
 \input{copy/03-body/process/figures/ProcessDef.tex}
 
 The grammar for process definitions is given in Fig.~\ref{fig:Process:Def}. Variables, Channels and Labels are specified by unique names. We refer to the \emph{endpoint} of a stream as a channel. A particular stream may flow into the input channels of several different processes, but can only be produced by a single output channel. For values and expressions we use an untyped lambda calculus with a few primitives chosen to facilitate the examples. The `$||$' operator is boolean-or, `+' addition, `/=' not-equal, and `$<$' less-then.
@@ -24,7 +24,7 @@ When lowering process code to a target language, such as C, LLVM, or some sort o
 
 
 % -----------------------------------------------------------------------------
-\subsection{Execution}
+\section{Execution}
 \label{s:Process:Eval}
 
 The dynamic execution of process networks consists of three aspects:
@@ -48,7 +48,7 @@ Each output channel may be pushed to by a single process only, so in a sense eac
 
 
 % -----------------------------------------------------------------------------
-\subsubsection{Injection}
+\subsection{Injection}
 Fig.~\ref{fig:Process:Eval:Inject} gives the rules for injecting values into processes. The statement $(\ProcInject{p}{v}{c}{p'})$ reads ``given process $p$, injecting value $v$ into channel $c$ yields an updated process $p'$''. The @injects@ form is similar, but operates on sets of processes rather than a single one.
 
 Rule (InjectValue) injects of a single value into a single process. The value is stored as a (@pending@~ v) binding in the $\InputState$ of the associated channel of the process. The $\InputState$ acts as a single element buffer, and must be empty (set to @none@) for the injection to succeed.
@@ -63,7 +63,7 @@ Rule (InjectMany) attempts to inject a single value into a set of processes. We 
 
 
 % -----------------------------------------------------------------------------
-\subsubsection{Advancing}
+\subsection{Advancing}
 Fig.~\ref{fig:Process:Eval:Shake} gives the rules for advancing a single process. The first set of rules handle specific instructions. The statement $(\ProcBlockShake{i}{is}{bs}{a}{l}{is'}{us'})$ reads ``instruction $i$, given channel states $is$ and the heap bindings $bs$, passes control to instruction at label $l$ and yields new channel states $is'$, heap update expressions $us'$, and performs an output action $a$.'' An output action $a$ is an optional message of the form $(\Push~\Chan~\Value)$, which encodes the value a process pushes to one of its output channels. We write ~$\cdot$~ for an empty action. 
 
 Rule (Pull) takes the @pending@ value $v$ from the channel state and produces a heap update that will copy this value into the variable $x$ named in the @pull@ instruction. We use the syntax $us,x=v$ to mean that the list of updates $us$ is extended with the new binding $x=v$. In the result channel states, the state of the channel $c$ that was pulled from is set to @have@, to indicate the value has been copied into the local variable.
@@ -78,7 +78,7 @@ The statement $\ProcShake{p}{a}{p'}$ reads ``process $p$ advances to new process
 
 
 % -----------------------------------------------------------------------------
-\subsubsection{Feeding}
+\subsection{Feeding}
 Fig.~\ref{fig:Process:Eval:Feed} gives the rules for collecting output actions and feeding the contained values to other processes. The first set of rules concerns feeding values to other processes within the same process network, while the second exchanges input and output values with the environment the process network is running in.
 
 The statement $\ProcShake{ps}{a}{ps'}$ reads ``the processes group $ps$ advances to the new process group $ps'$ yielding output action $a$. A process ``group'' is just a set of processes. 
@@ -101,7 +101,7 @@ Rule (FeedExternal) injects values from the external environment. This rule also
 
 
 % -----------------------------------------------------------------------------
-\subsection{Non-deterministic Execution Order}
+\section{Non-deterministic Execution Order}
 \label{s:EvaluationOrder}
 %%% AR: Can we simplify this?
 % Maybe we can start by talking about the different evaluation orders for just two alt2s:

@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\section{Benchmarks}
+\chapter{Benchmarks}
 \label{clustering:s:Benchmarks}
 
 \begin{figure*}
@@ -38,7 +38,7 @@ The benchmark programs are at \url{https://github.com/amosr/papers/tree/master/2
 
 % -----------------------------------------------------------------------------
 \pagebreak
-\subsection{Normalize2}
+\section{Normalize2}
 To demonstrate the ILP formulation we will use the @normalize2@ example from \S\ref{clustering:s:Introduction}, repeated here:
 \begin{code}
   normalize2 :: Array Int -> Array Int
@@ -131,17 +131,17 @@ Note that although nodes $sum1$ and $sum2$ have equal $\pi$ values, they are not
 
 
 % -----------------------------------------------------------------------------
-\subsection{Closest Points}
+\section{Closest Points}
 The closest points benchmark is a divide-and-conquer algorithm that finds the closest pair of 2-dimensional points in an array. We first find the midpoint along the Y-axis, and filter the remaining points to those above and below the midpoint. We then recursively find the closest pair of points in the two halves, and merge the results. As the filtered points are passed directly to the recursive call, there is no further opportunity to fuse them, and our clustering is the same as returned by Megiddo's algorithm. However, our clustering generates both filtered arrays in a single loop, unlike stream fusion that requires a separate loop for each.
 
 
 % -----------------------------------------------------------------------------
-\subsection{QuadTree}
+\section{QuadTree}
 The QuadTree benchmark recursively builds a 2-dimensional space partitioning tree from an array of points. At each step the array of points is filtered into four 2-dimensional boxes. As with the closest points algorith, there are no further opportunities for fusing the filtered results, and our clustering is the same as Megiddo's. However, our clustering produces all four filtered results in a single loop, whereas stream fusion requires four loops.
 
 
 % -----------------------------------------------------------------------------
-\subsection{QuickHull}
+\section{QuickHull}
 The core of the QuickHull algorithm is shown below: given a line and an array of points, we filter the points to those above the line, and also find the point farthest from that line.
 
 \begin{code}

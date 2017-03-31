@@ -101,7 +101,7 @@
 
 \microtypesetup{expansion=false}%
 \DeclareRobustCommand{\spacedallcaps}[1]{\textls[160]{\MakeTextUppercase{#1}}}%
-\DeclareRobustCommand{\spacedallcapsX}[1]{\textls[480]{\MakeTextUppercase{#1}}}%
+\DeclareRobustCommand{\spacedallcapsX}[1]{\textls[320]{\MakeTextUppercase{#1}}}%
 \DeclareRobustCommand{\spacedlowsmallcaps}[1]{\textls[80]{\scshape\MakeTextLowercase{#1}}}%
 
 % ********************************************************************
@@ -131,6 +131,12 @@
 % ********************************************************************
 \RequirePackage{titlesec}
         % parts
+    \titleformat{\part}[display]%
+        {\titlerule}
+        { \center{\color{halfgray}\spacedallcaps{\Large PART \thepart}} }
+        {0pt}%
+        {\large \center\spacedallcapsX}
+        [\normalsize\vspace*{.6\baselineskip}\titlerule]%
     % chapters
     \titleformat{\chapter}[display]%
         {\titlerule}
@@ -187,6 +193,21 @@
 
     % pagenumbers right after the titles
     % parts
+    % \renewcommand{\cftpartpresnum}{\scshape}%
+    % \renewcommand{\cftpartpresnum}{\scshape\MakeTextLowercase}%
+    % \renewcommand{\cftpartpresnum}{PRELLO}%
+    % \renewcommand{\cftpartaftersnum}{HELLO}%
+    % \renewcommand{\cftpartaftersnumb}{BELLO}%
+    % \let\cftoldpartfont\cftpartfont
+    % \renewcommand{\cftpartfont}{CFTPARTFONT}%
+    % \renewcommand{\cftpartpagefont}{CFTPARTPAGEFONT}%
+    % \renewcommand{\cftpartleader}{CFTPARTLEADER}
+    % \setlength{\cftpartnumwidth}{\cftpartnumwidth}
+    % \titleformat{\part}{\huge\bfseries}{}{0pt}{\thepart\quad}
+
+    % \renewcommand{\cftpartfont}{\normalfont}%
+    % \renewcommand{\cftpartpagefont}{\normalfont}%
+
     % chapters
     \renewcommand{\cftchappresnum}{\scshape\MakeTextLowercase}%
     \renewcommand{\cftchapfont}{\normalfont}%

@@ -1,7 +1,7 @@
 % !!!!!!!!!!!!!!!!!!!!!!!
 % I commented the \input out in section/04-ILP.tex
 
-\subsection{Proof}
+\section{Proof}
 To prove correctness of our linear program formulation, we need to prove two different things.
 Firstly, the formulation's constraints must always be satisfiable; that is, there must exist a variable assignment that satisfies all constraints.
 This is rather simple to show, but guarantees that the linear program will always give an answer.
@@ -9,7 +9,7 @@ The next thing to show is that any produced clustering is legal: if a variable a
 This means that, not only do we get \emph{an} answer, we also get the \emph{right} answer.
 
 %!TEX root = ../Main.tex
-\subsubsection{Satisfiability}
+\subsection{Satisfiability}
 For any program $p$, there exists a trivial clustering with no fusion at all.
 We can use this as the variable assignment of $ilp(p)$.
 For each pair of nodes $m,n \in p$, $x_{mn} = 1$ --- no fusion is possible.
@@ -18,7 +18,7 @@ For the $\pi$ variables, we must find a topographical ordering of the nodes in $
 \TODO{Now, prove that this assignment actually satisfies the constraints.}
 
 
-\subsubsection{Soundness}
+\subsection{Soundness}
 For any program $p$ and variable asignment $v$, if $v$ satisfies the constraints for $ilp(p)$, the clustering denoted by $x_{ij}$ in $v$ is legal.
 
 For a clustering to be legal, it must satisfy three constraints:

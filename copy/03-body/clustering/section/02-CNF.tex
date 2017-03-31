@@ -10,7 +10,7 @@
 
 
 % -----------------------------------------------------------------------------
-\section{Combinator Normal Form}
+\chapter{Combinator Normal Form}
 \label{clustering:s:CombinatorNormalForm}
 Input programs are expressed in \emph{Combinator Normal Form} (CNF), which is a textual description of the data flow graph. The grammar for CNF is given in Figure~\ref{clustering:f:CombinatorNormalForm}. The @normalize2@  example on the previous page is in CNF,  as is the matching data flow graph for @normalize2@ in Figure~\ref{clustering:f:normalize2-clusterings}. Our data flow graphs are similar to Loop Communication Graphs (LCGs) from related work in imperative array fusion~\cite{gao1993collective}. We name edges after the corresponding variable from the CNF form, and edges which are fusion preventing are drawn with a dash through them (as per the edge labeled @sum1@ in Figure~\ref{clustering:f:normalize2-clusterings}). In data flow graphs, we tend to elide the worker functions to combinators when they are not important to the discussion --- so we don't show the @(+)@ operator on each use of @fold@.
 

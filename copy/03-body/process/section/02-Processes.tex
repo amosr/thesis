@@ -1,7 +1,7 @@
 %!TEX root = ../Main.tex
 
 % -----------------------------------------------------------------------------
-\section{Processes, Machines, Combinators and Operators}
+\chapter{Processes, Machines, Combinators and Operators}
 \label{s:Processes}
 
 A \emph{process} in our system is a simple imperative program with a local heap. A process pulls source values from an arbitrary number of input streams and pushes result values to at least one output stream. The process language is an intermediate representation we use when fusing the overall dataflow network. When describing the fusion transform we describe the control flow of the process as a state machine, hence Machine Fusion. 
@@ -10,7 +10,7 @@ A \emph{combinator} is a template for a particular process which parameterizes i
 
 
 % -----------------------------------------------------------------------------
-\subsection{Grouping}
+\section{Grouping}
 
 The definition of the @group@ combinator which detects groups of successive identical elements in the input stream is given in Fig.~\ref{fig:Process:Group}. The process emits the first value pulled from the stream and every value that is different from the last one that was pulled. For example, when executed on the input stream @[1,2,2,3]@, the process will produce the output @[1,2,3]@. We include the concrete representation and a diagram of the process viewed as a state machine.
 
@@ -55,7 +55,7 @@ Finally, the instruction @(drop sIn1 A0 [])@ signals that the current element th
 
 
 % -----------------------------------------------------------------------------
-\subsection{Merging}
+\section{Merging}
 \begin{figure}
 \begin{alltt}
                merge
@@ -91,13 +91,13 @@ As the @merge@ process merges infinite streams, if we execute it with a finite i
 
 
 % -----------------------------------------------------------------------------
-\subsection{Fusion}
+\section{Fusion}
 
 Our fusion algorithm takes two processes and produces a new one that computes the output of both. For example, suppose we need a single process that produces the output of the first two lines of our @uniquesUnion@ example back in \S\ref{s:Introduction}. The result will be a process that computes the result of both @group@ and @merge@ as if they were executed concurrently, where the first input stream of the @merge@ process is the same as the input stream of the @group@ process. For ease of reference, when describing the fusion algorithm we will instantiate the parameters of each combinator with arguments of the same names.
 
 
 % -----------------------------------------------------------------------------
-\subsubsection{Fusing Pulls}
+\subsection{Fusing Pulls}
 \label{s:Fusion:FusingPulls}
 
 The algorithm proceeds by considering pairs of states: one in each of the source process state machines to be fused. Both the @group@ machine and the @merge@ machine pull from the same stream as their initial instruction, so we have the situation shown in Fig.~\ref{fig:Fusion:Pulls}. The @group@ machine needs to transition from label @A0@ to label @A1@, and the @merge@ machine from @B0@ to @B1@. In the result machine we produce three new instructions that transition between four joint result states, @F0@ to @F3@.
@@ -118,7 +118,7 @@ Finally, note that in the result states @F0@ through @F3@ the state of the input
 
 
 % -----------------------------------------------------------------------------
-\subsubsection{Fusing Cases}
+\subsection{Fusing Cases}
 \begin{figure}
 \includegraphics[scale=1.1]{copy/03-body/process/figures/fuse-case-pull.pdf}
 \caption{Fusing case instructions}
@@ -134,7 +134,7 @@ Note that we could construct the fused result machine in several ways. One optio
 
 
 % -----------------------------------------------------------------------------
-\subsection{Fused Result}
+\section{Fused Result}
 
 Fig.~\ref{fig:Process:Fused} shows the final result of fusing @group@ and @merge@ together. There are similar rules for handling the other combinations of instructions, but we defer the details to \S\ref{s:Fusion}. The result process has two input streams, @sIn1@ and @sIn2@ and two output streams: @sOut1@ which is the @group@ processes output stream, and @sOut2@ which is the @merge@ processes output stream. 
 

@@ -1,12 +1,12 @@
 %!TEX root = ../Main.tex
 
 % -----------------------------------------------------------------------------
-\section{Future work}
+\chapter{Future work}
 \label{s:FutureWork}
 
 %%% AR: Can we fit a few sentences here just to conclude, say we've described a fusion algorithm, with promising future work too
 
-\subsection{Case analysis}
+\section{Case analysis}
 \label{s:FullyAbstractCase}
 
 The fusion algorithm treats all @case@ conditions as fully abstract, by exploring all possible combinations for both processes.
@@ -23,7 +23,7 @@ After postprocessing, if any failure instructions are reachable, fusion fails as
 
 
 % -----------------------------------------------------------------------------
-\subsection{Finite streams}
+\section{Finite streams}
 \label{s:Finite}
 
 The processes we have seen so far deal with infinite streams, but in practice most streams are finite. Certain combinators such as @fold@ and @append@ only make sense on finite streams, and others like @take@ produce inherently finite output. We have focussed on the infinite stream version because it is simpler to explain and prove, but the extensions required to support finite streams do not require substantial conceptual changes.
@@ -76,7 +76,7 @@ It is also possible to encode finite streams as infinite streams with an explici
 
 
 % -----------------------------------------------------------------------------
-% \subsection{Non-determinism and fusion order}
+% \section{Non-determinism and fusion order}
 % \label{s:FusionOrder}
 % The main fusion algorithm here works on pairs of processes.
 % When there are more than two processes, there are multiple orders in which the pairs of processes can be fused. The order in which pairs of processes are fused does not affect the output values, but it does affect the access pattern: the order in which outputs are produced and inputs read. Importantly, the access pattern also affects whether fusion succeeds or fails to produce a process. In other words, while evaluating multiple processes is non-deterministic, the act of fusing two processes \emph{commits} to a particular deterministic interleaving of the two processes. The simplest example of this has two input streams, a function applied to both, then zipped together. 
@@ -99,7 +99,7 @@ It is also possible to encode finite streams as infinite streams with an explici
 %   in  abs
 % \end{code}
 
-% \subsection{Non-determinism and fusion order}
+% \section{Non-determinism and fusion order}
 % \label{s:Future:FusionOrder}
 % Our current solution to this is to try all permutations of fusing processes and use the first one that succeeds. A more principled solution may be to allow non-determinism in a single process by adding a non-deterministic choice instruction. Then when fusing two processes together, if both processes are pulling from unrelated streams, the result would be a non-deterministic choice between pulling from the first process and executing the first, or pulling from the second process and executing the second. In this way we could defer committing to a particular evaluation order until the required order is known. This may produce larger intermediate programs, but the same deterministic program could be extracted at the end.
 

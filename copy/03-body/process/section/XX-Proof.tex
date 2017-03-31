@@ -1,6 +1,6 @@
 %!TEX root = ../Main.tex
 
-\section{Proofs}
+\chapter{Proofs}
 \label{s:Proofs}
 
 Our fusion system is formalized in Coq, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels then the two source processes may also produce that same sequence. Note that due to non-determinism of process execution the converse is not true in practice: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders. 

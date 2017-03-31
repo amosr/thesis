@@ -1,7 +1,7 @@
 %!TEX root = ../Main.tex
 
 % ---------------------------------------------------------
-\section{Elements and Aggregates}
+\chapter{Elements and Aggregates}
 \label{icicle:s:ElementsAndAggregates}
 To allow incremental computation all Icicle queries must execute in a single pass over the input stream.
 Sadly, not all queries \emph{can} be executed in a single pass: the key examples are queries that require random access indexing, or otherwise need to access data in an order different to what the stream provides.
@@ -32,26 +32,26 @@ Evaluation and typing rules are defined in~\S\ref{icicle:s:IcicleSource}, while 
 
 
 % ---------------------------------------------------------
-\subsection{The Stage Restriction}
+\section{The Stage Restriction}
 To ensure that Icicle queries can be evaluated in a single pass, we use a modal type system inspired by staged computation~\cite{davies2001modal}. We use two modalities, @Element@ and @Aggregate@. Values of type @Element@~$\tau$ are taken from input stream on a per-element basis, whereas values of type @Aggregate@~$\tau$ are available only once the entire stream has been consumed. In the expression @(filter (key == k) of mean value)@, the variable @key@ has type @Element Date@ while @k@ has type @Aggregate Date@. Attempting to compile the unstreamable query in Icicle will produce a type error complaining that elements cannot be compared with aggregates.
 
 Note that the types of pure values such as constants are automatically promoted to the required modality. For example, if we have @open == 1@ and @open : Element Int@ then the constant @1@ is automatically promoted to have type @Element Int@ as well.
 
 
 % ---------------------------------------------------------
-\subsection{Finite Streams and Synchronous Data Flow}
+\section{Finite Streams and Synchronous Data Flow}
 In contrast to synchronous data flow languages such as {\sc Lustre}~\cite{halbwachs1991synchronous}, the streams processed by Icicle are conceptually finite in length. Icicle is fundamentally a query language, which queries finite tables of data held in a non-volatile store, but does so in a streaming manner. Lustre operates on conceptually infinite streams, such as those found in real-time control systems (like to fly airplanes). In Icicle, the ``last'' element in a stream is the last one that appears in the table on disk. In Lustre, the ``last'' element in a stream is the one that was most recently received. If the unstreamable query from \S2 was converted to Lustre syntax then it would execute, but the filter predicate would compare the last key with the most recent key from the stream, which is the key itself. The filter predicate would always be true, and the query would return the mean of the entire stream. Applying the Icicle type system to our queries imposes the natural stage restriction associated with finite streams, so there are distinct ``during'' (element) and ``after'' (aggregate) stages.
 
 
 % ---------------------------------------------------------
-\subsection{Incremental Update}
+\section{Incremental Update}
 Suppose we query a large table and record the result. Tomorrow morning we receive more data and add it to the table. We would like to update the result without needing to process all data from the start of the table. We can do this by remembering the values of all intermediate aggregates that were computed in the query, and updating them as new data arrives. In the @avg@ example from \S2 these aggregates are @k@ and @avgs@. 
 
 We also provide impure contextual information to the query such as the current date, by assigning it an aggregate type. As element-wise computations cannot depend on aggregate computations we ensure that reused parts of an incremental computation are the same regardless of which day they are executed.
 
 
 % ---------------------------------------------------------
-\subsection{Bounded Buffer Restriction}
+\section{Bounded Buffer Restriction}
 \label{icicle:s:IcicleSource:bounded}
 Icicle queries process tables of arbitrary size that may not fit in memory. Due to this, each query must execute without requiring buffer space proportional to the size of the input. As a counter example, here is a simple function which cannot be applied without reserving a buffer of the same size as the input:
 \begin{code}

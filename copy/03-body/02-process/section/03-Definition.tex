@@ -2,7 +2,7 @@
 
 % -----------------------------------------------------------------------------
 \chapter{Process definitions}
-\input{copy/03-body/process/figures/ProcessDef.tex}
+\input{copy/03-body/02-process/figures/ProcessDef.tex}
 
 The grammar for process definitions is given in Fig.~\ref{fig:Process:Def}. Variables, Channels and Labels are specified by unique names. We refer to the \emph{endpoint} of a stream as a channel. A particular stream may flow into the input channels of several different processes, but can only be produced by a single output channel. For values and expressions we use an untyped lambda calculus with a few primitives chosen to facilitate the examples. The `$||$' operator is boolean-or, `+' addition, `/=' not-equal, and `$<$' less-then.
 
@@ -57,9 +57,9 @@ Rule (InjectIgnore) allows processes that do not use a particular named channel 
 
 Rule (InjectMany) attempts to inject a single value into a set of processes. We use the single process judgment form to inject the value into all processes in the set, which must succeed for all of them. Once a value has been injected into all consuming processes that require it, the producing process no longer needs to retain it.
 
-\input{copy/03-body/process/figures/ProcessInject}
-\input{copy/03-body/process/figures/ProcessEval.tex}
-\input{copy/03-body/process/figures/ProcessFeed.tex}
+\input{copy/03-body/02-process/figures/ProcessInject}
+\input{copy/03-body/02-process/figures/ProcessEval.tex}
+\input{copy/03-body/02-process/figures/ProcessFeed.tex}
 
 
 % -----------------------------------------------------------------------------

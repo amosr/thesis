@@ -48,7 +48,7 @@ Finally, the instruction @(drop sIn1 A0 [])@ signals that the current element th
 \end{code}
 \end{center}
 \vspace{1em}
-\includegraphics[scale=1.1]{copy/03-body/process/figures/state-group.pdf}
+\includegraphics[scale=1.1]{copy/03-body/02-process/figures/state-group.pdf}
 \caption{The group combinator}
 \label{fig:Process:Group}
 \end{figure}
@@ -80,7 +80,7 @@ Finally, the instruction @(drop sIn1 A0 [])@ signals that the current element th
 \end{code}
 
 \medskip
-\includegraphics[scale=1.1]{copy/03-body/process/figures/state-merge.pdf}
+\includegraphics[scale=1.1]{copy/03-body/02-process/figures/state-merge.pdf}
 \caption{The merge combinator}
 \label{fig:Process:Merge}
 \end{figure}
@@ -111,7 +111,7 @@ Finally, note that in the result states @F0@ through @F3@ the state of the input
 
 
 \begin{figure}
-\includegraphics[scale=1.1]{copy/03-body/process/figures/fuse-pull-pull.pdf}
+\includegraphics[scale=1.1]{copy/03-body/02-process/figures/fuse-pull-pull.pdf}
 \caption{Fusing pull instructions}
 \label{fig:Fusion:Pulls}
 \end{figure}
@@ -120,7 +120,7 @@ Finally, note that in the result states @F0@ through @F3@ the state of the input
 % -----------------------------------------------------------------------------
 \subsection{Fusing Cases}
 \begin{figure}
-\includegraphics[scale=1.1]{copy/03-body/process/figures/fuse-case-pull.pdf}
+\includegraphics[scale=1.1]{copy/03-body/02-process/figures/fuse-case-pull.pdf}
 \caption{Fusing case instructions}
 \label{fig:Fusion:Case}
 \end{figure}
@@ -285,7 +285,7 @@ process
 @} }@
 \end{tabbing}
 
-\caption{Fusion of \textcolor{groupc}{group} and \textcolor{mergec}{merge}, along with \textcolor{sharec}{shared} instructions}
+\caption[Fusion of group and merge]{Fusion of \textcolor{groupc}{group} and \textcolor{mergec}{merge}, along with \textcolor{sharec}{shared} instructions}
 \label{fig:Process:Fused}
 \end{figure}
 

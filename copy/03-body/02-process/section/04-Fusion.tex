@@ -16,15 +16,15 @@ We also extend the existing $Variable$ grammar with a (@chan@ c) form which repr
 
 Still in Fig.~\ref{fig:Fusion:Types}, $\ChanType_2$ classifies how channels are used, and possibly shared, between two processes. Type @in2@ indicates that the two processes @pull@ from the same channel, and these actions must then be coordinated. Type @in1@ indicates that only a single process pulls from the channel. Type @in1out1@ indicates that one process pushes to the channel and the other pulls from the same. Type @out1@ indicates that the channel is pushed to by a single process. Each output channel is uniquely owned and cannot be pushed to by more than one process.
 
-\input{copy/03-body/process/figures/Fusion-types.tex}
-\input{copy/03-body/process/figures/Fusion-fusePair.tex}
+\input{copy/03-body/02-process/figures/Fusion-types.tex}
+\input{copy/03-body/02-process/figures/Fusion-fusePair.tex}
 
 
 \smallskip
 % -------------------------------------
 Fig.~\ref{fig:Fusion:Def:Top} defines function \ti{fusePair} that fuses a pair of processes together, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from Fig.~\ref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states we add them to a map $bs$ of joint label to corresponding the instruction, and repeat the process to a fixpoint where no more states can be discovered.
 
-\input{copy/03-body/process/figures/Fusion-tryStepPair.tex}
+\input{copy/03-body/02-process/figures/Fusion-tryStepPair.tex}
 
 % -------------------------------------
 Fig.~\ref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which of two processes to advance.
@@ -35,7 +35,7 @@ Clauses (DeferPull1) and (DeferPull2) are similar heuristics, which defer @pull@
 
 Clauses (Run1) and (Run2) apply when one process can advance using some other instruction. We try the first process first, and if that can advance then so be it. This priority means that fusion is left-biased, preferring advancement of the left process over the second.
 
-\input{copy/03-body/process/figures/Fusion-tryStep.tex}
+\input{copy/03-body/02-process/figures/Fusion-tryStep.tex}
 
 
 % -------------------------------------
@@ -66,7 +66,7 @@ Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants t
 
 
 % -------------------------------------
-\input{copy/03-body/process/figures/FusionUtils.tex}
+\input{copy/03-body/02-process/figures/FusionUtils.tex}
 
 \smallskip
 Fig.~\ref{fig:Fusion:Utils} contains definitions of some utility functions which we have already mentioned.

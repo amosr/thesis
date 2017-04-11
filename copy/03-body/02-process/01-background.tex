@@ -19,7 +19,59 @@ Streaming applications, where the input size is larger than fits in main memory,
 
 \section{Kahn process networks}
 
-\FigurePdf{figs/combinators/nd-merge}{Non-deterministic merge with values flowing through}{Non-deterministic merge: upper values (blue) and lower values (red) are passed through. Unlike normal streaming operations, the time domain is explicit in the streams.}
+Kahn process networks~\citep{kahn1976coroutines} are a kind of restricted process network.
+The key insight here is that if each process has blocking reads and is deterministic, the entire network behaves deterministically.
+While scheduling of processes must be assumed to be non-deterministic, this only affects the relative order between processes and how long communications take.
+The actual computation that each process performs remains deterministic, as do the values sent over communication channels.
+While a non-blocking read that checks for presence of an input value could use the non-determinism of the scheduler to act non-deterministically, blocking reads are insulated from this and can only act deterministically.
+
+There are other restrictions imposed by Kahn process networks.
+First, any communication between processes must be through channels, rather than through shared state.
+Secondly, each channel can only have one producer outputting to it, but can have multiple consumers reading from it.
+When a channel has multiple consumers, each value is duplicated across all consumers, ensuring that one consumer's reading habits do not affect other consumers in any way.
+
+The original formulation of Kahn process networks used non-blocking writes to channels, which requires a potentially unbounded buffer, while \citet{parks1995bounded} observes that introducing blocking writes can introduce deadlocks, but does not affect the determinacy.
+Deadlocks introduced by bounded buffers are known as `artificial deadlocks', as they would not occur with unbounded buffers.
+An artificial deadlock cannot affect stream values, only the size of the stream.
+
+\subsection{The three merges}
+There are three operations commonly called ``merge'', and the names ``deterministic merge'' and ``non-deterministic merge'' are sometimes used for the same operation, depending on the context.
+For this reason, it is necessary to explain all three to clear up any confusion, even though only one of these is supported by process fusion.
+In this discussion I will use separate names for all three merges: value-dependent merge, time-dependent merge, and ambiguous merge.
+
+\FigurePdf{figs/combinators/value-merge}{Value merge with example values}{Value merge: values from each input stream are compared and the smaller chosen, so that two sorted input streams become one sorted output stream.}
+
+Value-dependent merge operates over streams of values, and intersperses them, choosing the smallest value from each stream at every step.
+This operation is the core of merge-sort.
+\autoref{figs/combinators/value-merge} shows an example of value-dependent merge with two sorted input streams, producing the sorted concatenation of the two.
+Value-dependent merge is deterministic and can be encoded as a Kahn process.
+
+\FigurePdf{figs/combinators/time-merge}{Time merge with example values}{Time merge: upper values (blue) and lower values (red) are merged according to the time they arrive. This operation requires non-blocking reads and cannot be implemented as a Kahn process.}
+
+Time-dependent merge operates over two streams with inherent time, and merges according to the absolute time.
+\autoref{figs/combinators/time-merge} shows an example of time-dependent merge, where upper values (blue) and lower values (red) are shown with time along the x axis.
+Time-dependent merge can be implemented deterministically using a non-blocking read, but using a non-blocking read allows it to \emph{observe} the non-determinism in scheduling.
+This operation is sometimes known as a non-deterministic merge in terms of Kahn process networks \CITE, while in streaming languages such as \CITE it is known as a deterministic merge.
+While this cannot be implemented as a Kahn process, in some cases it is possible to embed the time inside the value, and use simple value-dependent merge.
+
+\FigurePdf{figs/combinators/amb-merge}{Ambiguous merge with example values}{Ambiguous merge: upper values (blue) and lower values (red) are merged according to the order, choosing non-deterministically when two values arrive at the same time.}
+
+Ambiguous merge is fully non-deterministic, and is similar to time-dependent merge, except when values arrive at the same point in time, it chooses non-deterministically between the two.
+\autoref{figs/combinators/amb-merge} shows an example of ambiguous merge, where both streams are defined at `3'.
+This operation cannot be implemented as a Kahn process.
+
+Only value-dependent merge is able to be expressed as a Kahn process network, it is important to compare which systems support value-dependent and which time-dependent.
+
+\subsection{Array computations}
+
+In our case we are interested in streams as a method for optimising array computations, by converting arrays to streams and vice versa.
+In some streaming operations the time domain of stream values is interesting, but this is not true for array computations.
+This makes Kahn process networks an ideal target for array computations: the restrictions help one to reason about how processes act, by allowing us to ignore the minutiae of scheduling and communications.
+
+Many standard stream operations can be written in this way, such as maps, filters, appends, etc.
+
+
+\section{Active and passive}
 
 \section{Bounded and unbounded buffers}
 
@@ -98,21 +150,21 @@ data Control a
 
 \begin{table}
 \begin{center}
-\begin{tabular}{|l||c|c|c|c|c|}
+\begin{tabular}{|l||c|c|c|c|c|c|}
 \hline
- & Split & Join & Diamond & Extensible & Nondeterministic merge \\
+ & Split & Join & Diamond & Extensible & Value-merge & Time-merge \\
 \hline
 \hline
 Polarized data flow
-  & $\checkmark$ & $\checkmark$ & $\times$ & $\checkmark$ & $\checkmark$ \\
+  & $\checkmark$ & $\checkmark$ & $\times$ & $\checkmark$ & $\checkmark$& $\checkmark$ \\
 Pull
-  & $\times$ & $\checkmark$ & $\times$ & $\checkmark$ & $\times$ \\
+  & $\times$ & $\checkmark$ & $\times$ & $\checkmark$ & $\checkmark$ & $\times$ \\
 Push
-  & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ \\
+  & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ & $\times$ & $\checkmark$ \\
 Data flow
-  & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ \\
+  & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\times$ \\
 Machine/process
-  & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$ \\
+  & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$ \\
 \hline
 \end{tabular}
 \end{center}

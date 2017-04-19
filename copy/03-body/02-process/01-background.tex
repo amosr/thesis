@@ -11,11 +11,46 @@ The real benefit of fusion comes from the fact that the fused program now has di
 The intermediate array can also be removed from memory, but this is more of a side-benefit than anything else.
 In imperative languages, removing intermediate arrays is performed as a separate step called array contraction.
 
-While it is possible to perform fusion.
+It is possible to perform fusion while keeping intermediate arrays; for example partitioning a stream into those greater than or equal to zero (`aboves'), and those below zero (`belows'), and appending the aboves to the belows.
 
-The issue of cache locality.
+\begin{code}
+partitions :: Stream Int -> Stream Int
+partitions inputs =
+ let aboves      = filter (>=0) inputs
+     belows      = filter  (<0) inputs
+     partitioned = aboves ++ belows
+ in  partitioned
+\end{code}
 
-Streaming applications, where the input size is larger than fits in main memory, are very important.
+This operation inherently requires a buffer, as the entire stream must be read in order to compute the aboves, and the append must wait until the end of aboves before it can read from belows.
+This operation can be fused together by using an intermediate buffer to store belows in, as values are read from inputs.
+
+\begin{code}
+partitions inputs =
+ output partitioned.
+ let go buf = do
+       v <- pull inputs (finish buf)
+       case v >= 0 of
+        True -> do
+         push partitioned v
+         go buf
+        False -> do
+         go (Buf.push buf v)
+     finish buf = case Buf.uncons buf of
+       Just (v,buf') -> do
+         push partitioned v
+         finish buf'
+       Nothing -> do
+         done
+ in  go Buf.empty
+\end{code}
+
+If the input happens to be a manifest array, then the buffer is already there - one could loop over the array twice, or even reuse parts of the array in-place similar to the partition in quicksort.
+However, when the input is a stream of unknown size, this buffering can cause space issues.
+If the input stream does not fit entirely in memory, storing even a subset of elements in an unbounded buffer is likely to run out of memory at some stage---and running out of memory could very well mean a terminated program.
+
+We are therefore not just interested in fusing programs, but fusing them without unbounded buffers, even at the expense of expressivity.
+For this reason, the main fusion algorithm does not handle any insertion of buffers.
 
 \section{Kahn process networks}
 
@@ -50,9 +85,10 @@ Value-dependent merge is deterministic and can be encoded as a Kahn process.
 
 Time-dependent merge operates over two streams with inherent time, and merges according to the absolute time.
 \autoref{figs/combinators/time-merge} shows an example of time-dependent merge, where upper values (blue) and lower values (red) are shown with time along the x axis.
-Time-dependent merge can be implemented deterministically using a non-blocking read, but using a non-blocking read allows it to \emph{observe} the non-determinism in scheduling.
-This operation is sometimes known as a non-deterministic merge in terms of Kahn process networks \CITE, while in streaming languages such as \CITE it is known as a deterministic merge.
-While this cannot be implemented as a Kahn process, in some cases it is possible to embed the time inside the value, and use simple value-dependent merge.
+Time-dependent merge can be implemented using a non-blocking read.
+By using a non-blocking read, the process itself is deterministic, but when placed inside a process network it is able to observe the \emph{external} non-determinism in scheduling.
+This operation is sometimes known as a non-deterministic merge in terms of process networks~\citep{brock1981scenarios}, while in streaming languages it can be known as deterministic merge or default~\citep{amagbegnon1995implementation}.
+While this cannot be implemented as a Kahn process, in some cases it is possible to embed the time inside the value and use value-dependent merge.
 
 \FigurePdf{figs/combinators/amb-merge}{Ambiguous merge with example values}{Ambiguous merge: upper values (blue) and lower values (red) are merged according to the order, choosing non-deterministically when two values arrive at the same time.}
 
@@ -60,15 +96,24 @@ Ambiguous merge is fully non-deterministic, and is similar to time-dependent mer
 \autoref{figs/combinators/amb-merge} shows an example of ambiguous merge, where both streams are defined at `3'.
 This operation cannot be implemented as a Kahn process.
 
-Only value-dependent merge is able to be expressed as a Kahn process network, it is important to compare which systems support value-dependent and which time-dependent.
+While only value-dependent merge is able to be expressed as a Kahn process network, it is important to compare which systems support time-dependent and ambiguous merges.
 
 \subsection{Array computations}
 
-In our case we are interested in streams as a method for optimising array computations, by converting arrays to streams and vice versa.
-In some streaming operations the time domain of stream values is interesting, but this is not true for array computations.
-This makes Kahn process networks an ideal target for array computations: the restrictions help one to reason about how processes act, by allowing us to ignore the minutiae of scheduling and communications.
+In our case we are interested in streams as a method for optimising array computations.
+Whether or not streams are ever \emph{stored} as arrays in memory or disk is not important; the distinction of array computations I wish to make is the the kind of \emph{computation} performed.
+Array computations are in control of when to pull, and when to push: they choose when to read from the input, and when to write to the output.
 
-Many standard stream operations can be written in this way, such as maps, filters, appends, etc.
+Streaming computations tend to need to react to input events as they come in, rather than requesting values from an input stream.
+Streaming computations sometimes use the time of stream values as information about the values themselves: such as using the time difference to extrapolate and guess what the next value is.
+
+In some ways, this makes Kahn process networks an ideal target for array computations: the restrictions help one to reason about how processes act, by allowing us to ignore the minutiae of scheduling and communications.
+
+Many standard online array operations can be written as Kahn processes, such as maps, filters, appends, etc.
+However, array computations that require random access, or anything other than monotonic access, cannot be described.
+This rules out reversing and random shuffling, as well as those that require multiple traversals such as sorting and self-appending.
+This probably means ``array computation'' is a misnomer.
+Stream computation is too pushy, array computation requires random access,...
 
 
 \section{Active and passive}

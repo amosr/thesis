@@ -103,3 +103,71 @@ It is also possible to encode finite streams as infinite streams with an explici
 % \label{s:Future:FusionOrder}
 % Our current solution to this is to try all permutations of fusing processes and use the first one that succeeds. A more principled solution may be to allow non-determinism in a single process by adding a non-deterministic choice instruction. Then when fusing two processes together, if both processes are pulling from unrelated streams, the result would be a non-deterministic choice between pulling from the first process and executing the first, or pulling from the second process and executing the second. In this way we could defer committing to a particular evaluation order until the required order is known. This may produce larger intermediate programs, but the same deterministic program could be extracted at the end.
 
+\section{Early termination and resource cleanup}
+What happens if a process does not care about the entire input stream, and only needs a prefix of the elements?
+This is the case with @take 10@, which only cares about the first ten elements of the stream.
+Another case is zipping two streams together --- where if the two streams are not the same length, the remainder of the longest is not required.
+However, in the current formulation, the producer --- that is, the pushing process --- has no way of knowing whether any of its consumers are still interested.
+As such, it must keep producing even when no consumers are still interested.
+
+\begin{code}
+takeAndDrop as = do
+  asPrefix <- take 10 as
+  perform print asPrefix
+\end{code}
+
+This program, which requires only the first ten (@as@), will keep looping until the entire input stream is depleted. Here is the fused process:
+
+\begin{code}
+takeAndDropFused as = process (l0 0).
+ l0 i   = pull as (l1 i) l4
+ l1 i a = case (i < 10) (l2 i a) (l3 i)
+ l2 i a = lift (print a) (l3 i)
+ l3 i   = drop as (l0 (i + 1))
+ l4     = done
+\end{code} 
+
+Notice that label (@l1@) checks if the take has finished, and simply continues to loop over the input, draining it.
+It is tempting to just stop executing the producer once all its consumers have disconnected, leaving it indefinitely blocked on a push.
+
+\begin{code}
+takeAndDropFusedStop as = process (l0 0).
+ l0 i   = pull as (l1 i) l4
+ l1 i a = case (i < 10) (l2 i a) l4
+ l2 i a = lift (print a) (l3 i)
+ l3 i   = drop as (l0 (i + 1))
+ l4     = done
+\end{code} 
+
+In our modified process, once the (@take@) has finished with its input, it simply finishes processing by jumping to (@l4@).
+This works for processes with a single output channel such as our example, but is not as straightforward when processes have multiple output channels.
+Even when the original processes only have a single output channel, the intermediate fused process may have multiple output channels.
+
+Let us consider an example with multiple outputs. Here, we take an input stream of pairs (@abs@) and @unzip@ them into two streams (@as@) and (@bs@).
+For (@as@) we @take@ the first ten elements, and print them.
+For (@bs@) we print all of the elements.
+
+\begin{code}
+takeAndRun abs = do
+  (as, bs) <- unzip abs
+  asPrefix <- take 10 as
+  perform print asPrefix
+  perform print bs
+\end{code}
+
+Here, once (@take@) has finished with (@as@), the pushing process (@unzip@) needs to keep pushing to (@bs@).
+This would not work if (@unzip@) were blocked pushing to (@as@).
+
+Another possibility is to modify the (@push@) instruction to have two output labels: the first is taken when pushing succeeds, and another for when pushing fails, as when there are no more consumers.
+
+Show an example of a process using this. What is the best example process? Unzip would need three copies of the loop.
+Also talk about the problem that disconnecting happens before you try to push, but you only learn about it once you push.
+This means if you had a long pipeline and disconnected at the bottom, the next push from the second-bottom would fail and disconnect from its input.
+Its producer would, in turn, only find out about the disconnect once it tried to push.
+This sort of bubbling up means it would take many elements before the disconnect actually finishes: if the pipeline is five long, it would take five elements from the time the bottom-most consumer decides to disconnect, before the top producer learns about the disconnection.
+This would be even worse if there are filters involved, as not every input element would be pushed.
+It might also blow up the size of the program, since every case of disconnection needs to be handled differently.
+
+More research and experience is needed to know whether this is a problem.
+How often do these disconnections actually occur in practice?
+

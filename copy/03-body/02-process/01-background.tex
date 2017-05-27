@@ -22,6 +22,9 @@ partitions inputs =
  in  partitioned
 \end{code}
 
+\FigurePdf{figs/combinators/filter-even-odd}{Pairing even/odd: combinator diagram}{Combinator diagram for pairing even/odd.}
+
+\autoref{figs/combinators/filter-even-odd} shows the combinator diagram for partitions.
 This operation inherently requires a buffer, as the entire stream must be read in order to compute the aboves, and the append must wait until the end of aboves before it can read from belows.
 This operation can be fused together by using an intermediate buffer to store belows in, as values are read from inputs.
 
@@ -115,28 +118,16 @@ This rules out reversing and random shuffling, as well as those that require mul
 This probably means ``array computation'' is a misnomer.
 Stream computation is too pushy, array computation requires random access,...
 
-
-\section{Active and passive}
-
-\section{Bounded and unbounded buffers}
-
-\begin{code}
-pairEvenOdd :: Array Int -> Array (Int, Int)
-pairEvenOdd input
- = let evens = filter even input
-       odds  = filter odd  input
-       pairs = zip evens odds
-   in  pairs
-\end{code}
-
-\FigurePdf{figs/combinators/filter-even-odd}{Pairing even/odd: combinator diagram}{Combinator diagram for pairing even/odd.}
-
-
 \section{Stream polarity}
 
-The most important thing for streaming computations is to be able to stream in constant memory - there is little point writing a streaming computation if 
+In order to characterise which stream computations can be performed in constant memory, we must characterise streams themselves.
+Streams are characterised by the operations performed on them without buffering: either push or pull.
+Push streams are those that can always be pushed to, without unbounded buffering, but potentially blocking.
+Pull streams can always be pulled from, also potentially blocking.
 
-There are two main ways of 
+An example of a push stream is writing to a file: writing a line of text to a file may block until the text is written, but will never require more than a bounded buffer.
+The converse, a pull stream, is reading from a file: reading ....
+
 
 \FigurePdf{figs/polarity/mappairs}{Map pairs: polarity diagram}{Polarity diagram for map pairs. Filled circles denote pull streams, as they always have an element inside that can be pulled. Empty circles denote push streams, as there is an empty hole that can always be filled by pushing to.}
 
@@ -188,6 +179,8 @@ data Control a
  = ...
 \end{code}
 
+
+\section{Active and passive}
 
 \section{Online and offline}
 

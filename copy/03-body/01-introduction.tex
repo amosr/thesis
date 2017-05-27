@@ -1,39 +1,6 @@
 \chapter{Introduction}
 \label{C:introduction}
 
-Today, the ATM swallowed my card and put my balance in arrears.
-Or perhaps yesterday, I don't remember.
-I must have done something wrong.
-Machines don't just take people's money for no reason. 
-I must have chosen the wrong option.
-Perhaps it was yesterday.
-
-It is hard to imagine spending a day without interacting with software in some way.
-Most of the software I touch is fairly innocuous, where an error might cause a few minutes' grumbling, but no real heartache.
-For other software, such as the banking server at my building society, or the cruise control on my car, errors can be disastrous.
-Unfortunately, the level of \emph{trust} provided to software does not generally coincide with the \emph{effort} taken to ensure correctness of that software.
-When banking software goes awry, people suffer financially.
-When debt recovery software goes awry, people suffer emotionally.
-When car software goes awry, people suffer physically.
-It is hard to imagine spending a day without software going awry in some way.
-
-What really makes this topic frustrating is that these are, in some sense, solved problems.
-We know how to write correct software, or at least we know how to write \emph{more} correct software.
-With formal methods we can prove that a program acts in accordance with some high-level specification.
-With type systems we can rule out whole classes of bugs and vulnerabilities just by compiling and typechecking the program.
-With high-level languages and high-level abstractions we can write programs that are more ``obviously correct'' and easier to reason about.
-
-Why do these problems persist?
-Part is the effort required: there is a real cost to proving programs correct using formal methods.
-Another part is lack of education and inertia.
-However, the part I wish to focus on is the performance costs associated with high-level abstractions.
-
-Compared to traditional imperative languages such as C, Java or Go, high-level languages with static type systems (Haskell being a notable example) reach a sweet middle ground in terms of effort to correctness.
-While they do not ensure the complete correctness that formal methods promise, they still provide valuable guarantees about the absence of particular errors.
-
-While my motivation for this thesis is born of a deep discontent with computing, the actual goal of this thesis is to improve the performance of certain programs.
-If we were able to rule out a large class of errors and offer competitive performance, surely this would reduce at least \emph{one} of the barriers to writing correct programs.
-One can hope.
 
 \section{Fusion}
 
@@ -66,12 +33,12 @@ Edges in this graph denote the flow of data between nodes.
 The edge between maximum and max uses an unfilled arrowhead, denoting that this is a \emph{fusion-preventing} edge, because maximum cannot know its output value until it has seen all the elements of the array.
 That is, maximum must see the end of the array before producing any output.
 We call combinators with fusion-preventing output edges \emph{offline} and those with fusible outputs \emph{online}.
-In many cases, combinators that produce scalar outputs (maximum, minimum, sum, mean) offline, while combinators that produce arrays (filter, map) are online; however this is not always true: the `sort' combinator produces an array but is offline, as all the data needs to be seen before it can be sorted.
+In many cases, combinators that produce scalar outputs (maximum, minimum, sum, mean) are offline, while combinators that produce arrays (filter, map) are online; however this is not always true: the `sort' combinator produces an array but is offline, as all the data needs to be seen before it can be sorted.
 
 
 The definition above is small and neat, and computes the right value, but is it fast?
 A naive way of executing this program is to loop over the input array performing the filter, then start from the start again to compute the maximum.
-The combinator diagram in \autoref{fig:combinators:filtermax-stream} shows the \emph{clustering} where the filter and the maximum are computed in different loops.
+The combinator diagram in \autoref{fig:combinators:filtermax-stream} shows this \emph{clustering} where the filter and the maximum are computed in different loops.
 
 However, if the array is large, this extra loop can take a lot of time.
 Ideally we would perform both computations in a single loop: the clustering in \autoref{fig:combinators:filtermax-fused}.

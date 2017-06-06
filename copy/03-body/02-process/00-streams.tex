@@ -1,0 +1,302 @@
+\chapter{Pulling and pushing}
+\label{chapter:process:streams}
+
+Streams can be roughly classified into two types: pull and push.
+This classification denotes where the control of the computation lives.
+For pull streams, the \emph{consumer} is in control of \emph{pulling} values from the stream producers.
+For push streams, the \emph{producer} is in control of \emph{pushing} values to the stream consumers.
+This distinction is not just a matter of taste, but in fact determines which streaming computations that can be performed \citep{kay2009you}.
+Roughly, pull computations can express joins, where multiple input streams are joined into one stream --- for example zipping two streams together.
+Push computations can express splits, where a single output stream is split into multiple streams --- for example partitioning according to a predicate.
+Pull computations, however, cannot support splits, and push computations cannot support joins.
+
+\section{Pull streams}
+Pull streams are also known as sources, as they are a `source' which is always ready to return the next value.
+We can encode this as a function that performs some effect (such as reading from a file), and returns a @Maybe@ value - either the value for the stream, or the end of the stream.
+As a Haskell datatype, this is:
+
+\begin{code}
+data Pull a
+  = Pull
+  { pull :: IO (Maybe a) }
+\end{code}
+
+More sophisticated representations are possible and will be discussed later in \autoref{sec:process:streams:stream-fusion}, and while these representations may have better runtime performance, the expressivity remains the same.
+
+In order to convert a list to a stream, we need to construct a mutable reference for the list, then each request to pull a value will inspect and update the reference.
+If the reference contains an empty list, the stream is over and we return @Nothing@. If the reference contains a list cell, we update the reference to refer to the rest of the list, and return the current value.
+
+\begin{code}
+pullOfList :: [a] -> IO (Pull a)
+pullOfList xs = do
+  ref <- newIORef xs 
+  Pull (go ref)
+ where
+  go ref = do
+    list <- readIORef ref
+    case list of
+     []     -> return Nothing
+     (l:ls) -> do
+      writeIORef ref ls
+      return l
+\end{code}
+
+Mapping a function over a list is simple: we take the function to perform, and the stream to apply it to.
+We construct a new pull stream where each request for a value asks the input stream for its value, and inspects it.
+If it is @Nothing@, the stream is over and we return @Nothing@ as well. If the stream is not over, we apply the function and return the new value.
+
+\begin{code}
+pullMap :: (a -> b) -> Pull a -> Pull b
+pullMap f (Pull as) = Pull bs
+ where
+  bs = do
+   v <- as
+   case v of
+    Nothing -> return Nothing
+    Just a  -> return (f a)
+\end{code}
+
+If we wish to operate over some prefix of a stream, we can take just the first few elements as well. We start by constructing a reference for the current count, and each pull increments and checks if we've hit count yet --- if we have, it's the end of the stream.
+
+\begin{code}
+pullTake :: Int -> Pull a -> Pull a
+pullTake count (Pull as) = do
+  ref <- newIORef 0 
+  Pull (go ref)
+ where
+  go ref = do
+    i <- readIORef ref
+    writeIORef ref (i + 1)
+    if i < count
+      then as
+      else return Nothing
+\end{code}
+
+There are many ways to join streams together. Zipping takes two streams and returns the pair from each stream, pairing them together in parallel.
+We can implement this by requesting a value from both input streams, then pairing them together if neither stream is finished.
+
+\begin{code}
+pullZip :: Pull a -> Pull b -> Pull (a,b)
+pullZip (Pull as) (Pull bs) = Pull abs
+ where
+  abs = do
+   a <- as
+   b <- bs
+   case (a, b) of
+    (Just a', Just b') -> return (Just (a',b'))
+    (_      , _      ) -> return  Nothing
+\end{code}
+
+\subsection{Fusion}
+One of the nice things about this representation is that we get a form of fusion for free, as part of general purpose optimisations.
+For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
+This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
+With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
+
+There is another side to this though, which is the amount of overhead that streaming costs us.
+For simple operators like map, this representation work well. If we map two functions over the stream, we expect there to be little additional streaming overhead.
+
+\begin{code}
+mapMap :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+mapMap f g as 
+ = let bs = pullMap f as
+       cs = pullMap g bs
+   in  cs
+\end{code}
+
+After inlining the definition of @pullMap@, we see that the definition for @bs@ can then be inlined into @cs@.
+With the help of case-of-case, as well as inlining the definition of @return@, we do in fact end up with the ideal code.
+
+\begin{code}
+mapMap :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+mapMap f g (Pull as)
+ = let cs = do
+          v <- as
+          case v of
+           Nothing -> return Nothing
+           Just b  -> return (g (f b))
+   in Pull cs
+\end{code}
+
+It is not always this easy.
+Let us consider the definition of filter.
+The pull action for filter requires a recursive loop for each element, because in order to pull a filtered element, we may need to pull an arbitrary number of elements from the source.
+If the predicate succeeds, we return the element, but if the predicate fails, we need to pull another input element to test.
+
+\begin{code}
+pullFilter :: (a -> Bool) -> Pull a -> Pull a
+pullFilter f (Pull as) = Pull go
+ where
+  go = do
+    v <- as
+    case v of
+     Nothing -> return Nothing
+     Just a  | f a
+             -> return a
+             | otherwise
+             -> go
+\end{code}
+
+This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
+Recursive functions like this are much harder to inline.
+More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:stream-fusion}.
+However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
+
+
+\subsection{Linearity}
+So far, pull streams have treated us well. We have been able to implement a few simple operations, and it shouldn't require too much imagination to believe that other operations such as append could be implemented too.
+However, there is a large restriction identified by \citet{bernardy2015duality}: linearity.
+Linearity means that each stream must be mentioned once: no more, no fewer.
+(This restriction also applies to pull streams, as we will see later.)
+
+To show this, let us try zipping a stream with itself: given an input stream defined by converting the list (@[1, 2, 3, 4]@), we will zip it with itself.
+
+\begin{code}
+xs <- pullOfList [1, 2, 3, 4]
+pullZip xs xs
+\end{code}
+
+For this example, the result we desire is each element paired with itself: (@[(1, 1),@ @(2, 2),@ @(3, 3),@ @(4, 4)]@).
+However, the result actually intersperses each element with the next: (@[(1, 2), (3, 4)]@).
+This is because the two streams share the same underlying mutable reference, and pulling from one inadvertently updates the other.
+
+In this case we could duplicate the call to @pullOfList@, but this is not always possible: if instead of reading from a list we were reading from a network socket, the network socket cannot be duplicated.
+One proposed solution is to add an explicit caching operator that stores a buffer of unread values between each consumer. However, if the input data is large, this will cause memory problems --- in general, an unbounded buffer is required. 
+
+This is not just a theoretical problem either, and there are real, practical programs that require sharing of streams.
+One such example is @filterMax@, which is the core of the Quickhull algorithm.
+This computes the maximum element of a stream at the same time as filtering the elements.
+
+\begin{code}
+filterMax :: Pull Int -> (Pull Int, Int)
+filterMax pts
+ = let above = pullFilter (>0) pts
+       maxim = pullMaximum     pts
+   in (above, maxim)
+\end{code}
+
+As it stands, we cannot execute this program: the maximum will consume the entire stream, leaving nothing left for the filter.
+We could hand-fuse these two operations together, into a special kind of filter that performs a fold at the same time, or even more generally, a fold that passes stream values through.
+This hypothetical new operation has some surprising interactions with existing combinators though.
+Before, when we implemented @pullTake@ we assumed that we could throw away the rest of the stream when we are finished. We did the same with @pullZip@, when one of the input streams is shorter.
+However, if something upstream is relying on the whole stream being pulled, we can no longer throw away remainder streams: take and zip must be modified to drain the rest of the stream even if they are never needed.
+This is an unsatisfying solution, as not only do we have to rewrite our program, we have lost the nice abstraction layer that streaming combinators gave us in the first place.
+
+
+\section{Push streams}
+
+Push streams are the dual of pull streams: rather than the consumer controlling evaluation, the producer is in control of the operation.
+Push streams are also known as sinks: they are a `sink' which can always be pushed into.
+We encode push streams as a function taking a @Maybe@ value, and performing some effect.
+
+\begin{code}
+data Push a
+  = Push
+  { push :: Maybe a -> IO () }
+\end{code}
+
+Because the producer controls push streams, instead of converting a list to a stream as we did with pull streams, we must take the stream to push into as an argument.
+We then recurse over the list, pushing each element in turn, then push @Nothing@ to note that the stream is finished.
+
+\begin{code}
+pushList :: [a] -> Push a -> IO ()
+pushList as (Push into) = go as
+ where
+  go [] = into Nothing
+  go (x:xs) = do
+    into (Just x)
+    go xs
+\end{code}
+
+Mapping is also a bit different for push streams, as they are contravariant. Rather than taking a function from @a@ to @b@ and a stream of @a@, we instead take a stream of @b@.
+That is, given something we can push @b@s into, and a way to convert @a@s to @b@s, we can return something to push @a@s into.
+
+\begin{code}
+pushMap :: (a -> b) -> Push b -> Push a
+pushMap f (Push bs) = Push as
+ where
+  as Nothing  = bs Nothing
+  as (Just a) = bs (Just (f b))
+\end{code}
+
+Filter and take can be implemented in a similar way.
+
+What push streams can do that pull streams cannot, is sharing.
+If we have two push streams that accept elements, we can construct a new push stream that sends elements to both:
+
+\begin{code}
+pushDup :: Push a -> Push a -> Push a
+pushDup (Push a) (Push b) = Push ab
+ where
+  ab v = do
+   a v
+   b v
+\end{code}
+
+A more familiar version of this operation is @unzip@: given a stream of pairs, we can push the first halves into the first stream, and the second halves into the second stream.
+With this sharing, we \emph{can} implement the @filterMax@ example from before.
+
+Push streams are not perfect, however, and we have simply traded one set of problems for another.
+While pull streams are able to express zip but not unzip, push streams can express unzip but not zip.
+More generally, push streams cannot express joins where the consumer needs to choose the order: zipping, appending, value-dependent merging, and so on.
+
+Push streams can, however, express a kind of non-deterministic merge by simply reusing the same push stream multiple times.
+In this case, the producers determine the merge order, and this can be used as a limited form of appending in some cases.
+
+\section{Coaxing the compiler}
+There are other stream representations, but they do not afford any extra expressivity in terms of zip and unzip.
+
+\subsection{Co-streams}
+It is possible to invert the push stream to use a continuation, rather than the value itself.
+This is a push stream where each outer value is a continuation of what to do with the actual value.
+
+\begin{code}
+data Copull a
+  = Copull
+  { copull :: (Maybe a -> IO ()) -> IO () }
+\end{code}
+
+\citet{bernardy2015duality} call this @CoSrc@.
+According to \citet{biboudis2017expressive} this stream representation is better for Java JIT compilation, as it allows the producer to have a simple for-loop structure, while the consumer can be inlined at runtime.
+It is not obvious how to implement either zip or unzip for this stream representation, so perhaps it is the intersection between push and pull: only straight-line computations.
+
+\subsection{Pulling without recursion}
+\label{sec:process:streams:stream-fusion}
+One of the problems with the pull-streams was filtering.
+The recursive definition of filter interfered with inlining.
+This is because the consumer is likely to be recursive as well, and inlining a recursive function into another recursive function is difficult.
+The solution offered by \citet{coutts2007stream} is to allow the definition of filter to return a value saying ``I haven't found it yet''.
+The consumer will then recursively rerun the filter until it is able to produce a value.
+In this way, filter no longer needs to be defined recursively, by telling its caller that it needs to be called again.
+
+For this representation, we introduce a new datatype @Step@ which is either a produced value, a skipped value, or the end of the stream.
+
+\begin{code}
+data PullSkip a
+  = PullSkip
+  { pullSkip :: IO (Step a) }
+
+data Step a
+  = Yield a | Skip | Done
+\end{code}
+
+All these different stream representations are just ways to coax the general purpose compiler optimisations into producing good code.
+So much time is spent, and wasted, finding the right representation that happens to fit the compiler optimisations we have.
+For the Java virtual machine, push streams with continuations are the best representation to convince it to produce tight loop bodies.
+For the Glasgow Haskell Compiler (GHC), co-iterative pull streams are the best representation because they allow filters to be fully inlined.
+But we know exactly the kind of code we want to produce, so why not instead of relying on the general purpose optimisations, just produce the right code to start with.
+
+This is the motivation behind \citet{kiselyov2016stream}'s work on stream fusion, which uses staged compilation to ensure that the right code is produced, and allows type-level guarantees that fusion will occur.
+However, their streams are still fundamentally pull-based, and is unable to express sharing between streams, or unzipping streams.
+
+\section{Pulling and pushing, together}
+
+Clearly, neither pull nor push alone are sufficient for the kind of streaming operations we wish to run.
+We wish for a stream representation that allows both pulling from producers, as well as pushing to consumers. 
+
+Recent work on Polarized Flow Fusion \citep{lippmeier2016polarized} supports both pulling and pushing, by constructing a data-flow network with sources for inputs and sinks for outputs.
+Operations on streams have an explicit polarity attached, to make sure any connections can be performed without buffering.
+Sources can have multiple inputs, while sinks can be explicitly duplicated and shared.
+However, this requires inspecting the entire data-flow network to determine which parts should be sources, and which should be sinks --- more manual labour that reduces the level of abstraction the programmer is working at.
+
+

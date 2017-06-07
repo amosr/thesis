@@ -197,6 +197,15 @@
   year={2010},
 }
 
+% Flow-based programming is very similar, data-flow network style, but the execution model is multithreaded with runtime scheduling.
+@book{morrison2010flow,
+  title={Flow-Based Programming: A new approach to application development},
+  author={Morrison, J Paul},
+  year={2010},
+  publisher={CreateSpace}
+}
+
+
 
 % -- N --
 
@@ -230,6 +239,22 @@
   author    = "Robert Soule and Michael I. Gordon and Saman Amarasinghe and Robert Grimm and Martin Hirzel",
   booktitle = "The 7th ACM International Conference on Distributed Event-Based Systems",
   year      = "2013",
+}
+
+% Lightweight actors for the JVM.
+% Uses linear types to ensure that messages are not aliased between actors.
+% Has a postprocessor called the `weaver' which operates over the java bytecode to
+% remove the overhead of actually performing actors as separate threads.
+% This is more like modifying the Java bytecode to store explicit continuations on the stack, and still uses runtime scheduling.
+@TechReport{srinivasan2010kilim,
+  author =	 {Srinivasan, Sriram},
+  title = 	 {{Kilim: A server framework with lightweight actors,
+         	   isolation types and zero-copy messaging}},
+  year = 	 2010,
+  month = 	 feb,
+  url = 	 {http://www.cl.cam.ac.uk/techreports/UCAM-CL-TR-769.pdf},
+  institution =  {University of Cambridge, Computer Laboratory},
+  number = 	 {UCAM-CL-TR-769}
 }
 
 % Scenario-aware dataflow (SADF)

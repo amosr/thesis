@@ -1,0 +1,88 @@
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Filter/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Filter/Vector}
+\legend{Folderol, Vector}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/Filter}
+\label{fig:bench:array:filter}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Max/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Max/Vector}
+\legend{Folderol, Vector}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/Maximum}
+\label{fig:bench:array:max}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{FilterMax/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{FilterMax/Vector}
+\legend{Folderol, Vector}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/FilterMax}
+\label{fig:bench:array:filtermax}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Partition/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Partition/Vector-fused}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{Partition/Vector-unfused}
+\legend{Folderol, Vector fused, Vector unfused}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/Partition}
+\label{fig:bench:array:partition}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartition/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartition/Vector-fused}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartition/Vector-unfused}
+\legend{Folderol, Vector fused, Vector unfused}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/MapPartition}
+\label{fig:bench:array:mappartition}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{PartitionMap2/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{PartitionMap2/Vector-fused}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{PartitionMap2/Vector-unfused}
+\legend{Folderol, Vector fused, Vector unfused}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/PartitionMap2}
+\label{fig:bench:array:partitionmap2}
+\end{figure}
+
+\begin{figure}
+\begin{tikzpicture}
+\begin{axis}[benchmarkaxis, xmode=log, ymode=log, xmax=10^9,ymax=20]
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartitionMap2/Folderol}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartitionMap2/Vector-fused}
+\BenchPlot{copy/03-body/02-process/figures/bench/arrays.post.csv}{MapPartitionMap2/Vector-unfused}
+\legend{Folderol, Vector fused, Vector unfused}
+\end{axis}
+\end{tikzpicture}
+\caption{Array/MapPartitionMap2}
+\label{fig:bench:array:mappartitionmap2}
+\end{figure}
+

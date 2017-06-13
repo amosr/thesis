@@ -1,14 +1,181 @@
 \chapter{Evaluation}
 \label{s:Benchmarks}
 Stream fusion is ultimately performed for practical reasons: we want the fused result program to run faster than the original unfused program.
-This finite stream extension is described in more detail in the appendix of the extended version of this paper, which is available at \url{http://cse.unsw.edu.au/~amosr/papers/merges.pdf}.
-
+We also need to be sure that the fused program is not too large, otherwise compilation and fusion would consume too much memory.
+This chapter shows benchmark results for fused programs and the result size of fused programs.
 
 \section{Benchmarks}
-We have implemented this system using Template Haskell in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
-To show practical examples, we use the finite stream extension mentioned in~\S\ref{s:Finite}.
-We present three benchmarks: two file-based benchmarks, and one array algorithm.
+% Graph style definitions
+\input{copy/03-body/02-process/figures/bench/bench.tex}
 
+For the benchmarks, I use the Folderol Template Haskell implementation described in \autoref{chapter:process:implementation}.
+Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench/Bench}.
+I present one spatial algorithm, two file-based benchmarks, and some array microbenchmarks.
+
+For the spatial and file benchmarks, I compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
+These streaming libraries have a limited API that ensures that any computation can be run with only bounded buffers.
+These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
+These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
+% This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
+
+For the spatial and array benchmarks, I compare against the `Vector' library.
+Vector provides unboxed arrays with pull-based shortcut fusion.
+Unlike the streaming libraries, it does allow splits, but these will not be fused.
+Instead, splits will be manifested as in-memory arrays.
+
+
+The benchmarks were run on a VPS with 24GB RAM running Debian 8.
+Each benchmark is presented with logarithmic scaled graphs over different data sizes, but as this can obscure the absolute differences, a direct comparison is available in the summary (\autoref{s:bench:summary}).
+
+\subsection{Quickhull}
+
+Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
+At its core is the @filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
+The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an @IO@ monad.
+\begin{code}
+filterMax :: Line -> Unbox.Vector Point -> IO (Point, Unbox.Vector Point)
+\end{code}
+
+The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
+As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSizeIO@ as a size hint to remove the need to dynamically grow the vector (\autoref{s:implementation:sizehints}).
+The Template Haskell splice calls @fuse@ with the default fusion options, and the process network.
+The process network starts by converting the input vector @pts@ to a stream @ins@.
+We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
+We then annotate each point of @ins@ with the distance between each point and the line with @map@, calling this stream @annot@.
+The @annot@ stream is filtered to only those above the line (@above@), then the annotations thrown away (@above'@).
+The maximum is computed by comparing the second half of each annotated point --- the distance --- and stored in @maxim@.
+Finally, @maxim@ is pushed into the scalar output sink, and all @above'@ points are pushed into the vector output sink.
+
+\begin{code}
+filterMaxFolderol l ps = do
+ (maxim,(above,())) <- scalarIO        $ \snkMaxim ->
+                       vectorSizeIO ps $ \snkAbove ->
+   $$(fuse defaultFuseOptions $ do
+      ins    <- source [|| sourceOfVector ps ||]
+      annot  <- map    [|| \p -> (p, distance p l) ||] ins
+      above  <- filter [|| \(_,d) -> d > 0 ||]       annot
+      above' <- map    [|| fst ||]                   above
+      maxim  <- maxBy  [|| compare `on` snd ||]      annot
+      sink maxim       [|| snkMaxim ||]
+      sink above'      [|| snkAbove ||])
+ return (fst maxim, above)
+\end{code}
+\iffalse
+$$
+\fi
+
+We now show the Vector program.
+The shortcut fusion system cannot fuse both operations into a single loop, and both operations must recompute the distances between the line and each point.
+This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
+We have implemented both.
+
+First, sharing the distances computes the distance between each point and the line, and stores this in a vector called @annot@.
+Then @point@ computes the maximum with @maximumBy@, comparing each distance.
+Next, @above@ filters each point.
+
+\begin{code}
+filterMaxVectorStore l ps
+ = let annot = Unbox.map (\p -> (p, distance p l)) ps
+       point = fst
+             $ Unbox.maximumBy (compare `on` snd) annot
+       above = Unbox.map fst
+             $ Unbox.filter ((>0) . snd) annot
+   in return (point, above)
+\end{code}
+
+To recompute the vectors, we duplicate the @annot@ vector to @annot1@ and @annot2@. The maximum now uses @annot1@, and filter uses @annot2@.
+This way, both maps to compute the distance can be fused into their consumers.
+\begin{code}
+filterMaxVectorRecompute l ps
+ = let annot1 = Unbox.map (\p -> (p, distance p l)) ps
+       point  = fst
+              $ Unbox.maximumBy (compare `on` snd) annot1
+       annot2 = Unbox.map (\p -> (p, distance p l)) ps
+       above  = Unbox.map fst
+              $ Unbox.filter ((>0) . snd) annot2
+   in return (point, above)
+\end{code}
+
+In the results below, recomputing the distances is faster than storing the distances.
+For this benchmark we used only two-dimensional points, but it is possible that at higher dimensions the cost of recomputing distances may outweigh the cost of allocation.
+Also, the choice to recompute the distances requires intimate knowledge of how shortcut fusion works and might be surprising to the naive user: duplicating work does not usually \emph{improve} performance.
+
+For Conduit, we also have two versions: the first uses two passes over the data, while the second is hand-fused into a single loop.
+The two-pass version defines two conduits, @cabove@ for the vector and @cmaxim@ for the maximum.
+@cabove@ converts the vector to a conduit with @sourceVector@, then annotates with the distances, filters according to the distances, removes the annotations, and converts back to a vector.
+As with Folderol, we use size hints when converting back to a vector to remove any overhead with growing and copying the vector.
+@cmaxim@ also converts the vector to a conduit, then annotates with the distances, and computes the maximum.
+
+\begin{code}
+filterMaxConduitTwoPass l ps = do
+  maxim <- runConduit cmaxim
+  above <- runConduit cabove
+  return (fst maxim, above)
+ where
+  cabove =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filter ((>0) . snd)           .|
+    map fst                       .|
+    sinkVectorSize ps
+
+  cmaxim =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    maximumBy (compare `on` snd)
+\end{code}
+
+The hand-fused version is more complicated, and loses the abstraction benefits from using a high-level streaming library.
+
+\begin{code}
+filterMaxOnePass l ps = do
+  r      <- MUnbox.unsafeNew (Unbox.length ps)
+  (a,ix) <- runConduit $ both r
+  r'     <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix r
+  return (a, r')
+ where
+  both r =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filterAndMax r 0 (0,0) (-1/0)
+
+  filterAndMax !r !ix (!x,!y) !d1 = do
+    e <- await
+    case e of
+     Just (!p2,!d2) -> do
+      let (!p',!d') = if d1 > d2 then ((x,y),d1) else (p2,d2)
+      case d2 > 0 of
+       True -> do
+        MUnbox.unsafeWrite r ix p2
+        filterAndMax r (ix+1) p' d'
+       False -> do
+        filterAndMax r ix p' d'
+     Nothing -> do
+      return ((x,y), ix)
+\end{code}
+
+For Pipes, we only have a hand-fused version, which follows much the same structure as the Conduit hand-fused version.
+
+Finally, the Streaming version is much closer to the Vector version.
+
+\begin{code}
+filterMax l ps = do
+  (vec,pt :> ()) <- sinkVectorSize ps
+            $ map fst
+            $ filter (\(_,d) -> d > 0)
+            $ store maximumBy (compare `on` snd)
+            $ map (\p -> (p, distance p l))
+            $ sourceVector ps
+  return (pt, vec)
+\end{code}
+\iffalse$\fi
+
+\autoref{fig:bench:quickhull} shows the runtimes for Quickhull over different numbers of points. The largest size, $10^8$, corresponds to around 750MB in memory.
+
+
+\input{copy/03-body/02-process/figures/bench/quickhull.tex}
+
+\subsection{File operations}
 For the file benchmarks, we compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
 These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
@@ -25,42 +192,14 @@ The `Streaming' library allows streams to be shared in a fairly straightforward 
 The second group in Figure~\ref{fig:bench:all} shows the runtimes for partitioning a 1MB file.
 
 
-Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
-At its core is an operation called `filterMax' which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
-
-Here we also compare against a @Data.Vector@ program, which uses shortcut fusion.
-The shortcut fusion system cannot fuse both operations into a single loop, and both operations must recompute the distances between the line and each point.
-% This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
-% We compared both, and recomputing was significantly faster.
-% However, we only benchmarked with two-dimensional points: at higher dimensions, the cost of recomputing distances may outweigh array allocation.
-As before, the Conduit and Pipes programs must be partially hand-fused.
-The third group in Figure~\ref{fig:bench:all} shows the runtimes for Quickhull over 40MB of data, or half a million points, while the final group uses more data (120MB) to compare directly against @Data.Vector@.
-
-
-% -----------------------------------------------------------------------------
-\subsection{Optimisation and Drop Instructions}
-\label{s:Optimisation}
-After we have fused two processes together, it may be possible to simplify the result before fusing in a third. Consider the result of fusing @group@ and @merge@ which we saw back in Figure~\ref{fig:Process:Fused}. At labels @F1@ and @F2@ are two consecutive @jump@ instructions. The update expressions attached to these instructions are also non-interfering, which means we can safely combine these instructions into a single @jump@. In general, we prefer to have @jump@ instructions from separate processes scheduled into consecutive groups, rather than spread out through the result code. The (PreferJump) clauses of Figure~\ref{fig:Fusion:Def:StepPair} implement a heuristic that causes jump instructions to be scheduled before all others, so they tend to end up in these groups.
-
-Other @jump@ instructions like the one at @F5@ have no associated update expressions, and thus can be eliminated completely. Another simple optimization is to perform constant propagation, which in this case would allow us to eliminate the first @case@ instruction. 
-
-Minimising the number of states in an intermediate process has the follow-on effect that the final fused result also has fewer states. Provided we do not change the order of instructions that require synchronization with other processes (@pull@, @push@ or @drop@), the fusibility of the overall process network will not be affected.
-
-% Another optimization is to notice that in some cases, when a heap variable is updated it is always assigned the value of another variable. In Figure~\ref{fig:Process:Fused}, the @v@ and @x1@ variables are only ever assigned the value of @b1@, and @b1@ itself is only ever loaded via a @pull@ instruction. Remember from \S\ref{s:Fusion:FusingPulls} that the variable @b1@ is the stream buffer variable. Values pulled from stream @sIn1@ are first stored in @b1@ before being copied to @v@ and @x1@. When the two processes to be fused share a common input stream, use of stream buffer variable allows one process to continue using the value that was last pulled from the stream, while the other moves onto the next one. 
-
-When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in Figure~\ref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. To increase the chance that we can perform copy-propagation, we need both processess to want to pull from the same stream at the same time. Moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early.
-
-% In the result, the interleaved instructions from both source processes then share the same heap variable.  
-
-% In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
-
-
-\input{copy/03-body/02-process/figures/bench/bench.tex}
-\input{copy/03-body/02-process/figures/bench/quickhull.tex}
 \input{copy/03-body/02-process/figures/bench/append.tex}
 \input{copy/03-body/02-process/figures/bench/part2.tex}
 
+\subsection{Array microbenchmarks}
 \input{copy/03-body/02-process/figures/bench/arrays.tex}
+
+\subsection{Summary}
+\label{s:bench:summary}
 
 \section{Program size}
 \label{s:Evaluation}
@@ -114,23 +253,6 @@ When fusing two processes the fusion algorithm essentially compares every state 
 In the worst case, fusion of two processes produces O($n*m$) different states, where $n$ and $m$ are the number of states in each. If we assume the two processes have about the same number of states then this is O($n^2$). Fusing the next process into this result yields O($n^3$), so overall the worst case number of states in the result will be O($n^k$), where $k$ is the number of processes fused. 
 
 In the particular case of @merge@, the implementation has two occurrences of the @push@ instruction. During fusion, the states for the consuming process are inlined at each occurrence of @push@. These states are legitimately different because at each occurence of @push@ the input channels of the merge process are in different channel states, and these channel states are included in the overall process state.
-
-
-% -----------------------------------------------------------------------------
-\section{Optimisation and Drop Instructions}
-\label{s:Optimisation}
-After we have fused two processes together, it may be possible to simplify the result before fusing in a third. Consider the result of fusing @group@ and @merge@ which we saw back in Fig.\ref{fig:Process:Fused}. At labels @F1@ and @F2@ are @jump@ instructions, where the first passes control to the second. The update expressions attached to these instructions are also non-interferring, which means we can safely combine these consecutive @jump@ instructions into a single @jump@ to @F4@. In general, we prefer to have @jump@ instructions from separate processes scheduled into consecutive groups, rather than spread out through the result code. The (PreferJump) clauses of Fig.\ref{fig:Fusion:Def:StepPair} implement a heuristic that causes jump instructions to be scheduled before all others, so they tend to end up in these groups.
-
-There are also @jump@ instructions like the one at @F5@ which have no associated update expressions, and thus can be eliminated completely. Another simple optimization is to perform constant propagation, which in this case would allow us to eliminate the first @case@ instruction. 
-
-Minimising the number of states in an intermediate process has the follow-on effect that the final fused result also has lower number of states. Provided we do not change the order of instructions that do not require synchronization with other processes, meaning @pull@ @push@ or @drop@, the fusibility of the overall process network will not be affected.
-
-Another optimization is to notice that in some cases, when a heap variable is updated it is always assigned the value of another variable. In Fig.\ref{fig:Process:Fused}, the @v@ and @x1@ variables are only ever assigned the value of @b1@, and @b1@ itself is only ever loaded via a @pull@ instruction. Remember from \S\ref{s:Fusion:FusingPulls} that the variable @b1@ is the stream buffer variable. Values pulled from stream @sIn1@ are first stored in @b1@ before being copied to @v@ and @x1@. When the two processes to be fused share a common input stream, use of stream buffer variable allows one process to continue using the value that was last pulled from the stream, while the other moves onto the next one. 
-
-When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in Fig.\ref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. In the result, the interleaved instructions from both source processes then share the same heap variable.
-
-To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
-
 
 
 

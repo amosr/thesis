@@ -172,6 +172,29 @@ filterMax l ps = do
 
 \autoref{fig:bench:quickhull} shows the runtimes for Quickhull over different numbers of points. The largest size, $10^8$, corresponds to around 750MB in memory.
 
+\begin{table}
+\begin{center}
+\begin{tabular}{ll|rr}
+& & Absolute (s)  & Relative (\%) \\
+\hline
+Folderol & & 2.1s & 100\% \\
+Hand  & & 1.3s & 61\% \\
+&&&\\
+Vector & store & 4.0s & 190\% \\
+       & recompute & 2.8s & 133\% \\
+&&&\\
+Conduit & 2-pass & 88.8s & 4,228\% \\
+       & hand   & 79.7s & 3,795\% \\
+&&&\\
+Pipes  & hand   & 39.4s & 1,876\% \\
+Streaming &    & 62.1s & 2,957\% \\
+\end{tabular}
+\end{center}
+\caption[Quickhull benchmark results]{Quickhull benchmark results}
+\label{table:bench:quickhull}
+\end{table}
+
+
 
 \input{copy/03-body/02-process/figures/bench/quickhull.tex}
 

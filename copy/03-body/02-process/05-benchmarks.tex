@@ -9,19 +9,36 @@ This chapter shows benchmark results for fused programs and the result size of f
 \input{copy/03-body/02-process/figures/bench/bench.tex}
 
 For the benchmarks, I use the Folderol Template Haskell implementation described in \autoref{chapter:process:implementation}.
-Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench/Bench}.
-I present one spatial algorithm, two file-based benchmarks, and some array microbenchmarks.
+Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
+I present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
+The benchmarks are comparing with the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
+
+The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
+It is the \emph{de facto} standard for array programming in Haskell.
+While the fusion is pull-based, splits can still be expressed in the program.
+When splits are present, they act as fusion barriers, requiring streams to be manifested as in-memory arrays.
+Vector also provides no guarantees about whether fusion will occur: it makes its best effort, but the easiest way to tell whether fusion has occurred is to look at the generated program.
+We could benchmark the program to see whether it is ``fast enough'', but if we do not have an optimal baseline to compare against, it is hard to know how fast the program \emph{should} be.
+After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it.
+Perhaps the program must be rewritten, hand-fused, or perhaps strictness annotations are required.
+
+Move elsewhere.
+The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
+Vector also has a problem with monadic actions, and there are a few parts to this.
+Firstly, if the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
+Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
+Because the structure is dynamic, it is hard for the compiler to reason statically about the structure.
+Secondly, converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
+Instead, the current implementation runs all of the stream's actions, collecting the result in a list, and only constructs the vector after the stream has finished.
+This way, the effects do not need to be interleaved.
+It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
+
 
 For the spatial and file benchmarks, I compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
 These streaming libraries have a limited API that ensures that any computation can be run with only bounded buffers.
 These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
-
-For the spatial and array benchmarks, I compare against the `Vector' library.
-Vector provides unboxed arrays with pull-based shortcut fusion.
-Unlike the streaming libraries, it does allow splits, but these will not be fused.
-Instead, splits will be manifested as in-memory arrays.
 
 
 The benchmarks were run on a VPS with 24GB RAM running Debian 8.
@@ -51,20 +68,20 @@ filterMaxFolderol l ps = do
  (maxim,(above,())) <- scalarIO        $ \snkMaxim ->
                        vectorSizeIO ps $ \snkAbove ->
    $$(fuse defaultFuseOptions $ do
-      ins    <- source [|| sourceOfVector ps ||]
+      ins    <- source [|| sourceOfVector ps       ||]
       annot  <- map    [|| \p -> (p, distance p l) ||] ins
-      above  <- filter [|| \(_,d) -> d > 0 ||]       annot
-      above' <- map    [|| fst ||]                   above
-      maxim  <- maxBy  [|| compare `on` snd ||]      annot
-      sink maxim       [|| snkMaxim ||]
-      sink above'      [|| snkAbove ||])
+      above  <- filter [|| \(_,d) -> d > 0         ||] annot
+      above' <- map    [|| fst                     ||] above
+      maxim  <- maxBy  [|| compare `on` snd        ||] annot
+      sink maxim       [|| snkMaxim                ||]
+      sink above'      [|| snkAbove                ||])
  return (fst maxim, above)
 \end{code}
 \iffalse
 $$
 \fi
 
-We now show the Vector program.
+On to the Vector program.
 The shortcut fusion system cannot fuse both operations into a single loop, and both operations must recompute the distances between the line and each point.
 This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
 We have implemented both.
@@ -156,7 +173,10 @@ filterMaxOnePass l ps = do
 
 For Pipes, we only have a hand-fused version, which follows much the same structure as the Conduit hand-fused version.
 
-Finally, the Streaming version is much closer to the Vector version.
+Finally, the Streaming version is much closer to the Vector version, except that the stream must be explicitly split into both consumers.
+We start by converting the vector to a stream with @sourceVector@, and then use @map@ to annotate each point with the distance from the line.
+To split the stream, we use @store@ which takes a computation to perform on the copy of the stream --- in this case computing the maximum with @maximumBy@.
+The original stream is also passed through, which is filtered and then the annotations discarded.
 
 \begin{code}
 filterMax l ps = do
@@ -170,7 +190,11 @@ filterMax l ps = do
 \end{code}
 \iffalse$\fi
 
-\autoref{fig:bench:quickhull} shows the runtimes for Quickhull over different numbers of points. The largest size, $10^8$, corresponds to around 750MB in memory.
+\autoref{table:bench:quickhull} shows the runtimes for Quickhull over $10^8$ points, which corresponds to around 750MB in memory.
+The hand-fused version is the fastest, followed by folderol.
+The vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
+The streaming libraries are significantly slower, spending most of the time allocating closures and forcing thunks.
+Why are they so much slower? This would be better in the motivation.
 
 \begin{table}
 \begin{center}
@@ -196,8 +220,6 @@ Streaming &    & 62.1s & 2,957\% \\
 
 
 
-\input{copy/03-body/02-process/figures/bench/quickhull.tex}
-
 \subsection{File operations}
 For the file benchmarks, we compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
 These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
@@ -220,6 +242,25 @@ The second group in Figure~\ref{fig:bench:all} shows the runtimes for partitioni
 
 \subsection{Array microbenchmarks}
 \input{copy/03-body/02-process/figures/bench/arrays.tex}
+
+\subsection{Dynamic range compression}
+
+\begin{code}
+compressorFolderol :: Unbox.Vector Double -> IO (Unbox.Vector Double)
+compressorFolderol xs = do
+  (ys,()) <- Plumbing.vectorAtMostIO (Unbox.length xs) $ \snkYs -> do
+    $$(Splice.fuse Splice.defaultFuseOptions $ do
+        x0      <- Network.source    [|| Source.sourceOfVector xs ||]
+
+        squares <- Process.map       [|| \x -> x * x ||]         x0
+        avg     <- Process.postscanl [|| expAvg      ||] [||0||] squares
+        root    <- Process.map       [|| clipRoot    ||]         avg
+        out     <- Process.zipWith   [|| (*)         ||] root    x0
+
+        Network.sink out [|| snkYs ||])
+  return ys
+\end{code}
+
 
 \subsection{Summary}
 \label{s:bench:summary}

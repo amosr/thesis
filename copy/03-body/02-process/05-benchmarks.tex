@@ -24,25 +24,31 @@ Perhaps the program must be rewritten, hand-fused, or perhaps strictness annotat
 
 Move elsewhere.
 The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
-Vector also has a problem with monadic actions, and there are a few parts to this.
-Firstly, if the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
-Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
-Because the structure is dynamic, it is hard for the compiler to reason statically about the structure.
-Secondly, converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
+Vector has a minor problem with monadic actions, but this is an implementation detail that could probably be ignored.
+Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
 Instead, the current implementation runs all of the stream's actions, collecting the result in a list, and only constructs the vector after the stream has finished.
 This way, the effects do not need to be interleaved.
 It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
 
-For the spatial and file benchmarks, I compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
-These streaming libraries have a limited API that ensures that any computation can be run with only bounded buffers.
+The three Haskell streaming libraries, `Conduit', `Pipes', and `Streaming', have a limited API that ensures that any computation can be run with only bounded buffers.
 These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
+If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
+Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
+Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
+In Vector/stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into both step function and state.
+The step function is completely static, and so can be optimised etc, but the state changes dynamically.
+In contrast, in Pipes/Conduit, the step function and state are mixed together: the entire stream is only available dynamically as a function closure, hidden inside a constructor inside a monadic operation.
 
 
-The benchmarks were run on a VPS with 24GB RAM running Debian 8.
-Each benchmark is presented with logarithmic scaled graphs over different data sizes, but as this can obscure the absolute differences, a direct comparison is available in the summary (\autoref{s:bench:summary}).
+
+The benchmark results presented below were all run on a MacBook Pro, with a 2GHz Intel Core i7, and 16GB of RAM.
+The operating system is OS X El Capitan.
+To run the benchmarks, I used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
+Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
+It can also collect statistics on allocations, which is sometimes a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
 
 \subsection{Quickhull}
 
@@ -50,12 +56,12 @@ Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex 
 At its core is the @filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
 The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an @IO@ monad.
 \begin{code}
-filterMax :: Line -> Unbox.Vector Point -> IO (Point, Unbox.Vector Point)
+filterMax :: Line -> Vector Point -> IO (Point, Vector Point)
 \end{code}
 
 The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
 As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSizeIO@ as a size hint to remove the need to dynamically grow the vector (\autoref{s:implementation:sizehints}).
-The Template Haskell splice calls @fuse@ with the default fusion options, and the process network.
+The Template Haskell splice calls @fuse@ to convert the process network into executable code.
 The process network starts by converting the input vector @pts@ to a stream @ins@.
 We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
 We then annotate each point of @ins@ with the distance between each point and the line with @map@, calling this stream @annot@.
@@ -65,9 +71,9 @@ Finally, @maxim@ is pushed into the scalar output sink, and all @above'@ points 
 
 \begin{code}
 filterMaxFolderol l ps = do
- (maxim,(above,())) <- scalarIO        $ \snkMaxim ->
-                       vectorSizeIO ps $ \snkAbove ->
-   $$(fuse defaultFuseOptions $ do
+ (maxim,(above,())) <- scalar          $ \snkMaxim ->
+                       vectorSize   ps $ \snkAbove ->
+   $$(fuse $ do
       ins    <- source [|| sourceOfVector ps       ||]
       annot  <- map    [|| \p -> (p, distance p l) ||] ins
       above  <- filter [|| \(_,d) -> d > 0         ||] annot
@@ -190,33 +196,118 @@ filterMax l ps = do
 \end{code}
 \iffalse$\fi
 
-\autoref{table:bench:quickhull} shows the runtimes for Quickhull over $10^8$ points, which corresponds to around 750MB in memory.
-The hand-fused version is the fastest, followed by folderol.
-The vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
+\autoref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
+The hand-fused version is the fastest, followed by Folderol.
+The Vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
+Intimate knowledge of shortcut fusion was required to find `recompute', the faster of the two vector benchmarks, and there is no indication in the source program, or from the compiler, that the two could not be fused together.
 The streaming libraries are significantly slower, spending most of the time allocating closures and forcing thunks.
 Why are they so much slower? This would be better in the motivation.
+On the plus side, the limited APIs and linearity constraints for Conduit and Pipes made it more obvious that they would not be fused into a single loop, but even with partial hand-fusion, are still significantly slower.
+The `Streaming' program allows explicit sharing, and was the simplest of the three streaming libraries, requiring no hand fusion.
+Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Conduit' program, but is still significantly slower than Folderol.
+
+These streaming libraries are not usually used for array computations, and it should now be obvious why.
+In practice, one tends to `chunk' the data so that each element is an array of multiple elements: this reduces overhead paid for streaming.
+This chunking complicates the program further, again reducing the level of abstraction the programmer can work at.
+Even with chunking, we may reduce the streaming overhead from once per element to once per thousand elements, but we can never remove it entirely.
+With Folderol there is no streaming overhead to reduce because it is statically fused away.
 
 \begin{table}
 \begin{center}
-\begin{tabular}{ll|rr}
-& & Absolute (s)  & Relative (\%) \\
+\begin{tabular}{ll|rrrr}
+& & Runtime (s)  & Runtime (\%) & Allocation (b) & Allocation (\%) \\
 \hline
-Folderol & & 2.1s & 100\% \\
-Hand  & & 1.3s & 61\% \\
+Folderol &          & 0.21s &   100\% & 1.2e9 & 100\% \\
+Hand     &          & 0.14s &    66\% & 4.8e8 &  40\% \\
 &&&\\
-Vector & store & 4.0s & 190\% \\
-       & recompute & 2.8s & 133\% \\
+Vector & store      & 0.40s &   190\% & 1.8e9 & 150\%\\
+       & recompute  & 0.34s &   161\% & 8.0e8 & 66\%\\
 &&&\\
-Conduit & 2-pass & 88.8s & 4,228\% \\
-       & hand   & 79.7s & 3,795\% \\
+Conduit & 2-pass    & 10.0s & 4,762\% & 6.2e10& 5,167\% \\
+       & hand       &  7.9s & 3,762\% & 4.4e10& 3,667\% \\
 &&&\\
-Pipes  & hand   & 39.4s & 1,876\% \\
-Streaming &    & 62.1s & 2,957\% \\
+Pipes  & hand       &  4.9s & 1,876\% & 3.9e10& 3,250\% \\
+Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 \end{tabular}
 \end{center}
 \caption[Quickhull benchmark results]{Quickhull benchmark results}
 \label{table:bench:quickhull}
 \end{table}
+
+\subsection{Dynamic range compression}
+Dynamic range compression is an audio signal processing algorithm to reduce the volume of loud sounds, leaving quiet sounds unchanged.
+To implement this, we take an audio signal, and at each point compute a rolling average of the volume.
+We clip the volume at the upper bound, one, and divide the clipped volume by the original volume.
+This will be our multiplier, which we multiply the original signal by at each step.
+This way, if the volume is less than the limit, our multiplier will be one and the signal is unchanged. 
+If the volume is above the limit, our multiplier will be the reciprocal of volume: whatever is required to get the volume back down to one.
+
+\begin{code}
+compressor :: Vector Double -> IO (Vector Double)
+\end{code}
+
+To implement this in Folderol, we start by creating a sink for our output vector, calling the sink @snkOut@ and the vector @vecOut@.
+This will be the same size as the input vector, so we use @vectorSize@.
+We take the input array @vecIns@ and convert it to a stream @ins@.
+We are going to compute the volume of the input stream using the \emph{root mean square}, so first we need to square each element.
+This is the @squares@ stream.
+We need to compute the average of the squares, so we will use an exponential moving average --- which is equivalent to as a low-pass filter.
+To compute the moving average, we use @postscanl@, which is like a fold over the data, except it returns the stream of accumulators rather than just the final result.
+The difference between @postscanl@ and regular @scanl@ is that the output stream for @scanl@ contains the original zero accumulator for the fold, while @postscanl@ omits this.
+Now that we have our average, @avg@, we @clip@ each element by taking the square root, and clipping it to one. This is our multiplier, @mul@.
+Finally, we zip the original stream with the multiplier, and multiply them together.
+
+\begin{code}
+compressor vecIns = do
+  (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
+    $$(fuse $ do
+        ins     <- source    [|| sourceOfVector vecIns ||]
+        squares <- map       [|| \x -> x * x ||]         ins
+        avg     <- postscanl [|| lop         ||] [||0||] squares
+        mul     <- map       [|| clip        ||]         avg
+        out     <- zipWith   [|| (*)         ||] mul     ins
+        sink out             [|| snkOut      ||])
+  return vecOut
+ where
+  lop acc sample = acc * 0.9 + sample * 0.1
+
+  clip mean
+   = let root    = sqrt mean
+     in  min 1.0 root / root
+\end{code}
+
+The Vector version is very similar to the Folderol version, except without the Template Haskell boilerplate.
+The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
+
+\begin{code}
+compressorVector :: Vector Double -> IO (Vector Double)
+compressorVector ins = do
+  let squares = Unbox.map        (\x -> x * x) ins
+  let avg     = Unbox.postscanl' lop   0       squares
+  let mul     = Unbox.map        clip          avg
+  let out     = Unbox.zipWith    (*)   mul     ins
+  return out
+\end{code}
+
+\autoref{table:bench:quickhull} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
+The difference between the hand-fused version and the Folderol version are very slight, and may be due to operating system scheduling overhead. 
+The Vector version is slower because its generated loop indexes the input array twice.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{ll|rrrr}
+& & Runtime (s)  & Runtime (\%) & Allocation (b) & Allocation (\%) \\
+\hline
+Folderol &          & 0.93s &   100\% & 8.0e8 & 100\% \\
+Hand     &          & 0.98s &   105\% & 8.0e8 & 100\% \\
+&&&\\
+Vector &            & 1.78s &   191\% & 8.0e8 & 100\%\\
+\end{tabular}
+\end{center}
+\caption[Compressor benchmark results]{Compressor benchmark results}
+\label{table:bench:compressor}
+\end{table}
+
 
 
 
@@ -228,38 +319,46 @@ These libraries also have a monadic interface, which allows the structure of the
 
 The first file benchmark simply appends two files while counting the lines.
 In Pipes and Conduit, counting the lines is implemented as a pipe which counts each line before passing it along.
-The first group in Figure~\ref{fig:bench:all} shows the runtimes for appending 2MB of data.
+\autoref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
+
+
+\begin{table}
+\begin{center}
+\begin{tabular}{ll|rrrr}
+& & Runtime (s)  & Runtime (\%) & Allocation (b) & Allocation (\%) \\
+\hline
+Folderol &          & 0.29s &   100\% & 8.6e8 & 100\% \\
+Hand     &          & 0.29s &   100\% & 8.6e8 & 100\% \\
+Conduit &           & 0.93s &   320\% & 3.3e9 & 383\% \\
+Pipes  &            & 0.94s &   324\% & 3.4e9 & 395\% \\
+Streaming &         & 0.57s &   196\% & 2.6e9 & 302\% \\
+\end{tabular}
+\end{center}
+\caption[Append2 benchmark results]{Append2 benchmark results}
+\label{table:bench:append2}
+\end{table}
 
 The second file benchmark takes a file and partitions it into two files: one with even-length lines, and one with odd-length lines.
 The output lines are also counted.
 Even with partial hand-fusion because of the multiple outputs, the Pipes and Conduit programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
 The `Streaming' library allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
-The second group in Figure~\ref{fig:bench:all} shows the runtimes for partitioning a 1MB file.
+\autoref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
 
-
-\input{copy/03-body/02-process/figures/bench/append.tex}
-\input{copy/03-body/02-process/figures/bench/part2.tex}
-
-\subsection{Array microbenchmarks}
-\input{copy/03-body/02-process/figures/bench/arrays.tex}
-
-\subsection{Dynamic range compression}
-
-\begin{code}
-compressorFolderol :: Unbox.Vector Double -> IO (Unbox.Vector Double)
-compressorFolderol xs = do
-  (ys,()) <- Plumbing.vectorAtMostIO (Unbox.length xs) $ \snkYs -> do
-    $$(Splice.fuse Splice.defaultFuseOptions $ do
-        x0      <- Network.source    [|| Source.sourceOfVector xs ||]
-
-        squares <- Process.map       [|| \x -> x * x ||]         x0
-        avg     <- Process.postscanl [|| expAvg      ||] [||0||] squares
-        root    <- Process.map       [|| clipRoot    ||]         avg
-        out     <- Process.zipWith   [|| (*)         ||] root    x0
-
-        Network.sink out [|| snkYs ||])
-  return ys
-\end{code}
+\begin{table}
+\begin{center}
+\begin{tabular}{ll|rrrr}
+& & Runtime (s)  & Runtime (\%) & Allocation (b) & Allocation (\%) \\
+\hline
+Folderol &          & 0.30s &   100\% & 8.6e8 & 100\% \\
+Hand     &          & 0.30s &   100\% & 8.6e8 & 100\% \\
+Conduit & hand      & 0.66s &   220\% & 2.4e9 & 279\% \\
+Pipes  & hand       & 0.55s &   183\% & 2.0e9 & 232\% \\
+Streaming &         & 1.21s &   403\% & 6.1e9 & 709\% \\
+\end{tabular}
+\end{center}
+\caption[Part2 benchmark results]{Part2 benchmark results}
+\label{table:bench:part2}
+\end{table}
 
 
 \subsection{Summary}

@@ -1,0 +1,284 @@
+##
+dist/build/bench/bench --regress allocated:iters +RTS -T > ~/proj/thesis/copy/03-body/02-process/05-bench-allocated.txt
+##
+
+benchmarking Append2/1,000,000/Hand
+time                 309.5 ms   (298.3 ms .. 336.3 ms)
+                     0.998 R²   (0.989 R² .. 1.000 R²)
+mean                 299.5 ms   (293.2 ms .. 308.6 ms)
+std dev              8.950 ms   (2.904 ms .. 12.24 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.649e8    (8.648e8 .. 8.651e8)
+  y                  -367775.200 (-1037177.000 .. -1376.000)
+variance introduced by outliers: 16% (moderately inflated)
+
+benchmarking Append2/1,000,000/Folderol
+time                 292.0 ms   (284.0 ms .. 300.3 ms)
+                     0.999 R²   (0.998 R² .. 1.000 R²)
+mean                 288.0 ms   (285.9 ms .. 291.5 ms)
+std dev              3.320 ms   (313.6 μs .. 4.208 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.649e8    (8.648e8 .. 8.651e8)
+  y                  -356653.600 (-1036036.800 .. 17248.000)
+variance introduced by outliers: 16% (moderately inflated)
+
+benchmarking Append2/1,000,000/Vector
+time                 322.1 ms   (295.2 ms .. 362.8 ms)
+                     0.995 R²   (0.981 R² .. 1.000 R²)
+mean                 316.8 ms   (301.9 ms .. 325.2 ms)
+std dev              14.58 ms   (3.799 ms .. 19.37 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.649e8    (8.648e8 .. 8.651e8)
+  y                  -362701.600 (-1053344.000 .. 5408.000)
+variance introduced by outliers: 16% (moderately inflated)
+
+benchmarking Append2/1,000,000/Vector-multi
+time                 483.5 ms   (374.8 ms .. 532.1 ms)
+                     0.994 R²   (0.985 R² .. 1.000 R²)
+mean                 517.9 ms   (492.0 ms .. 531.0 ms)
+std dev              22.43 ms   (0.0 s .. 22.57 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              1.354e9    (1.354e9 .. 1.354e9)
+  y                  -523896.000 (-552600.000 .. -507496.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Append2/1,000,000/Streaming
+time                 622.0 ms   (518.4 ms .. 693.9 ms)
+                     0.997 R²   (0.990 R² .. 1.000 R²)
+mean                 629.3 ms   (607.7 ms .. 644.2 ms)
+std dev              22.35 ms   (0.0 s .. 25.77 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              2.557e9    (2.557e9 .. 2.557e9)
+  y                  -470944.000 (-1082880.000 .. -77168.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Append2/1,000,000/Pipes
+time                 1.102 s    (869.8 ms .. 1.282 s)
+                     0.993 R²   (0.991 R² .. 1.000 R²)
+mean                 1.093 s    (1.056 s .. 1.113 s)
+std dev              32.86 ms   (0.0 s .. 35.74 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              3.401e9    (3.401e9 .. 3.401e9)
+  y                  -303764.000 (-1510808.000 .. 563104.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Append2/1,000,000/Conduit
+time                 1.016 s    (890.1 ms .. 1.254 s)
+                     0.994 R²   (0.986 R² .. NaN R²)
+mean                 1.039 s    (1.004 s .. 1.067 s)
+std dev              44.75 ms   (0.0 s .. 49.19 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              3.337e9    (3.337e9 .. 3.337e9)
+  y                  -286476.000 (-1091952.000 .. 615432.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Audio/Compressor/Hand/100,000,000
+time                 931.7 ms   (654.5 ms .. 1.304 s)
+                     0.982 R²   (0.948 R² .. NaN R²)
+mean                 1.003 s    (948.6 ms .. 1.055 s)
+std dev              88.74 ms   (0.0 s .. 90.57 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.000e8    (8.000e8 .. 8.000e8)
+  y                  -3376.000  (-11656.000 .. 11480.000)
+variance introduced by outliers: 22% (moderately inflated)
+
+benchmarking Audio/Compressor/Folderol/100,000,000
+time                 919.4 ms   (891.7 ms .. 949.2 ms)
+                     1.000 R²   (1.000 R² .. 1.000 R²)
+mean                 915.9 ms   (909.7 ms .. 920.3 ms)
+std dev              6.614 ms   (0.0 s .. 7.593 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.000e8    (8.000e8 .. 8.000e8)
+  y                  2152.000   (-4136.000 .. 12440.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Audio/Compressor/Vector/100,000,000
+time                 2.036 s    (1.766 s .. 2.657 s)
+                     0.989 R²   (NaN R² .. 1.000 R²)
+mean                 1.835 s    (1.759 s .. 1.911 s)
+std dev              130.0 ms   (0.0 s .. 130.6 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.000e8    (8.000e8 .. 8.000e8)
+  y                  -1828.000  (-11464.000 .. 464.000)
+variance introduced by outliers: 20% (moderately inflated)
+
+benchmarking Audio/Compressor-lop/Hand/100,000,000
+time                 1.160 s    (980.2 ms .. 1.387 s)
+                     0.996 R²   (0.985 R² .. 1.000 R²)
+mean                 1.214 s    (1.179 s .. 1.282 s)
+std dev              58.73 ms   (0.0 s .. 59.41 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.000e8    (8.000e8 .. 8.000e8)
+  y                  -2684.000  (-13856.000 .. 12512.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Audio/Compressor-lop/Folderol/100,000,000
+time                 1.094 s    (794.4 ms .. 1.329 s)
+                     0.988 R²   (0.984 R² .. 1.000 R²)
+mean                 1.240 s    (1.143 s .. 1.299 s)
+std dev              88.93 ms   (0.0 s .. 100.9 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.000e8    (8.000e8 .. 8.000e8)
+  y                  -1844.000  (-11560.000 .. 464.000)
+variance introduced by outliers: 20% (moderately inflated)
+
+benchmarking Audio/Compressor-lop/Vector/100,000,000
+time                 2.494 s    (2.273 s .. 2.679 s)
+                     0.999 R²   (0.998 R² .. 1.000 R²)
+mean                 2.401 s    (2.336 s .. 2.445 s)
+std dev              66.00 ms   (0.0 s .. 76.16 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              1.600e9    (1.600e9 .. 1.600e9)
+  y                  2168.000   (-4136.000 .. 12440.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Hand
+time                 304.2 ms   (294.3 ms .. 315.2 ms)
+                     1.000 R²   (0.998 R² .. 1.000 R²)
+mean                 304.9 ms   (302.2 ms .. 306.3 ms)
+std dev              2.546 ms   (757.0 μs .. 3.388 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.649e8    (8.648e8 .. 8.651e8)
+  y                  -249575.200 (-506188.000 .. 269385.143)
+variance introduced by outliers: 16% (moderately inflated)
+
+benchmarking Part2/1,000,000/Folderol
+time                 340.4 ms   (264.0 ms .. 427.9 ms)
+                     0.992 R²   (0.973 R² .. 1.000 R²)
+mean                 324.0 ms   (303.0 ms .. 337.9 ms)
+std dev              20.82 ms   (0.0 s .. 24.04 ms)
+allocated:           1.000 R²   (NaN R² .. 1.000 R²)
+  iters              8.649e8    (8.645e8 .. 8.651e8)
+  y                  -262404.000 (-522968.000 .. 1039360.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Vector
+time                 493.9 ms   (435.3 ms .. 536.5 ms)
+                     0.998 R²   (0.995 R² .. 1.000 R²)
+mean                 511.5 ms   (498.5 ms .. 522.1 ms)
+std dev              16.46 ms   (0.0 s .. 18.23 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              1.354e9    (1.353e9 .. 1.354e9)
+  y                  -249888.000 (-1020992.000 .. 991456.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Streaming
+time                 1.433 s    (1.204 s .. 1.709 s)
+                     0.994 R²   (0.993 R² .. 1.000 R²)
+mean                 1.425 s    (1.399 s .. 1.451 s)
+std dev              44.44 ms   (0.0 s .. 44.74 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              6.115e9    (6.115e9 .. 6.115e9)
+  y                  -7572.000  (-71248.000 .. 66968.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Pipes/hand-fused
+time                 523.8 ms   (494.7 ms .. 543.3 ms)
+                     1.000 R²   (NaN R² .. 1.000 R²)
+mean                 557.7 ms   (547.6 ms .. 567.2 ms)
+std dev              16.14 ms   (0.0 s .. 16.56 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              2.065e9    (2.064e9 .. 2.066e9)
+  y                  -105956.000 (-1188016.000 .. 1164848.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Pipes/arrow
+time                 793.5 ms   (737.3 ms .. 903.3 ms)
+                     0.998 R²   (0.995 R² .. 1.000 R²)
+mean                 839.6 ms   (812.3 ms .. 861.1 ms)
+std dev              33.19 ms   (0.0 s .. 37.12 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              3.221e9    (3.221e9 .. 3.221e9)
+  y                  -418180.000 (-708216.000 .. -89376.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Part2/1,000,000/Conduit/hand-fused
+time                 645.0 ms   (629.8 ms .. 659.0 ms)
+                     1.000 R²   (1.000 R² .. 1.000 R²)
+mean                 673.8 ms   (664.4 ms .. 681.8 ms)
+std dev              12.70 ms   (0.0 s .. 13.78 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              2.409e9    (2.408e9 .. 2.409e9)
+  y                  -399560.000 (-1624912.000 .. 821456.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Conduit/TwoPass/20,000,000
+time                 10.93 s    (8.245 s .. 13.65 s)
+                     0.992 R²   (0.970 R² .. 1.000 R²)
+mean                 10.55 s    (9.976 s .. 10.95 s)
+std dev              616.0 ms   (0.0 s .. 706.3 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              6.258e10   (6.258e10 .. 6.258e10)
+  y                  -406788.000 (-809976.000 .. 472.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Conduit/OnePass/20,000,000
+time                 8.445 s    (7.614 s .. 10.27 s)
+                     0.994 R²   (0.989 R² .. 1.000 R²)
+mean                 8.359 s    (8.097 s .. 8.540 s)
+std dev              272.3 ms   (0.0 s .. 313.8 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              4.367e10   (4.367e10 .. 4.367e10)
+  y                  -422968.000 (-854280.000 .. 12280.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Pipes/20,000,000
+time                 5.991 s    (5.374 s .. 6.631 s)
+                     0.999 R²   (0.995 R² .. 1.000 R²)
+mean                 5.654 s    (5.536 s .. 5.745 s)
+std dev              140.7 ms   (0.0 s .. 158.1 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              3.949e10   (3.949e10 .. NaN)
+  y                  -321496.000 (-639464.000 .. 472.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Streaming/20,000,000
+time                 4.468 s    (3.229 s .. 5.065 s)
+                     0.990 R²   (0.978 R² .. 1.000 R²)
+mean                 4.727 s    (4.464 s .. 4.864 s)
+std dev              227.9 ms   (0.0 s .. 237.7 ms)
+allocated:           1.000 R²   (NaN R² .. 1.000 R²)
+  iters              3.044e10   (3.044e10 .. 3.044e10)
+  y                  -453668.000 (-915760.000 .. 12368.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Hand/20,000,000
+time                 178.8 ms   (142.5 ms .. 214.8 ms)
+                     0.976 R²   (0.964 R² .. 0.998 R²)
+mean                 151.3 ms   (142.1 ms .. 167.5 ms)
+std dev              15.99 ms   (8.219 ms .. 21.82 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              4.800e8    (4.800e8 .. 4.800e8)
+  y                  521.143    (-1059.368 .. 5352.000)
+variance introduced by outliers: 27% (moderately inflated)
+
+benchmarking Quickhull/Folderol/20,000,000
+time                 245.4 ms   (158.7 ms .. 348.7 ms)
+                     0.946 R²   (0.871 R² .. 1.000 R²)
+mean                 261.7 ms   (234.8 ms .. 288.0 ms)
+std dev              30.37 ms   (25.86 ms .. 31.31 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              1.201e9    (1.201e9 .. 1.201e9)
+  y                  -527.200   (-1408.000 .. 488.000)
+variance introduced by outliers: 36% (moderately inflated)
+
+benchmarking Quickhull/Vector/Recompute/20,000,000
+time                 305.0 ms   (294.6 ms .. 316.0 ms)
+                     1.000 R²   (1.000 R² .. 1.000 R²)
+mean                 334.3 ms   (327.3 ms .. 340.0 ms)
+std dev              8.998 ms   (0.0 s .. 9.887 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              8.008e8    (8.008e8 .. 8.008e8)
+  y                  -780.000   (-7456.000 .. 16328.000)
+variance introduced by outliers: 19% (moderately inflated)
+
+benchmarking Quickhull/Vector/Store/20,000,000
+time                 507.1 ms   (415.3 ms .. 594.4 ms)
+                     0.996 R²   (NaN R² .. 1.000 R²)
+mean                 480.9 ms   (462.1 ms .. 492.0 ms)
+std dev              17.00 ms   (0.0 s .. 19.09 ms)
+allocated:           1.000 R²   (1.000 R² .. 1.000 R²)
+  iters              1.762e9    (1.762e9 .. 1.762e9)
+  y                  -2752.000  (-11344.000 .. 464.000)
+variance introduced by outliers: 19% (moderately inflated)
+

@@ -48,17 +48,36 @@ The benchmark results presented below were all run on a MacBook Pro, with a 2GHz
 The operating system is OS X El Capitan.
 To run the benchmarks, I used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
 Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
-It can also collect statistics on allocations, which is sometimes a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
+It can also collect statistics on allocations, which is sometimes (but not always) a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
 
 \subsection{Quickhull}
 
 Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
 At its core is the @filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
 The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an @IO@ monad.
-\begin{code}
-filterMax :: Line -> Vector Point -> IO (Point, Vector Point)
-\end{code}
 
+\begin{lstlisting}[float,label=l:bench:filterMaxType,caption=Type signature for filterMax]
+filterMax :: Line -> Vector Point -> IO (Point, Vector Point)
+\end{lstlisting}
+
+\autoref{l:bench:filterMaxType} shows the type signature for @filterMax@.
+
+\begin{lstlisting}[float,label=l:bench:filterMaxFolderol,caption=Folderol implementation of filterMax]
+filterMaxFolderol l ps = do
+  (maxim,(above,())) <- scalar          $ \snkMaxim ->
+                        vectorSize   ps $ \snkAbove ->
+   $(fuse $ do
+      ins    <- source [|sourceOfVector ps      |]
+      annot  <- map    [|\p -> (p, distance p l)|] ins
+      above  <- filter [|\(_,d) -> d > 0        |] annot
+      above' <- map    [|fst                    |] above
+      maxim  <- maxBy  [|compare `on` snd       |] annot
+      sink maxim       [|snkMaxim               |]
+      sink above'      [|snkAbove               |]$)
+  return (fst maxim, above)
+\end{lstlisting}
+
+\autoref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
 The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
 As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSizeIO@ as a size hint to remove the need to dynamically grow the vector (\autoref{s:implementation:sizehints}).
 The Template Haskell splice calls @fuse@ to convert the process network into executable code.
@@ -69,23 +88,6 @@ The @annot@ stream is filtered to only those above the line (@above@), then the 
 The maximum is computed by comparing the second half of each annotated point --- the distance --- and stored in @maxim@.
 Finally, @maxim@ is pushed into the scalar output sink, and all @above'@ points are pushed into the vector output sink.
 
-\begin{code}
-filterMaxFolderol l ps = do
- (maxim,(above,())) <- scalar          $ \snkMaxim ->
-                       vectorSize   ps $ \snkAbove ->
-   $$(fuse $ do
-      ins    <- source [|| sourceOfVector ps       ||]
-      annot  <- map    [|| \p -> (p, distance p l) ||] ins
-      above  <- filter [|| \(_,d) -> d > 0         ||] annot
-      above' <- map    [|| fst                     ||] above
-      maxim  <- maxBy  [|| compare `on` snd        ||] annot
-      sink maxim       [|| snkMaxim                ||]
-      sink above'      [|| snkAbove                ||])
- return (fst maxim, above)
-\end{code}
-\iffalse
-$$
-\fi
 
 On to the Vector program.
 The shortcut fusion system cannot fuse both operations into a single loop, and both operations must recompute the distances between the line and each point.
@@ -96,7 +98,7 @@ First, sharing the distances computes the distance between each point and the li
 Then @point@ computes the maximum with @maximumBy@, comparing each distance.
 Next, @above@ filters each point.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:filterMaxVectorStore,caption=Vector / store implementation of filterMax]
 filterMaxVectorStore l ps
  = let annot = Unbox.map (\p -> (p, distance p l)) ps
        point = fst
@@ -104,11 +106,11 @@ filterMaxVectorStore l ps
        above = Unbox.map fst
              $ Unbox.filter ((>0) . snd) annot
    in return (point, above)
-\end{code}
+\end{lstlisting}
 
 To recompute the vectors, we duplicate the @annot@ vector to @annot1@ and @annot2@. The maximum now uses @annot1@, and filter uses @annot2@.
 This way, both maps to compute the distance can be fused into their consumers.
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:filterMaxVectorRecompute,caption=Vector / recompute implementation of filterMax]
 filterMaxVectorRecompute l ps
  = let annot1 = Unbox.map (\p -> (p, distance p l)) ps
        point  = fst
@@ -117,7 +119,7 @@ filterMaxVectorRecompute l ps
        above  = Unbox.map fst
               $ Unbox.filter ((>0) . snd) annot2
    in return (point, above)
-\end{code}
+\end{lstlisting}
 
 In the results below, recomputing the distances is faster than storing the distances.
 For this benchmark we used only two-dimensional points, but it is possible that at higher dimensions the cost of recomputing distances may outweigh the cost of allocation.
@@ -129,7 +131,7 @@ The two-pass version defines two conduits, @cabove@ for the vector and @cmaxim@ 
 As with Folderol, we use size hints when converting back to a vector to remove any overhead with growing and copying the vector.
 @cmaxim@ also converts the vector to a conduit, then annotates with the distances, and computes the maximum.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:filterMaxConduitTwoPass,caption=Conduit 2-pass implementation of filterMax]
 filterMaxConduitTwoPass l ps = do
   maxim <- runConduit cmaxim
   above <- runConduit cabove
@@ -146,11 +148,11 @@ filterMaxConduitTwoPass l ps = do
     sourceVector ps               .|
     map (\p -> (p, distance p l)) .|
     maximumBy (compare `on` snd)
-\end{code}
+\end{lstlisting}
 
 The hand-fused version is more complicated, and loses the abstraction benefits from using a high-level streaming library.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:filterMaxConduitOnePass,caption=Conduit one-pass (hand-fused) implementation of filterMax]
 filterMaxOnePass l ps = do
   r      <- MUnbox.unsafeNew (Unbox.length ps)
   (a,ix) <- runConduit $ both r
@@ -175,7 +177,7 @@ filterMaxOnePass l ps = do
         filterAndMax r ix p' d'
      Nothing -> do
       return ((x,y), ix)
-\end{code}
+\end{lstlisting}
 
 For Pipes, we only have a hand-fused version, which follows much the same structure as the Conduit hand-fused version.
 
@@ -184,17 +186,16 @@ We start by converting the vector to a stream with @sourceVector@, and then use 
 To split the stream, we use @store@ which takes a computation to perform on the copy of the stream --- in this case computing the maximum with @maximumBy@.
 The original stream is also passed through, which is filtered and then the annotations discarded.
 
-\begin{code}
-filterMax l ps = do
+\begin{lstlisting}[float,label=l:bench:filterMaxStreaming,caption=Streaming implementation of filterMax]
+filterMaxStreaming l ps = do
   (vec,pt :> ()) <- sinkVectorSize ps
             $ map fst
-            $ filter (\(_,d) -> d > 0)
+            $ filter (\(_,d) -> d /= 0)
             $ store maximumBy (compare `on` snd)
             $ map (\p -> (p, distance p l))
             $ sourceVector ps
   return (pt, vec)
-\end{code}
-\iffalse$\fi
+\end{lstlisting}
 
 \autoref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
 The hand-fused version is the fastest, followed by Folderol.
@@ -242,9 +243,9 @@ This will be our multiplier, which we multiply the original signal by at each st
 This way, if the volume is less than the limit, our multiplier will be one and the signal is unchanged. 
 If the volume is above the limit, our multiplier will be the reciprocal of volume: whatever is required to get the volume back down to one.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:compressorType,caption=Type signature for compressor]
 compressor :: Vector Double -> IO (Vector Double)
-\end{code}
+\end{lstlisting}
 
 To implement this in Folderol, we start by creating a sink for our output vector, calling the sink @snkOut@ and the vector @vecOut@.
 This will be the same size as the input vector, so we use @vectorSize@.
@@ -257,16 +258,16 @@ The difference between @postscanl@ and regular @scanl@ is that the output stream
 Now that we have our average, @avg@, we @clip@ each element by taking the square root, and clipping it to one. This is our multiplier, @mul@.
 Finally, we zip the original stream with the multiplier, and multiply them together.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:compressorFolderol,caption=Folderol implementation of compressor]
 compressor vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
-    $$(fuse $ do
-        ins     <- source    [|| sourceOfVector vecIns ||]
-        squares <- map       [|| \x -> x * x ||]         ins
-        avg     <- postscanl [|| lop         ||] [||0||] squares
-        mul     <- map       [|| clip        ||]         avg
-        out     <- zipWith   [|| (*)         ||] mul     ins
-        sink out             [|| snkOut      ||])
+    $(fuse $ do
+        ins     <- source    [|sourceOfVector vecIns|]
+        squares <- map       [|\x -> x * x|]       ins
+        avg     <- postscanl [|lop        |] [|0|] squares
+        mul     <- map       [|clip       |]       avg
+        out     <- zipWith   [|(*)        |] mul   ins
+        sink out             [|snkOut     |]$)
   return vecOut
  where
   lop acc sample = acc * 0.9 + sample * 0.1
@@ -274,12 +275,12 @@ compressor vecIns = do
   clip mean
    = let root    = sqrt mean
      in  min 1.0 root / root
-\end{code}
+\end{lstlisting}
 
 The Vector version is very similar to the Folderol version, except without the Template Haskell boilerplate.
 The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
 
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:compressorVector,caption=Vector implementation of compressor]
 compressorVector :: Vector Double -> IO (Vector Double)
 compressorVector ins = do
   let squares = Unbox.map        (\x -> x * x) ins
@@ -287,7 +288,7 @@ compressorVector ins = do
   let mul     = Unbox.map        clip          avg
   let out     = Unbox.zipWith    (*)   mul     ins
   return out
-\end{code}
+\end{lstlisting}
 
 \autoref{table:bench:quickhull} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
 The difference between the hand-fused version and the Folderol version are very slight, and may be due to operating system scheduling overhead. 
@@ -374,14 +375,14 @@ Stream fusion is ultimately performed for practical reasons. We want the fused r
 \section{Fusibility}
 \label{s:FusionOrder}
 When we fuse a pair of processes we commit to a particular interleaving of instructions from each process. When we have at least three processes to fuse, the choice of which two to handle first can determine whether this fused result can then be fused with the third process. Consider our @alternatives@ example from \S\ref{s:EvaluationOrder}, here it is again:
-\begin{code}
+\begin{lstlisting}[float,label=l:bench:alternates,caption=Alternates]
   alternates : S Nat -> S Nat -> S Nat -> S (Nat, Nat)
   alternates sInA sInB sInC
    = let  s1   = alt2 sInA sInB
           s2   = alt2 sInB sInC
           sOut = zip s1 s2
      in   sOut
-\end{code}
+\end{lstlisting}
 
 In our current system, if we fuse the two @alt2@ processes together first, then try to fuse this result process with the downstream @zip@ process, then this final fusion transform fails. This happens because the first fusion transform commits to a sequential instruction interleaving where two output values \emph{must} be pushed to stream @s1@ first, before then pushing values to @s2@. As we discussed in \S\ref{s:EvaluationOrder}, the downstream @zip@ process needs to pull single values from @s1@ and @s2@ alternatively.
 

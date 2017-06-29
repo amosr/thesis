@@ -1,0 +1,67 @@
+\usepackage{listings}
+
+\colorlet{TemplateStage}{Blue}
+
+\lstdefinelanguage{Haskell}%
+  {morekeywords={if,then,else,case,class,data,default,deriving,%
+      hiding,in,infix,infixl,infixr,import,instance,let,module,%
+      newtype,of,qualified,type,where,do,return},%
+   sensitive,%
+   morecomment=[l]--,%
+   morecomment=[n]{\{-}{-\}},%
+   morestring=[b]",%
+   % Single char doesn't work as a string because of primes
+   % morestring=[b]'%
+   % Nice symbols
+   literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            % Disable space-then-dot as function composition because Conduit uses .| to fuse
+            % {\ .}{{$\circ$}}2
+            {\ .\ }{{$\circ$}}3
+            {>>}{{>>}}2 {>>=}{{>>=}}2
+            {|}{{$\mid$}}1
+  % Template Haskell splicing / quoting
+  % Use untyped TH syntax because it's less noisy.
+  % Splice start: turn colour to splice colour
+            {$(}{{ \color{TemplateStage} \$( }}2
+  % Splice end: this needs to be written as dollar-close in the listing.
+  % Turn colour back to normal
+            {$)}{{\textcolor{TemplateStage}{)}\color{black}}}2
+  % Quote start: presumably outside is a splice, so set colour back to normal
+            {[|}{{ \color{black} $\llbracket$ }}2
+  % Quote end: presumably exiting back to splice, so change to splice colour
+            {|]}{{ $\rrbracket$ \color{TemplateStage} }}2
+  }[keywords,comments,strings]%
+\lstset{language=Haskell}
+
+\lstset{%
+    rulecolor={\color[gray]{0.7}},
+    numbers=none,
+    numberstyle=\color{Gray}\tiny\it,
+    commentstyle=\color{MidnightBlue}\it,
+    stringstyle=\color{Maroon},
+    keywordstyle=[1]\color{OliveGreen},
+    % keywordstyle=[2]\color{ForestGreen},
+    % keywordstyle=[3]\color{Bittersweet},
+    % keywordstyle=[4]\color{RoyalPurple},
+    captionpos=b,
+    aboveskip=2\medskipamount,
+    xleftmargin=0.5\parindent,
+    xrightmargin=0.5\parindent,
+    flexiblecolumns=false,
+    escapechar={\%},
+    texcl=true,
+    showstringspaces=false,
+    frame=tb,
+}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  flexiblecolumns=false,
+  basewidth={0.5em,0.45em},
+}
+

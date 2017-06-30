@@ -27,10 +27,10 @@
   % Template Haskell splicing / quoting
   % Use untyped TH syntax because it's less noisy.
   % Splice start: turn colour to splice colour
-            {$(}{{ \color{TemplateStage} \$( }}2
+            {$$(}{{ \color{TemplateStage} \$\$( }}3
   % Splice end: this needs to be written as dollar-close in the listing.
   % Turn colour back to normal
-            {$)}{{\textcolor{TemplateStage}{)}\color{black}}}2
+            {$$)}{{\textcolor{TemplateStage}{)}\color{black}}}1
   % Quote start: presumably outside is a splice, so set colour back to normal
             {[|}{{ \color{black} $\llbracket$ }}2
   % Quote end: presumably exiting back to splice, so change to splice colour

@@ -1,0 +1,206 @@
+\chapter{Benchmark code}
+\label{app:Benchmarks}
+
+\begin{lstlisting}[float,label=l:a:bench:quickhull,caption=Quickhull skeleton parameterised by filterMax and pivots]
+quickhull :: (Vector Point -> IO (Point,Point))
+          -> (Line -> Vector Point -> IO (Point, Vector Point))
+          -> Vector Point
+          -> IO (Vector Point)
+quickhull fPivots fFilterMax ps0
+ | null ps0 =
+   return empty
+ | otherwise = do
+   (l,r) <- fPivots ps0
+   top   <- go l r ps0
+   bot   <- go r l ps0
+   return (singleton l ++ top ++ singleton r ++ bot)
+ where
+  go l r ps
+   | null ps =
+     return empty
+   | otherwise = do
+     (pt,above) <- fFilterMax (l,r) ps
+     left       <- go l pt above
+     right      <- go pt r above
+     return (left ++ singleton pt ++ right)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxFolderol,caption=Folderol implementation of filterMax]
+filterMaxFolderol l ps = do
+  (maxim,(above,())) <- scalar          $ \snkMaxim ->
+                        vectorSize   ps $ \snkAbove ->
+   $$(fuse $ do
+      ins    <- source [|sourceOfVector ps      |]
+      annot  <- map    [|\p -> (p, distance p l)|] ins
+      above  <- filter [|\(_,d) -> d > 0        |] annot
+      above' <- map    [|fst                    |] above
+      maxim  <- maxBy  [|compare `on` snd       |] annot
+      sink maxim       [|snkMaxim               |]
+      sink above'      [|snkAbove               |]$$)
+  return (fst maxim, above)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxHand,caption=Hand-fused implementation of filterMax]
+filterMax l ps
+ | Unbox.length ps == 0
+ = return ((0,0), Unbox.empty)
+ | otherwise = do
+   mv <- MUnbox.unsafeNew $ Unbox.length ps
+   (x,y,wix) <- go0 mv
+   v <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 wix mv
+   return ((x,y), v)
+ where
+  {-# INLINE go0 #-}
+  go0 !mv = do
+   let (x0,y0) = Unbox.unsafeIndex ps 0
+   let d0 = distance (x0,y0) l
+   case d0 > 0 of
+    True -> do
+      MUnbox.unsafeWrite mv 0 (x0,y0)
+      go mv 1 1 x0 y0 d0
+    False -> do
+     go mv 1 0 x0 y0 d0
+
+  {-# INLINE go #-}
+  go !mv !ix !writeIx !x1 !y1 !d1
+   = case ix >= Unbox.length ps of
+      True -> return (x1,y1, writeIx)
+      False -> do
+       let (x2,y2) = Unbox.unsafeIndex ps ix
+       let d2 = distance (x2,y2) l
+       case d2 > 0 of
+        True -> do
+          MUnbox.unsafeWrite mv writeIx (x2,y2)
+          case d1 > d2 of
+           True -> go mv (ix + 1) (writeIx + 1) x1 y1 d1
+           False -> go mv (ix + 1) (writeIx + 1) x2 y2 d2
+        False ->
+          case d1 > d2 of
+           True -> go mv (ix + 1) writeIx x1 y1 d1
+           False -> go mv (ix + 1) writeIx x2 y2 d2
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxVectorShare,caption=Vector / share implementation of filterMax]
+filterMaxVectorShare l ps
+ = let annot = Unbox.map (\p -> (p, distance p l)) ps
+       point = fst
+             $ Unbox.maximumBy (compare `on` snd) annot
+       above = Unbox.map fst
+             $ Unbox.filter ((>0) . snd) annot
+   in return (point, above)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxVectorRecompute,caption=Vector / recompute implementation of filterMax]
+filterMaxVectorRecompute l ps
+ = let annot1 = Unbox.map (\p -> (p, distance p l)) ps
+       point  = fst
+              $ Unbox.maximumBy (compare `on` snd) annot1
+       annot2 = Unbox.map (\p -> (p, distance p l)) ps
+       above  = Unbox.map fst
+              $ Unbox.filter ((>0) . snd) annot2
+   in return (point, above)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitTwoPass,caption=Conduit 2-pass implementation of filterMax]
+filterMaxConduitTwoPass l ps = do
+  maxim <- runConduit cmaxim
+  above <- runConduit cabove
+  return (fst maxim, above)
+ where
+  cabove =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filter ((>0) . snd)           .|
+    map fst                       .|
+    sinkVectorSize ps
+
+  cmaxim =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    maximumBy (compare `on` snd)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitOnePass,caption=Conduit one-pass (hand-fused) implementation of filterMax]
+filterMaxOnePass l ps = do
+  r      <- MUnbox.unsafeNew (Unbox.length ps)
+  (a,ix) <- runConduit $ both r
+  r'     <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix r
+  return (a, r')
+ where
+  both r =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filterAndMax r 0 (0,0) (-1/0)
+
+  filterAndMax !r !ix (!x,!y) !d1 = do
+    e <- await
+    case e of
+     Just (!p2,!d2) -> do
+      let (!p',!d') = if d1 > d2 then ((x,y),d1) else (p2,d2)
+      case d2 > 0 of
+       True -> do
+        MUnbox.unsafeWrite r ix p2
+        filterAndMax r (ix+1) p' d'
+       False -> do
+        filterAndMax r ix p' d'
+     Nothing -> do
+      return ((x,y), ix)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxStreaming,caption=Streaming implementation of filterMax]
+filterMaxStreaming l ps = do
+  (vec,pt :> ()) <- sinkVectorSize ps
+            $ map fst
+            $ filter (\(_,d) -> d /= 0)
+            $ store maximumBy (compare `on` snd)
+            $ map (\p -> (p, distance p l))
+            $ sourceVector ps
+  return (pt, vec)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:bench:compressorFolderol,caption=Folderol implementation of compressor]
+compressorFolderol :: Vector Double -> IO (Vector Double)
+compressorFolderol vecIns = do
+  (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
+    $$(fuse $ do
+        ins     <- source    [|sourceOfVector vecIns|]
+        squares <- map       [|\x -> x * x|]       ins
+        avg     <- postscanl [|lop        |] [|0|] squares
+        mul     <- map       [|clip       |]       avg
+        out     <- zipWith   [|(*)        |] mul   ins
+        sink out             [|snkOut     |]$$)
+  return vecOut
+ where
+  lop acc sample = acc * 0.9 + sample * 0.1
+
+  clip mean
+   = let root    = sqrt mean
+     in  min 1.0 root / root
+\end{lstlisting}
+
+
+\begin{lstlisting}[float,label=l:bench:compressorVector,caption=Vector implementation of compressor]
+compressorVector :: Vector Double -> IO (Vector Double)
+compressorVector ins = do
+  let squares = Unbox.map        (\x -> x * x) ins
+  let avg     = Unbox.postscanl' lop   0       squares
+  let mul     = Unbox.map        clip          avg
+  let out     = Unbox.zipWith    (*)   mul     ins
+  return out
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:bench:partitionAppendVector,caption=Vector implementations of partitionAppend]
+partitionAppendV2Loop :: Unbox.Vector Int -> IO (Unbox.Vector Int)
+partitionAppendV2Loop !xs = do
+  let (as,bs) = Unbox.partition (\i -> i `mod` 2 == 0) xs
+  let  asbs   = as Unbox.++ bs
+  return asbs
+
+partitionAppendV2Source :: Unbox.Vector Int -> IO (Unbox.Vector Int)
+partitionAppendV2Source !xs = do
+  let p i     = i `mod` 2 == 0
+  let as      = Unbox.filter        p  xs
+  let bs      = Unbox.filter (not . p) xs
+  let asbs   = as Unbox.++ bs
+  return asbs
+\end{lstlisting}

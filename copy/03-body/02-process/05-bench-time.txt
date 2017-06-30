@@ -194,3 +194,30 @@ mean                 404.3 ms   (398.4 ms .. 407.3 ms)
 std dev              5.098 ms   (0.0 s .. 5.200 ms)
 variance introduced by outliers: 19% (moderately inflated)
 
+benchmarking PartitionAppend/Folderol-2ix/10,000,000
+time                 274.1 ms   (272.2 ms .. 275.4 ms)
+                     1.000 R²   (1.000 R² .. 1.000 R²)
+mean                 276.0 ms   (274.9 ms .. 277.9 ms)
+std dev              1.735 ms   (109.8 μs .. 2.166 ms)
+variance introduced by outliers: 16% (moderately inflated)
+
+benchmarking PartitionAppend/Folderol-2kernel/10,000,000
+time                 162.2 ms   (155.6 ms .. 169.1 ms)
+                     0.999 R²   (0.995 R² .. 1.000 R²)
+mean                 172.8 ms   (168.3 ms .. 184.2 ms)
+std dev              9.198 ms   (1.613 ms .. 13.27 ms)
+variance introduced by outliers: 13% (moderately inflated)
+
+benchmarking PartitionAppend/Vector/10,000,000
+time                 147.8 ms   (145.9 ms .. 151.5 ms)
+                     1.000 R²   (0.999 R² .. 1.000 R²)
+mean                 147.9 ms   (146.5 ms .. 149.2 ms)
+std dev              1.912 ms   (1.285 ms .. 2.528 ms)
+variance introduced by outliers: 12% (moderately inflated)
+
+benchmarking PartitionAppend/Vector-unfused/10,000,000
+time                 264.7 ms   (252.2 ms .. 277.7 ms)
+                     0.999 R²   (0.997 R² .. 1.000 R²)
+mean                 262.4 ms   (258.9 ms .. 265.1 ms)
+std dev              3.558 ms   (1.623 ms .. 4.745 ms)
+variance introduced by outliers: 16% (moderately inflated)

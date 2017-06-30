@@ -89,11 +89,11 @@ I compare both implementations.
 
 \begin{lstlisting}[float,label=l:bench:filterMaxVectorShare,caption=Vector / share implementation of filterMax]
 filterMaxVectorShare l ps
- = let annot = Unbox.map (\p -> (p, distance p l)) ps
+ = let annot = map (\p -> (p, distance p l)) ps
        point = fst
-             $ Unbox.maximumBy (compare `on` snd) annot
-       above = Unbox.map fst
-             $ Unbox.filter ((>0) . snd) annot
+             $ maximumBy (compare `on` snd) annot
+       above = map fst
+             $ filter ((>0) . snd) annot
    in return (point, above)
 \end{lstlisting}
 
@@ -371,7 +371,7 @@ partitionAppend !xs = do
         as    <- filter [|even             |] x0
         bs    <- filter [|odd              |] x0
         asbs  <- append as bs
-        sink asbs       [|snkYs               |]$$)
+        sink asbs       [|snkYs            |]$$)
   return ys
 \end{lstlisting}
 
@@ -398,7 +398,7 @@ partitionAppend2Source !xs = do
         as    <- filter [|even             |] x0
         bs    <- filter [|odd              |] x1
         asbs  <- append as bs
-        sink asbs       [|snkYs               |]$$)
+        sink asbs       [|snkYs            |]$$)
   return ys
 \end{lstlisting}
 
@@ -408,7 +408,7 @@ In the first loop, we partition the input into two intermediate arrays.
 Then in the second loop, we append the two intermediate arrays.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Loop,caption=Partition / append with two loops]
-runPartApp2Loop :: Unbox.Vector Int -> IO (Unbox.Vector Int)
+runPartApp2Loop :: Vector Int -> IO (Vector Int)
 runPartApp2Loop !xs = do
   (as,(bs,())) <- vectorSize xs $ \snkAs ->
                   vectorSize xs $ \snkBs ->
@@ -422,7 +422,7 @@ runPartApp2Loop !xs = do
         as'   <- source      [|sourceOfVector as|]
         bs'   <- source      [|sourceOfVector bs|]
         asbs  <- append as' bs'
-        sink asbs            [|snkYs               |]$$)
+        sink asbs            [|snkYs            |]$$)
   return ys
 \end{lstlisting}
 

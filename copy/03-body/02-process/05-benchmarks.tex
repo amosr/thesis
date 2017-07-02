@@ -48,6 +48,10 @@ To run the benchmarks, I used the Criterion\footnote{\url{http://hackage.haskell
 Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
 It can also collect statistics on allocations, which is sometimes (but not always) a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
 
+There are many implementations of the benchmark programs, but for the most part they all follow the same structure.
+Showing five different implementations of the same program is not that interesting.
+I just show the Folderol versions, but the other versions are available in \autoref{app:Benchmarks}.
+
 \subsection{Quickhull}
 
 Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
@@ -155,7 +159,7 @@ The streaming libraries are significantly slower, spending most of the time allo
 Why are they so much slower? This would be better in the motivation.
 On the plus side, the limited APIs and linearity constraints for Conduit and Pipes made it more obvious that they would not be fused into a single loop, but even with partial hand-fusion, are still significantly slower.
 The `Streaming' program allows explicit sharing, and was the simplest of the three streaming libraries, requiring no hand fusion.
-Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Conduit' program, but is still significantly slower than Folderol.
+Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Conduit' and `Pipes' programs, but is still significantly slower than Folderol.
 
 It would be nice to know why the Folderol version is slower than the hand-fused version.
 Inspecting the assembly, the code is very similar.
@@ -363,13 +367,14 @@ Streaming &         & 1.21s &   403\% & 6.1e9 & 709\% \\
 \subsection{Partition / append}
 
 \begin{lstlisting}[float,label=l:bench:partitionAppendFail,caption=Partition / append fusion failure]
-partitionAppend :: Vector Int -> IO (Vector Int)
-partitionAppend !xs = do
+partitionAppendFailure :: Vector Int -> IO (Vector Int)
+partitionAppendFailure xs = do
   (ys,()) <- vectorSize xs $ \snkYs ->
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
         as    <- filter [|even             |] x0
         bs    <- filter [|odd              |] x0
+        -- Failure: cannot fuse append with both filters
         asbs  <- append as bs
         sink asbs       [|snkYs            |]$$)
   return ys
@@ -387,10 +392,12 @@ But this means that when reading from the stream, if we see an odd-valued elemen
 In this case, the input stream is not really a stream, but is backed by a real vector.
 So we can actually implement it without introducing an unbounded buffer: we already have the buffer.
 To execute the program, we \emph{explicitly} introduce another source to read from the vector. 
+See \autoref{l:bench:partitionAppend2Source}.
+The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
+All of @as@ can be read by @append@, independently of @bs@.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Source,caption=Partition / append with two sources]
-partitionAppend2Source :: Vector Int -> IO (Vector Int)
-partitionAppend2Source !xs = do
+partitionAppend2Source xs = do
   (ys,()) <- vectorSize xs $ \snkYs ->
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
@@ -406,10 +413,10 @@ But we can actually implement it another way, if we are willing to introduce two
 In this version we introduce two loops.
 In the first loop, we partition the input into two intermediate arrays.
 Then in the second loop, we append the two intermediate arrays.
+See \autoref{l:bench:partitionAppend2Loop}.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Loop,caption=Partition / append with two loops]
-runPartApp2Loop :: Vector Int -> IO (Vector Int)
-runPartApp2Loop !xs = do
+partitionAppend2Loop xs = do
   (as,(bs,())) <- vectorSize xs $ \snkAs ->
                   vectorSize xs $ \snkBs ->
     $$(fuse $ do
@@ -441,6 +448,13 @@ Vector   & 2-loop   & 0.15s &    88\% & 1.6e8 &  67\% \\
 \label{table:bench:part2}
 \end{table}
 
+The Vector implementations follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
+Note that the 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
+The Vector @partition@ cannot fuse with any consumers and always constructs manifest output vectors.
+The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
+The length of both partitions must equal the length of the original array.
+Once the end is reached, the false parts which were filled backwards can be reversed in-place.
+Unfortunately, the Vector program still splits this array in two and appends it back together: which should be the same as not splitting the array in the first place.
 
 In the table, the Vector version with two loops is the fastest, but the difference between it and Folderol with two loops is fairly small.
 The Folderol version with two sources uses the least memory - a third of the two loop Folderol, and a half of the Vector versions.
@@ -449,7 +463,6 @@ So by giving a compilation error when fusion fails, we are able to maintain a hi
 The author must explicitly choose when is the right time to reuse an array, when is the right time to introduce a new loop, and when is the right time to introduce intermediate buffers.
 This way, the result of fusion should not be magic or surprising.
 The author can be confident that if it compiles, it will have the desired streaming behaviour.
-
 
 % -----------------------------------------------------------------------------
 \section{Fusibility}
@@ -508,9 +521,14 @@ In the worst case the fallback approach is to try all possible orderings of proc
 
 % -----------------------------------------------------------------------------
 \section{Result Size}
+\TODO{Update with Folderol sizes}
 
-As with any fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together. The left of Fig.~\ref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner. To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @merge@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes. The @merge@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @merge@ at the start. The right of Fig.~\ref{fig:bench:outputsize} shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a @map@ and a @filter@ processing the same input stream. In both cases the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are less than 100 states in the result process. 
-%%% AR: Note that the split version also has only one merge?
+As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
+\autoref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
+To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @merge@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
+The @merge@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @merge@ at the start.
+The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a @map@ and a @filter@ processing the same input stream.
+In both cases the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are fewer than 100 states in the result process. 
 
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
@@ -524,4 +542,20 @@ In the particular case of @merge@, the implementation has two occurrences of the
 
 
 
-\input{copy/03-body/02-process/figures/bench/process-size.tex}
+\input{copy/03-body/02-process/figures/process-size.tex}
+
+\section{Conclusion}
+In the benhmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
+For array computations there is a bit of boilerplate required to convert between vectors and streams, and vice versa.
+There is also some extra visual noise for the Template Haskell.
+But this is fairly minor, and the required changes are more or less mechanical and type-driven.
+
+The real benefit is not having to read through Core programs, not having to guess whether fusion has worked or failed.
+If fusion succeeds, we know it has succeeded.
+If fusion fails, we know not just that it has failed, but \emph{where} it has failed.
+It is a lot easier to track down the failure.
+
+When fusion is not just an added bonus, when program correctness depends on fusion, when a stray unbounded buffer means a crashing program and an angry one-am phone call, we need strong guarantees about fusion.
+
+We have shown that this is possible, and that we can scale up to real, practical problems, as well as performing well on benchmarks.
+

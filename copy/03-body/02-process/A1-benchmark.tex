@@ -158,7 +158,7 @@ filterMaxStreaming l ps = do
   return (pt, vec)
 \end{lstlisting}
 
-\begin{lstlisting}[float,label=l:bench:compressorFolderol,caption=Folderol implementation of compressor]
+\begin{lstlisting}[float,label=l:a:bench:compressorFolderol,caption=Folderol implementation of compressor]
 compressorFolderol :: Vector Double -> IO (Vector Double)
 compressorFolderol vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
@@ -179,7 +179,7 @@ compressorFolderol vecIns = do
 \end{lstlisting}
 
 
-\begin{lstlisting}[float,label=l:bench:compressorVector,caption=Vector implementation of compressor]
+\begin{lstlisting}[float,label=l:a:bench:compressorVector,caption=Vector implementation of compressor]
 compressorVector :: Vector Double -> IO (Vector Double)
 compressorVector ins = do
   let squares = Unbox.map        (\x -> x * x) ins
@@ -189,7 +189,7 @@ compressorVector ins = do
   return out
 \end{lstlisting}
 
-\begin{lstlisting}[float,label=l:bench:partitionAppendVector,caption=Vector implementations of partitionAppend]
+\begin{lstlisting}[float,label=l:a:bench:partitionAppendVector,caption=Vector implementations of partitionAppend]
 partitionAppendV2Loop :: Unbox.Vector Int -> IO (Unbox.Vector Int)
 partitionAppendV2Loop !xs = do
   let (as,bs) = Unbox.partition (\i -> i `mod` 2 == 0) xs

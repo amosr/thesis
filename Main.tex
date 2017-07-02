@@ -1,4 +1,4 @@
-\RequirePackage{fix-cm} % fix some latex issues see: http://texdoc.net/texmf-dist/doc/latex/base/fixltx2e.pdf
+% \RequirePackage{fix-cm} % fix some latex issues see: http://texdoc.net/texmf-dist/doc/latex/base/fixltx2e.pdf
 \documentclass[ twoside,headinclude,%1headlines,% letterpaper a4paper
                 footinclude=true
                 ,paper=a4
@@ -6,16 +6,16 @@
                 ,12pt
                 ]{report}
 
+\usepackage{lmodern}
 \input{structure/00-00-style.tex}
 \input{structure/00-01-imports.tex}
 \input{structure/00-02-listing.tex}
 
 \begin{document}
 
-\input{copy/03-body/02-process/05-benchmarks.tex}
 % \input{structure/01-title.tex}
 % \input{structure/02-front.tex}
-% \input{structure/03-body.tex}
+\input{structure/03-body.tex}
 \input{structure/04-back.tex}
 
 \end{document}

@@ -4,6 +4,73 @@
 Template Haskell code generation extraction.
 We have implemented this system using Template Haskell in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
 
+\section{Template Haskell}
+Template Haskell is a metaprogramming extension for Haskell.
+Template Haskell is a bit like staged computation. A very limited form of staged computation, but the idea is there.
+
+\begin{lstlisting}
+power :: Int -> Q (TExp Int -> Int)
+power 0 = [|\i -> 1|]$$END
+power i = do
+ j    <- power (i - 1)
+ [|\i -> $$(j$$) i * i|]$$END
+\end{lstlisting}
+
+Meta-Repa similar idea but for flat data parallel computations, not really for streaming computations \cite{ankner2013edsl}.
+
+The original Template Haskell paper \cite{sheard2002template}.
+However, this doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
+Generated expressions don't have types.
+Typechecking does still occur on the expressions, though, but only after they have been spliced together.
+This is less of a problem for generation alone --- if you trust the generation code.
+But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
+Otherwise the type error will be very well hidden, somewhere inside the generated code.
+For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
+So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated (under an empty environment?) returns a value of type \lstinline|t|.
+
+\section{Example}
+
+Look at a simple example first: we just want to read some file and do some things.
+It doesn't matter what.
+\begin{lstlisting}
+mapFilter :: FilePath -> FilePath -> IO ()
+mapFilter fileIn fileOut = do
+  $$(fuse $ do
+     ins    <- source [|sourceOfFile fileIn|]
+     above  <- filter [|\i -> i > 0        |] ins
+     double <- map    [|\i -> i * 2        |] above
+     sink double      [|sinkToFile fileOut |]$$)
+\end{lstlisting}
+
+We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
+
+\section{Types}
+The first thing to do is implement sources and sinks: pull and push streams.
+Folderol does use pull and push streams, but only as the end-points for computations.
+The input streams at the very start of computations will be sources, and the output streams at the very end are sinks.
+These are how we interface with the outside world.
+Streams inside the computation use internal communication, and can be fused away in the end. They can be implemented as values passed via function calls.
+
+\begin{lstlisting}
+data Source m a
+ = forall s.
+   Source
+ { init :: m s
+ , pull :: s -> m (Maybe a, s)
+ , done :: s -> m ()
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data Sink m a
+ = forall s.
+   Sink
+ { init :: m s
+ , push :: s -> a -> m s
+ , done :: s -> m ()
+ }
+\end{lstlisting}
+
 \section{Constructor Specialisation}
 Talk about SpecConstr - what it does, example of how it's used.
 Example of infinite looping with recursive constructors.

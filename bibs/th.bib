@@ -21,17 +21,10 @@
   organization={ACM}
 }
 
-@article{hammond2003automatic,
-  title={Automatic skeletons in template haskell},
-  author={Hammond, Kevin and Berthold, Jost and Loogen, Rita},
-  journal={Parallel processing letters},
-  volume={13},
-  number={03},
-  pages={413--424},
-  year={2003},
-  publisher={World Scientific}
-}
-
+% Quasiquoting and antiquoting for arbitrary DSLs.
+% One of the big things is it works for patterns as well as expressions.
+% Generic SYB to allow reuse of the same parser.
+% Not particularly relevant here.
 @inproceedings{mainland2007s,
   title={Why it's nice to be quoted: quasiquoting for haskell},
   author={Mainland, Geoffrey},
@@ -41,6 +34,13 @@
   organization={ACM}
 }
 
+% Type-based rather than syntactic staging.
+% Makes the point that keeping the representation abstract is important for safety, as equivalent
+% programs should not be distinguishable. See [taha1999sound].
+% But then the optimisations are able to perform structural rewrites, so they aren't using an abstract representation?
+% "Safety is maintained by exposing the internal code structure only to rewriting modules but keeping it hidden from the client generator code"
+% I don't understand how that maintains safety, it seems to just move the inherent unsafety from one place to another. I suppose you have to explicitly opt-in to the unsafe parts.
+% I guess you can still reason about higher-order code as you would about higher-order functions, because the only place you can take apart and inspect code is in the compilation/run stage.
 @inproceedings{rompf2010lightweight,
   title={Lightweight modular staging: a pragmatic approach to runtime code generation and compiled DSLs},
   author={Rompf, Tiark and Odersky, Martin},
@@ -50,4 +50,20 @@
   pages={127--136},
   year={2010},
   organization={ACM}
+}
+
+% "Part of the strength of the equational properties of MetaML comes from the absence of a mechanism for intensional analysis"
+% "adding intensional analysis ... weakens the notion of equivalence to the extent that it makes most interesting program optimisations unsound"
+% I suppose it is saying that allowing the programmer to observe the difference between "expression e" and "let x = expression in x", these sort of optimisations cannot be applied because they change the meaning. But wouldn't you still be able to apply them, only before 'run'?
+% But it is hard to limit things like beta-reduction to level-0 because you want substitution to act uniformly over different stages, and anyway it is hard to tell the level of an expression by the expression alone - it depends on the context.
+% "We are forced to allow beta-reduction to leak into higher levels, and we see this leakage as beneficial as it allows implementations to perform a wider range of semantics-preserving optimisations"
+@article{taha1999sound,
+  title={A sound reduction semantics for untyped CBN multi-stage computation. Or, the theory of MetaML is non-trival},
+  author={Taha, Walid},
+  journal={ACM SIGPLAN Notices},
+  volume={34},
+  number={11},
+  pages={34--43},
+  year={1999},
+  publisher={ACM}
 }

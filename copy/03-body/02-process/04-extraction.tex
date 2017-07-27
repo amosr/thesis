@@ -6,27 +6,287 @@ We have implemented this system using Template Haskell in a library called @fold
 
 \section{Template Haskell}
 Template Haskell is a metaprogramming extension for Haskell.
-Template Haskell is a bit like staged computation. A very limited form of staged computation, but the idea is there.
+Template Haskell is a limited form of staged computation, where the only `stages' are compile-time and run-time.
+It has two modes: splicing and quasiquoting.
+Splicing \verb/$$(f)/ expects the type of @f@ to be @Q (TExp t)@, and evaluates @f@ to an expression at compile time.
+The splice is replaced with the result expression.
+Quasiquoting \lstinline/[||x||]/ constructs the expression representation of @x@.
 
-\begin{lstlisting}
-power :: Int -> Q (TExp Int -> Int)
-power 0 = [|\i -> 1|]$$END
-power i = do
- j    <- power (i - 1)
- [|\i -> $$(j$$) i * i|]$$END
-\end{lstlisting}
-
-Meta-Repa similar idea but for flat data parallel computations, not really for streaming computations \cite{ankner2013edsl}.
-
-The original Template Haskell paper \cite{sheard2002template}.
-However, this doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
-Generated expressions don't have types.
+The original Template Haskell paper \cite{sheard2002template} doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
+In the original paper, generated expressions don't have types.
 Typechecking does still occur on the expressions, though, but only after they have been spliced together.
 This is less of a problem for generation alone --- if you trust the generation code.
 But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
 Otherwise the type error will be very well hidden, somewhere inside the generated code.
 For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
 So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated (under an empty environment?) returns a value of type \lstinline|t|.
+
+There is also a @Q@ monad which is used when constructing and splicing expressions.
+The @Q@ monad mainly gives a fresh name supply, so that when names are bound inside expressions they can be given unique names. This way they will not interfere with other bindings.
+
+The obligatory example for staged computation is a power function, where the exponent is known at compile time, but the mantissa is not known until runtime.
+In general staged computation, the exponent is known one stage before the mantissa, but because Template Haskell only supports two stages, the exponent stage is necessarily compile-time.
+
+We define the @power@ function with the type \lstinline/Int -> Q (TExp (Int -> Int))/. This means it takes an integer at compile-time, and produces a computation in the quote monad (@Q@), returning an expression which, at runtime, will take an integer and return an integer.
+
+\begin{lstlisting}
+power :: Int -> Q (TExp (Int -> Int))
+power 0 = [||\i -> 1                       ||]
+power n = [||\i -> @$$(power (n - 1))@ i * i ||]
+\end{lstlisting}
+
+The power function pattern matches on the exponent.
+When it is zero, we enter quasiquoting mode and construct a function that always returns 1.
+When the exponent is non-zero, we again enter quasiquoting mode, and construct a function.
+Inside the quasiquote, we need to handle the recursive case, so we enter back into splicing mode with \lstinline/@$$(power (n - 1))@/ to compute the one-smaller power, which returns the function expression, to which we apply @i@. Finally, we multiply the smaller power of @i@ with @i@ itself.
+This function does not handle negative exponents: it is just to show the use of staging.
+
+We can then, in another module, define a specialised power function that computes the square.
+We define this as a top-level binding, by performing a splice, and inside that splice we call @power@ with the statically known at compile-time argument @2@.
+So the type inside the splice is \lstinline/Q (TExp (Int -> Int))/: a quoted computation returning an expression of type \lstinline/Int -> Int/.
+After this is spliced in, it unwraps the quote computation and expression and we end up reifying it to a real function of \lstinline/Int -> Int/.
+
+\begin{lstlisting}
+power2 :: Int -> Int
+power2 = @$$(power 2)@
+\end{lstlisting}
+
+This is a ``top-level splice'', because it is not inside a quasiquotation.
+Top-level splices can only refer to bindings imported from other modules, not ones defined locally.
+This is why it needs to be in a different module.
+This is just a silly restriction to be aware of. Is it even worth mentioning?
+
+If we turn on the compiler option @-ddump-splices@ we can view the resulting code.
+The names of variables have changed slightly for for readability.
+
+\begin{lstlisting}
+Splicing expression
+    power 2 => \i0 -> (\i1 -> (\i2 -> 1) i1 * i1) i0 * i0
+\end{lstlisting}
+
+It's a pretty roundabout way to multiply a number by itself. There are a lot of opportunities for simplifying that code. And while GHC should be able to remove these, it would be better to not introduce them in the first place.
+So let us fix it.
+The function @powerS'@ (@S@ for \emph{simpler}) takes the argument as a `real' argument, rather than returning an expression of function type: its type is \lstinline/Int -> Q (TExp Int) -> Q (TExp Int)/.
+We've moved the function from later (expression) to now (value).
+But the argument is still an expression.
+
+\begin{lstlisting}
+powerS' :: Int -> Q (TExp Int) -> Q (TExp Int)
+powerS' 0 i = [||1                          ||]
+powerS' n i = [||@$$(powerS' (n-1) i)@ * @$$(i)@||]
+\end{lstlisting}
+
+The definition of @powerS@ introduces the lambda binding as before, but passes the expression of this binding to the worker function.
+We enter quoting mode, then introduce a lambda. Then we go back into splicing mode, in order to call the helper function @powerS'@.
+Then, in order to pass the mantissa @i@ to the helper function, we need to go back into quoting mode.
+Note that the quoted expresssion \lstinline/[||i||]/ is \emph{open}: it refers to bindings outside the environment.
+This means if you somehow kept a hold of that expression and used it in a different context, outside the lambda binding, it would be incorrect.
+So you can construct bad, ill-typed expressions with Template Haskell. This is certainly not ideal, but is just something to be aware of.
+
+Is it worth noting that MetaOCaml has similar problems, including BER MetaOCaml?
+You don't need to rant about let-insertion in MetaOCaml: how it is allegedly safe, but it is not \emph{type} safe.
+
+\begin{lstlisting}
+powerS :: Int -> Q (TExp (Int -> Int))
+powerS n = [||\i -> @$$(powerS' n [||i||])@||]
+\end{lstlisting}
+
+The output is a lot simpler now.
+Whereas before there was a lambda introduced and applied at each recursive step, now there is only a single lambda.
+
+\begin{lstlisting}
+Splicing expression
+    powerS 2 => \i -> ((1 * i) * i)
+\end{lstlisting}
+
+There is still more we could do to improve the function, for example removing the multiplication by one, but this is sufficient to show the core splicing and quoting ideas behind Template Haskell.
+For more information on staging in general, \citet{rompf2010lightweight} takes this example further.
+
+Meta-Repa similar idea but for flat data parallel computations, not really for streaming computations \cite{ankner2013edsl}.
+But it also uses Template Haskell, so that's worth mentioning.
+
+\section{Constructor Specialisation}
+Constructor specialisation is another idea originating in staged compilation / partial evaluation \cite{mogensen1993constructor}.
+Staged variables can be classified as static or dynamic, but this can be too coarse: sometimes you have partially-static constructors with some dynamic values.
+For example, if you have a value datatype with two constructors, \lstinline/VInt :: Int -> Value/ and \lstinline/VString :: String -> Value/.
+If you evaluate a type-correct program to add two numbers, you know statically that the values should be ints: but you don't know what the values should be.
+When it is statically known that some constructors are only instantiated with partially static values, rather than treating the values dynamically, these values can be lifted out to separate constructors.
+So you add new constructors for each combination of statically-known information.
+Actually, this isn't so related. It's close but not worth going into the details.
+
+In Haskell, there isn't so much connection with staged compilation, but the distinction between static and runtime is still useful.
+Talk about SpecConstr --- what it does, example of how it's used.
+Is it worth mentioning worker/wrapper transform?
+
+Constructor specialisation, or call-pattern specialisation \cite{peyton2007call}, is an optimisation for recursive functions.
+When recursive calls are made with particular constructors, and the next recursive step will perform case analysis on the newly allocated constructor, we can remove the middle step.
+Instead of allocating a new constructor, scrutinising it, and then throwing it away, we can define specialised versions of the function, for each particular constructor.
+There are two good bits. First, we don't need to allocate anything, and second, we can jump straight to the right part of the function.
+An example.
+The naive way to write @last@, which takes a list of @a@ and returns @Maybe a@: if the list is empty, it returns @Nothing@; otherwise it returns @Just@ the last element.
+
+\begin{lstlisting}
+last :: [a] -> Maybe a
+last []     = Nothing
+last (x:[]) = Just x
+last (_:xs) = last xs
+\end{lstlisting}
+
+This isn't so good.
+It isn't a particularly good example, either.
+
+\begin{lstlisting}
+last :: [a] -> Maybe a
+last []     = Nothing
+last (x:xs) = Just (last' x xs)
+ where
+  last' x []     = x
+  last' _ (x:xs) = last x s
+\end{lstlisting}
+
+Well let's try an example from Stream Fusion \cite{coutts2007stream}.
+This is what zip looks like.
+
+\begin{lstlisting}
+zipS :: Stream a -> Stream b -> Stream (a,b)
+zipS (Stream stepA initA) (Stream stepB initB)
+ = Stream step' (Left (initA, initB))
+ where
+  step' (Left (stateA, stateB))
+   = case stepA stateA of
+      Yield a stateA' -> Skip (Right (stateA', stateB, a))
+      Skip    stateA' -> Skip (Left  (stateA', stateB))
+      Done            -> Done
+  step' (Right (stateA, stateB, a))
+   = case stepB stateB of
+      Yield b stateB' -> Yield (a,b) (Left  (stateA, stateB'))
+      Skip    stateB' -> Skip        (Right (stateA, stateB', a))
+      Done            -> Done
+\end{lstlisting}
+
+Zip is too complicated. Try append.
+
+I don't really want to explain stream fusion here, so this isn't a great example either.
+But the idea here is that we define a non-recursive stepper function. The non-recursive part is important, because recursive functions are much harder to inline.
+So we deconstruct the @Stream@ for each input, and pull out the step function (@stepL@, @stepR@) and the initial state (@initL@, @initR@).
+The result stream has the step function @step'@, and the initial state (@Left initL@): starting with the `left' side of the append, with the initial state for the left stream.
+The step function looks at the current state.
+If it is left, we evaluate and scrutinise the left input stream's step function.
+If the left stream produces a value (@Yield@), the appended stream produces that value, and the new state is still running the @Left@ stream, but with the updated state @stateL'@.
+If the left stream produces no value (@Skip@), but just updates its state, the append also produces no value and updates its state accordingly.
+Finally, if the left stream is finished (@Done@), we update the state to the right stream with the initial state: (@Right initR@).
+We do the same for the right side, except when it finishes, the entire stream is finished.
+
+\begin{lstlisting}
+appendS :: Stream a -> Stream a -> Stream a
+appendS (Stream stepL initL) (Stream stepR initR)
+ = Stream step' (Left initL)
+ where
+  step' (Left  stateL)
+   = case stepL stateL of
+      Yield a stateL' -> Yield a (Left  stateL')
+      Skip    stateL' -> Skip    (Left  stateL')
+      Done            -> Skip    (Right initR)
+  step' (Right stateR)
+   = case stepR stateR of
+      Yield a stateR' -> Yield a (Right stateR')
+      Skip    stateR' -> Skip    (Right stateR')
+      Done            -> Done
+\end{lstlisting}
+
+For illustration, we will look at the list case. The function above shows the stream version, but we are interested in the list version.
+We can obtain this list version by converting the input lists to streams, executing @appendS@, then converting its result back to a list.
+When we put a conversion to list on either side of this function, we end up with this function.
+We have taken the step function above and turned it into a recursive function that takes the current state, and returns a list.
+Each step with a new state is replaced by a recursive call.
+The input streams are replaced by lists.
+Where the output produced a @Yield@ before, we now produce a list cons, with the value part the yielded element, and the rest of the list is the recursive call with the updated state.
+So @Yield a (Left stateL')@ becomes @a : go (Left ls')@.
+Similarly, @Skip@ becomes a recursive call and @Done@ becomes the empty list.
+
+
+\begin{lstlisting}
+append :: [a] -> [a] -> [a]
+append ls0 rs0
+ = go (Left ls0)
+ where
+  go (Left (a:ls'))
+   = a : go (Left ls')
+  go (Left  [])
+   = go (Right rs0)
+  go (Right (a:rs'))
+   = a : go (Right rs')
+  go (Right [])
+   = []
+\end{lstlisting}
+
+The problem here is that, at each iteration of the recursive loop, we are constructing a new @Left@ or @Right@ at the end of one iteration, and immediately scrutinising it at the start of the next iteration.
+So all the machinery of stream fusion hasn't given us any benefit yet --- we only have a single combinator, and we're allocating more intermediate rubbish than the original list implementation.
+Constructor specialisation takes the recursive calls with constructors, and specialises them to a function for that constructor.
+So where we have (@go (Left ls')@), we want to create a specialised function for the @Left@ constructor, and call it with (@go'Left ls'@).
+The body of @go'Left@ is the same as @go@, except that we know the argument is a @Left@, so we can simplify the right-hand side.
+We perform the same specialisation for the @Right@ case.
+
+\begin{lstlisting}
+append :: [a] -> [a] -> [a]
+append ls0 rs0
+ = go'Left ls0
+ where
+  go'Left (a:ls')
+   = a : go'Left ls'
+  go'Left []
+   = go'Right rs0
+
+  go'Right (a:rs')
+   = a : go'Right rs'
+  go'Right []
+   = []
+\end{lstlisting}
+
+Now our new version doesn't construct any @Left@ or @Right@ values.
+We have removed the intermediate allocations, which gives a significant performance increase.
+
+\subsection{ForceSpecConstr}
+For these stream programs, we want to force constructor specialisation to remove as much as possible.
+Constructor specialisation is generally conservative because it duplicates the code.
+If we duplicated a function a thousand times, we would need a thousand copies of the original function.
+Duplicating too much code leads to very large intermediate programs, and long compilation times.
+The Glasgow Haskell Compiler has heuristics designed to only duplicate code when it knows it will be a benefit.
+But with the stream fusion, we need to be sure that we have removed all the extra intermediate state allocations, because otherwise stream fusion could be a \emph{pessimisation} instead of an optimisation.
+
+To tell GHC to always do as much constructor specialisation as possible, we construct an annotated type @SPEC@. Whenever a function has an argument of type @SPEC@, it will be fully specialised.
+We define a datatype with two constructors, @SPEC@ and @SPEC2@, even though we will only use one of the constructors.
+The reason for \emph{two} constructors is interesting.
+A datatype with one constructor and no arguments is called a ``unit type'' and is treated specially by GHC, because it conveys no information.
+If a function has an argument of unit, you already know its value before looking at it.
+Equationally, GHC is allowed to remove these ``information-free'' arguments before constructor specialisation runs, but if they are removed, constructor specialisation no longer knows it has to force them.
+We trick GHC into keeping the @SPEC@s around until constructor specialisation, by adding another constructor.
+
+\begin{lstlisting}
+data SPEC = SPEC | SPEC2
+{-# ANN type SPEC ForceSpecConstr #-}
+\end{lstlisting}
+
+Then, when we have a recursive function we want to force, at every recursive call we pass @SPEC@, and in the function definition, we add a \emph{bang pattern} to the @SPEC@ argument to force it.
+\begin{lstlisting}
+append :: [a] -> [a] -> [a]
+append ls0 rs0
+ = go SPEC (Left ls0)
+ where
+  go !_ (Left (a:ls'))
+   = a : go SPEC (Left ls')
+  go !_ (Left  [])
+   = go SPEC (Right rs0)
+  go !_ (Right (a:rs'))
+   = a : go SPEC (Right rs')
+  go !_ (Right [])
+   = []
+\end{lstlisting}
+
+Not all is well, however.
+We can't always force constructor specialisation, because recursive types.
+Example of infinite looping with recursive constructors.
+
 
 \section{Example}
 
@@ -35,11 +295,11 @@ It doesn't matter what.
 \begin{lstlisting}
 mapFilter :: FilePath -> FilePath -> IO ()
 mapFilter fileIn fileOut = do
-  $$(fuse $ do
-     ins    <- source [|sourceOfFile fileIn|]
-     above  <- filter [|\i -> i > 0        |] ins
-     double <- map    [|\i -> i * 2        |] above
-     sink double      [|sinkToFile fileOut |]$$)
+  @$$(fuse $ do
+     ins    <- source @[||sourceOfFile fileIn||]@
+     above  <- filter @[||\i -> i > 0        ||]@ ins
+     double <- map    @[||\i -> i * 2        ||]@ above
+     sink double      @[||sinkToFile fileOut ||]@)@
 \end{lstlisting}
 
 We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
@@ -70,10 +330,6 @@ data Sink m a
  , done :: s -> m ()
  }
 \end{lstlisting}
-
-\section{Constructor Specialisation}
-Talk about SpecConstr - what it does, example of how it's used.
-Example of infinite looping with recursive constructors.
 
 \section{Size hints}
 \label{s:implementation:sizehints}

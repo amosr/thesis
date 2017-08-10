@@ -39,9 +39,13 @@
 %  % Explicit colour revert: because I am silly
 %            {$$END}{{ \color{black} }}1
   % Quote start: presumably outside is a splice, so set colour back to normal
+            {[|}{{$[|$}}2
+            {|]}{{$|]$}}2
             {[||}{{$[\|$}}2
   % Quote end: presumably exiting back to splice, so change to splice colour
             {||]}{{$\|]$}}2
+            {(}{{$($}}1
+            {)}{{$)$}}1
   }[keywords,comments,strings]%
 \lstset{language=Haskell}
 

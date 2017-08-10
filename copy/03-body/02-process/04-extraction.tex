@@ -1,8 +1,59 @@
 \chapter{Implementation and code generation}
 \label{chapter:process:implementation}
 
-Template Haskell code generation extraction.
-We have implemented this system using Template Haskell in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
+
+We have implemented this fusion system in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
+Rather than modifying the compiler to support our particular fusion system, we use Template Haskell, which allows us to perform code-generation at compile-time: a form of macro metaprogramming.
+
+This chapter explains how to generate code for processes, while taking advantage of the existing optimisations in the Glasgow Haskell Compiler (GHC).
+Generating code for a single process is fairly straightforward in itself; the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
+Haskell does support imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
+If we wish to get good performance, we must generate code closer to what the compiler expects.
+
+\section{All this boxing and unboxing}
+In Haskell, most values are boxed by default \citep{jones1991unboxed}.
+Boxed values are stored as pointers to heap objects, which can in turn reference other boxed or unboxed values.
+Boxed values are useful for implementing parametric polymorphism because they give a uniform representation to all the different types.
+A list which is polymorphic in its element type can use a pointer to refer to its values regardless of the actual element type.
+
+The problem with boxed values is that they require an extra allocation per object, as well as a pointer indirection for each access.
+This can cause performance issues in tight loops, particularly because most objects are immutable.
+
+Consider the following function, which loops over an array to compute its sum.
+It starts by calling the local function @loop@ with the initial loop index, and the initial sum.
+The definition of @loop@ checks if it has reached the end of the array, and if so returns the sum; otherwise it increments the running sum and proceeds to the next index.
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop 0 0
+ where
+  loop index running_sum
+   | index == length vector
+   = running_sum
+   | otherwise
+   = let value = vector ! index
+     in loop (index + 1) (running_sum + value)
+\end{lstlisting}
+
+It is not clear from the program source alone, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
+If this were compiled naively it would be rather disastrous for performance, as in order to process each element of the array, it must allocate two new boxed values.
+Hilariously, all of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
+While the garbage collector is tuned for small, short-lived objects, it is better to not introduce the garbage in the first place.
+
+Removing boxing is not a novel thing, and there are many ways to do this.
+The point to make is not that this is an interesting thing, just that we must know how it works in order to generate good code that fits it.
+Boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
+
+\begin{lstlisting}
+data Int = I# Int#
+\end{lstlisting}
+
+GHC is able to remove boxing as function arguments, but here's the clincher.
+Mutable references (@IORef a@) are stored boxed, and there isn't much we can do about that.
+There are such things as unboxed references, which use an unboxed vector under the hood, but these require a particular ``@Unbox@ instance'' for the value type, and boxed things which \emph{need} to be boxed (recursive types such as linked lists) cannot be stored.
+We want something in between: we want things to be unboxed when they can, but we don't want to outlaw boxed values.
+
+
+
 
 \section{Template Haskell}
 Template Haskell is a metaprogramming extension for Haskell.
@@ -104,6 +155,28 @@ For more information on staging in general, \citet{rompf2010lightweight} takes t
 
 Meta-Repa similar idea but for flat data parallel computations, not really for streaming computations \cite{ankner2013edsl}.
 But it also uses Template Haskell, so that's worth mentioning.
+
+\subsection{Untyped expressions}
+We can also go between the typed and untyped representation.
+The type @Exp@ is an untyped Template Haskell expression.
+It still has a type, but this is not known or checked until it is spliced in.
+Like typed expressions, one can quasiquote untyped expressions with \lstinline/[|e|]/ and splice with \lstinline/@$(e)@/.
+There is only one pipe or dollar-sign in the untyped case, rather than two.
+
+One can convert from a typed expression to an untyped expression.
+This does not affect the expression itself, and once it is spliced in it will have the same type.
+It just throws away some type-level information.
+
+\begin{lstlisting}
+unTypeQ :: Q (TExp a) -> Q Exp
+\end{lstlisting}
+
+Conversely, if one is very careful, one can convert an untyped expression to a typed one.
+This is an unsafe operation, because one can choose any type at all for the expression.
+The expression is not checked against the chosen type until it is spliced in.
+\begin{lstlisting}
+unsafeTExpCoerce :: Q Exp -> Q (TExp a)
+\end{lstlisting}
 
 \section{Constructor Specialisation}
 Constructor specialisation is another idea originating in staged compilation / partial evaluation \cite{mogensen1993constructor}.
@@ -303,6 +376,23 @@ mapFilter fileIn fileOut = do
 \end{lstlisting}
 
 We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
+It has the following type.
+\begin{lstlisting}
+fuse :: Monad m => Network m () -> Q (TExp (m ()))
+\end{lstlisting}
+That is, it takes a process network with underlying monad @m@ and returns the expression for the underlying computation in the monad @m@.
+The process network @Network m ()@ is a monad as well.
+
+The process network first constructs a source that reads from a file.
+\begin{lstlisting}
+source :: Q (TExp (Source m a))              -> Network m (Channel a)
+filter :: Q (TExp (a -> Bool))  -> Channel a -> Network m (Channel a)
+map    :: Q (TExp (a -> b))     -> Channel a -> Network m (Channel b)
+sink   :: Q (TExp (Sink m a))   -> Channel a -> Network m (Channel a)
+\end{lstlisting}
+The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
+
+Now show the generated code.
 
 \section{Types}
 The first thing to do is implement sources and sinks: pull and push streams.
@@ -356,5 +446,57 @@ When the two processes are able to accept the next variable from the stream at t
 To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
 
 
+\section{Untyped interface}
+Talk about how convert from @TExp a@ to @Exp@, and why.
+Our processes can have arbitrarily many input channels and output channels, which makes it hard to construct a type-safe process, since each channel can be a different type.
+We would need a list of types --- a type-level list --- for the type of each input channel, and another list for the output channels.
+Each process also has a store (heap) for local variables, and these would need a different type for each variable as well.
 
+These problems are not insurmountable: one can use type-level lists and fake dependent types in Haskell \CITE, but this is not really the point of this thesis.
+We take a simpler tack.
+Instead, we provide an untyped core for the processes and networks, then build on top of this to provide a typed interface for constructing networks.
 
+Type safety.
+This is a similar idea as our untyped core providing a ``trusted base''.
+One must be very careful that it is indeed safe, but this is not exposed to the user, and is small enough to reason about by hand.
+Also, the code generation will still end up being typechecked by the Haskell compiler.
+We are not losing any actual typesafety, then, because the code will still eventually be typechecked.
+What we are losing is good error locations. If there are bugs in the untyped core, the errors will show up somewhere in the generated code.
+This may make it hard to track down the original error location.
+But if the core is correct, this should not happen.
+So this is the idea at least.
+
+\section{Instructions}
+
+\begin{lstlisting}
+data Info
+ = Info
+ { infoBindings     :: Set Var
+ , infoInstruction  :: Instruction
+ }
+
+data Instruction
+ = I'Pull Channel Var Next Next
+ | I'Push Channel Haskell.Exp Next
+ | I'Jump Next
+ | I'Bool Haskell.Exp Next Next
+ | I'Drop Channel Next
+ | I'Done
+
+data Next
+ = Next
+ { nextLabel    :: Label
+ , nextUpdates  :: Map Var Haskell.Exp
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data Process
+ = Process
+ { pName          :: [Char]
+ , pInputs        :: Set Channel
+ , pOutputs       :: Set Channel
+ , pInitial       :: Next
+ , pInstructions  :: Map Label Info
+ }
+\end{lstlisting}

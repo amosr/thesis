@@ -22,6 +22,7 @@ This can cause performance issues in tight loops, particularly because most obje
 Consider the following function, which loops over an array to compute its sum.
 It starts by calling the local function @loop@ with the initial loop index, and the initial sum.
 The definition of @loop@ checks if it has reached the end of the array, and if so returns the sum; otherwise it increments the running sum and proceeds to the next index.
+
 \begin{lstlisting}
 sum :: Vector Int -> Int
 sum vector = loop 0 0
@@ -47,11 +48,86 @@ Boxed machine-word integers are represented by the following type, which defines
 data Int = I# Int#
 \end{lstlisting}
 
-GHC is able to remove boxing as function arguments, but here's the clincher.
-Mutable references (@IORef a@) are stored boxed, and there isn't much we can do about that.
-There are such things as unboxed references, which use an unboxed vector under the hood, but these require a particular ``@Unbox@ instance'' for the value type, and boxed things which \emph{need} to be boxed (recursive types such as linked lists) cannot be stored.
-We want something in between: we want things to be unboxed when they can, but we don't want to outlaw boxed values.
+Now we know how machine-word integers are represented, we can look at an explicitly boxed version of @sum@.
+This is still using boxed integers, but all arithmetic is explicitly unboxing and reboxing.
+Unboxed literals are written as @0#@ or @1#@.
+Unboxed arithmetic are written as @+#@ or @==#@, and @!#@ for unboxed indexing.
+With explicit boxing, it should now be visible that the recursive call to @loop@ constructs new boxed integers.
 
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop (I# 0#) (I# 0#)
+ where
+  loop (I# index) (I# running_sum)
+   | index ==# length vector
+   = I# running_sum
+   | otherwise
+   = let value = vector !# index
+     in loop (I# (index +# 1#)) (I# (running_sum +# value))
+\end{lstlisting}
+
+Constructor specialisation \cite{peyton2007call} is a loop optimisation that can remove these boxed arguments to recursive calls.
+It looks at the constructors to recursive calls, and counts which ones are scrutinised or unwrapped at the start of the function definition.
+In this case, @loop@ is first (and later, as well) called with the constructors @I#@ for both arguments, and both arguments are scrutinised.
+So it creates a specialised version of @loop@ where both arguments are @I#@ constructors.
+This specialised version is the same as the original, except the arguments are known to be @I#@ constructors, which means the pattern matching on the arguments can be simplified away.
+We will call this specialised version @loop'I#'I#@.
+Then everywhere that @loop@ is called with @I#@ constructors, it will be replaced with a call to @loop'I#'I#@.
+So any function call that looks like (@loop (I# x) (I# y)@) is replaced by a call to our new function (@loop'I#'I# x y@).
+
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop'I#'I# 0# 0#
+ where
+  loop'I#'I# index running_sum
+   | index ==# length vector
+   = I# running_sum
+   | otherwise
+   = let value = vector !# index
+     in loop'I#'I# (index +# 1#) (running_sum +# value)
+\end{lstlisting}
+
+Constructor specialisation has removed all the boxing except for the final return value, which is only constructed once anyway.
+Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, even types with multiple constructors such as (@Maybe a@) or (@Either a b@).
+In this example, the original @loop@ function was no longer called, so it was able to be removed entirely.
+It is not always the case that the original function can be removed, and constructor specialisation can duplicate the code many times: once for each combination of constructors.
+This can cause quite a lot of copies of the original function, which can cause large intermediate programs that do not fit in memory.
+To alleviate this, GHC implements some heuristics to limit the number of duplicates created, as well as only creating specialisations if the original function is not too large.
+This makes sense for general purpose code, but for tight loops where we expect most of our runtime to be, we really want to be sure that all specialisations are created.
+For tight loops, we want to \emph{force} constructor specialisation to occur as much as possible.
+This is achieved by annotating the function to be specialised with the special constructor @SPEC@.
+Going back to the original @sum@ function, if we want to force constructor specialisation on @loop@, we can do this by adding the @SPEC@ to the function binding as well as all calls to it:
+
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop SPEC 0 0
+ where
+  loop SPEC index running_sum
+   | index == length vector
+   = running_sum
+   | otherwise
+   = let value = vector ! index
+     in loop SPEC (index + 1) (running_sum + value)
+\end{lstlisting}
+
+% I don't think the recursive-specialisation bug is particularly interesting, or worth talking about.
+% Forcing constructor specialisation can be seen as an annotation telling the compiler to try harder, that this particular function is important.
+% The implementation must still be careful to limit the number of specialisations to a \emph{finite} amount.
+% Constructor specialisation works for arbitrary constructors, 
+
+We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
+We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
+Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
+This means that in order to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
+
+Unboxed mutable references do exist, but are unsuitable because they can \emph{only} store unboxed values.
+Recursive types such as linked lists cannot be stored in unboxed references.
+We desire an unboxed representation when possible, and boxed representation when necessary.
+
+It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
+Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing stream fusion in MetaOCaml.
+So this will not necessarily map to other languages, but it is true in the particular case of GHC.
+TODO: does data flow fusion mention needing to do this as the winding transform? \cite{lippmeier2013data}
 
 
 

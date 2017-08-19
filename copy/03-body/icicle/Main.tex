@@ -1,0 +1,13 @@
+\part{Icicle: Using types to ensure fusion}
+\label{part:icicle}
+
+\input{copy/03-body/icicle/style/utils.tex}
+
+We present Icicle, a pure streaming query language which statically guarantees that multiple queries over the same input stream are fused. We use a modal type system to ensure that fused queries can be computed incrementalally, and a fold-based intermediate language to compile down to efficient C code. We present production benchmarks demonstrating significant speedup over existing queries written in R, and on par with the Unix tools \texttt{grep} and \texttt{wc}.
+
+\input{copy/03-body/icicle/section/01-Introduction.tex}
+\input{copy/03-body/icicle/section/02-Source.tex}
+\input{copy/03-body/icicle/section/03-Core.tex}
+\input{copy/03-body/icicle/section/04-Benchmarks.tex}
+\input{copy/03-body/icicle/section/XX-Related.tex}
+

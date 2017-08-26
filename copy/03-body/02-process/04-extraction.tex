@@ -2,12 +2,12 @@
 \label{chapter:process:implementation}
 
 
-We have implemented this fusion system in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
+We have implemented this fusion system [the one described in chapter \ldots] in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
 Rather than modifying the compiler to support our particular fusion system, we use Template Haskell, which allows us to perform code-generation at compile-time: a form of macro metaprogramming.
 
 This chapter explains how to generate code for processes, while taking advantage of the existing optimisations in the Glasgow Haskell Compiler (GHC).
 Generating code for a single process is fairly straightforward in itself; the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
-Haskell does support imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
+Haskell supports imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
 If we wish to get good performance, we must generate code closer to what the compiler expects.
 
 \section{All this boxing and unboxing}
@@ -88,7 +88,6 @@ sum vector = loop'I#'I# 0# 0#
 \end{lstlisting}
 
 Constructor specialisation has removed all the boxing except for the final return value, which is only constructed once anyway.
-Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, even types with multiple constructors such as (@Maybe a@) or (@Either a b@).
 In this example, the original @loop@ function was no longer called, so it was able to be removed entirely.
 It is not always the case that the original function can be removed, and constructor specialisation can duplicate the code many times: once for each combination of constructors.
 This can cause quite a lot of copies of the original function, which can cause large intermediate programs that do not fit in memory.
@@ -110,11 +109,6 @@ sum vector = loop SPEC 0 0
      in loop SPEC (index + 1) (running_sum + value)
 \end{lstlisting}
 
-% I don't think the recursive-specialisation bug is particularly interesting, or worth talking about.
-% Forcing constructor specialisation can be seen as an annotation telling the compiler to try harder, that this particular function is important.
-% The implementation must still be careful to limit the number of specialisations to a \emph{finite} amount.
-% Constructor specialisation works for arbitrary constructors, 
-
 We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
 We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
 Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
@@ -127,8 +121,36 @@ We desire an unboxed representation when possible, and boxed representation when
 It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
 Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing stream fusion in MetaOCaml.
 So this will not necessarily map to other languages, but it is true in the particular case of GHC.
-TODO: does data flow fusion mention needing to do this as the winding transform? \cite{lippmeier2013data}
 
+In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
+The motivation here is that GHC does not track aliasing information of arrays stored in mutable references, but does track it for arrays as function arguments.
+
+\subsection{Extended constructor specialisation}
+
+Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, including types with multiple constructors such as (@Maybe a@) or (@Either a b@).
+It even works for recursive types such as lists, which could produce an an infinite number of specialisations.
+Constructor specialisation must be careful to limit the specialisations to a finite number of \emph{useful} ones.
+
+TODO: An example here with interesting types.
+
+With recursive types, there could be an infinite number of reachable call patterns.
+Suppose we wish to reverse a linked list.
+We can write this using a helper function, which takes the list that is reversed so far, as well as the list to reverse.
+
+\begin{lstlisting}
+reverse :: [Int] -> [Int]
+reverse xs0 = go [] xs0
+ where
+  go zs []     = zs
+  go zs (x:xs) = go (x:zs) xs
+\end{lstlisting}
+
+The helper function @go@ could be specialised an infinite number of times, but this would lead to non-terminating compilation.
+First, the call to @go@ is seeded with the call pattern (@go [] _@).
+Then, at every step in the evaluation, a list constructor is moved from the second argument to the first, resulting in the infinite chain of call patterns, (@go [_] _@), (@go [_, _] _@), and so on.
+Usually, these specialisations would not be produced because they do not reduce allocation.
+However, in the original implementation, when @SPEC@ is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
+We fixed this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
 
 
 \section{Template Haskell}

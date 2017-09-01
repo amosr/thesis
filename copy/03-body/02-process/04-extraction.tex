@@ -318,188 +318,6 @@ The expression is not checked against the chosen type until it is spliced in.
 unsafeTExpCoerce :: Q Exp -> Q (TExp a)
 \end{lstlisting}
 
-\section{Constructor Specialisation}
-Constructor specialisation is another idea originating in staged compilation / partial evaluation \cite{mogensen1993constructor}.
-Staged variables can be classified as static or dynamic, but this can be too coarse: sometimes you have partially-static constructors with some dynamic values.
-For example, if you have a value datatype with two constructors, \lstinline/VInt :: Int -> Value/ and \lstinline/VString :: String -> Value/.
-If you evaluate a type-correct program to add two numbers, you know statically that the values should be ints: but you don't know what the values should be.
-When it is statically known that some constructors are only instantiated with partially static values, rather than treating the values dynamically, these values can be lifted out to separate constructors.
-So you add new constructors for each combination of statically-known information.
-Actually, this isn't so related. It's close but not worth going into the details.
-
-In Haskell, there isn't so much connection with staged compilation, but the distinction between static and runtime is still useful.
-Talk about SpecConstr --- what it does, example of how it's used.
-Is it worth mentioning worker/wrapper transform?
-
-Constructor specialisation, or call-pattern specialisation \cite{peyton2007call}, is an optimisation for recursive functions.
-When recursive calls are made with particular constructors, and the next recursive step will perform case analysis on the newly allocated constructor, we can remove the middle step.
-Instead of allocating a new constructor, scrutinising it, and then throwing it away, we can define specialised versions of the function, for each particular constructor.
-There are two good bits. First, we don't need to allocate anything, and second, we can jump straight to the right part of the function.
-An example.
-The naive way to write @last@, which takes a list of @a@ and returns @Maybe a@: if the list is empty, it returns @Nothing@; otherwise it returns @Just@ the last element.
-
-\begin{lstlisting}
-last :: [a] -> Maybe a
-last []     = Nothing
-last (x:[]) = Just x
-last (_:xs) = last xs
-\end{lstlisting}
-
-This isn't so good.
-It isn't a particularly good example, either.
-
-\begin{lstlisting}
-last :: [a] -> Maybe a
-last []     = Nothing
-last (x:xs) = Just (last' x xs)
- where
-  last' x []     = x
-  last' _ (x:xs) = last x s
-\end{lstlisting}
-
-Well let's try an example from Stream Fusion \cite{coutts2007stream}.
-This is what zip looks like.
-
-\begin{lstlisting}
-zipS :: Stream a -> Stream b -> Stream (a,b)
-zipS (Stream stepA initA) (Stream stepB initB)
- = Stream step' (Left (initA, initB))
- where
-  step' (Left (stateA, stateB))
-   = case stepA stateA of
-      Yield a stateA' -> Skip (Right (stateA', stateB, a))
-      Skip    stateA' -> Skip (Left  (stateA', stateB))
-      Done            -> Done
-  step' (Right (stateA, stateB, a))
-   = case stepB stateB of
-      Yield b stateB' -> Yield (a,b) (Left  (stateA, stateB'))
-      Skip    stateB' -> Skip        (Right (stateA, stateB', a))
-      Done            -> Done
-\end{lstlisting}
-
-Zip is too complicated. Try append.
-
-I don't really want to explain stream fusion here, so this isn't a great example either.
-But the idea here is that we define a non-recursive stepper function. The non-recursive part is important, because recursive functions are much harder to inline.
-So we deconstruct the @Stream@ for each input, and pull out the step function (@stepL@, @stepR@) and the initial state (@initL@, @initR@).
-The result stream has the step function @step'@, and the initial state (@Left initL@): starting with the `left' side of the append, with the initial state for the left stream.
-The step function looks at the current state.
-If it is left, we evaluate and scrutinise the left input stream's step function.
-If the left stream produces a value (@Yield@), the appended stream produces that value, and the new state is still running the @Left@ stream, but with the updated state @stateL'@.
-If the left stream produces no value (@Skip@), but just updates its state, the append also produces no value and updates its state accordingly.
-Finally, if the left stream is finished (@Done@), we update the state to the right stream with the initial state: (@Right initR@).
-We do the same for the right side, except when it finishes, the entire stream is finished.
-
-\begin{lstlisting}
-appendS :: Stream a -> Stream a -> Stream a
-appendS (Stream stepL initL) (Stream stepR initR)
- = Stream step' (Left initL)
- where
-  step' (Left  stateL)
-   = case stepL stateL of
-      Yield a stateL' -> Yield a (Left  stateL')
-      Skip    stateL' -> Skip    (Left  stateL')
-      Done            -> Skip    (Right initR)
-  step' (Right stateR)
-   = case stepR stateR of
-      Yield a stateR' -> Yield a (Right stateR')
-      Skip    stateR' -> Skip    (Right stateR')
-      Done            -> Done
-\end{lstlisting}
-
-For illustration, we will look at the list case. The function above shows the stream version, but we are interested in the list version.
-We can obtain this list version by converting the input lists to streams, executing @appendS@, then converting its result back to a list.
-When we put a conversion to list on either side of this function, we end up with this function.
-We have taken the step function above and turned it into a recursive function that takes the current state, and returns a list.
-Each step with a new state is replaced by a recursive call.
-The input streams are replaced by lists.
-Where the output produced a @Yield@ before, we now produce a list cons, with the value part the yielded element, and the rest of the list is the recursive call with the updated state.
-So @Yield a (Left stateL')@ becomes @a : go (Left ls')@.
-Similarly, @Skip@ becomes a recursive call and @Done@ becomes the empty list.
-
-
-\begin{lstlisting}
-append :: [a] -> [a] -> [a]
-append ls0 rs0
- = go (Left ls0)
- where
-  go (Left (a:ls'))
-   = a : go (Left ls')
-  go (Left  [])
-   = go (Right rs0)
-  go (Right (a:rs'))
-   = a : go (Right rs')
-  go (Right [])
-   = []
-\end{lstlisting}
-
-The problem here is that, at each iteration of the recursive loop, we are constructing a new @Left@ or @Right@ at the end of one iteration, and immediately scrutinising it at the start of the next iteration.
-So all the machinery of stream fusion hasn't given us any benefit yet --- we only have a single combinator, and we're allocating more intermediate rubbish than the original list implementation.
-Constructor specialisation takes the recursive calls with constructors, and specialises them to a function for that constructor.
-So where we have (@go (Left ls')@), we want to create a specialised function for the @Left@ constructor, and call it with (@go'Left ls'@).
-The body of @go'Left@ is the same as @go@, except that we know the argument is a @Left@, so we can simplify the right-hand side.
-We perform the same specialisation for the @Right@ case.
-
-\begin{lstlisting}
-append :: [a] -> [a] -> [a]
-append ls0 rs0
- = go'Left ls0
- where
-  go'Left (a:ls')
-   = a : go'Left ls'
-  go'Left []
-   = go'Right rs0
-
-  go'Right (a:rs')
-   = a : go'Right rs'
-  go'Right []
-   = []
-\end{lstlisting}
-
-Now our new version doesn't construct any @Left@ or @Right@ values.
-We have removed the intermediate allocations, which gives a significant performance increase.
-
-\subsection{ForceSpecConstr}
-For these stream programs, we want to force constructor specialisation to remove as much as possible.
-Constructor specialisation is generally conservative because it duplicates the code.
-If we duplicated a function a thousand times, we would need a thousand copies of the original function.
-Duplicating too much code leads to very large intermediate programs, and long compilation times.
-The Glasgow Haskell Compiler has heuristics designed to only duplicate code when it knows it will be a benefit.
-But with the stream fusion, we need to be sure that we have removed all the extra intermediate state allocations, because otherwise stream fusion could be a \emph{pessimisation} instead of an optimisation.
-
-To tell GHC to always do as much constructor specialisation as possible, we construct an annotated type @SPEC@. Whenever a function has an argument of type @SPEC@, it will be fully specialised.
-We define a datatype with two constructors, @SPEC@ and @SPEC2@, even though we will only use one of the constructors.
-The reason for \emph{two} constructors is interesting.
-A datatype with one constructor and no arguments is called a ``unit type'' and is treated specially by GHC, because it conveys no information.
-If a function has an argument of unit, you already know its value before looking at it.
-Equationally, GHC is allowed to remove these ``information-free'' arguments before constructor specialisation runs, but if they are removed, constructor specialisation no longer knows it has to force them.
-We trick GHC into keeping the @SPEC@s around until constructor specialisation, by adding another constructor.
-
-\begin{lstlisting}
-data SPEC = SPEC | SPEC2
-{-# ANN type SPEC ForceSpecConstr #-}
-\end{lstlisting}
-
-Then, when we have a recursive function we want to force, at every recursive call we pass @SPEC@, and in the function definition, we add a \emph{bang pattern} to the @SPEC@ argument to force it.
-\begin{lstlisting}
-append :: [a] -> [a] -> [a]
-append ls0 rs0
- = go SPEC (Left ls0)
- where
-  go !_ (Left (a:ls'))
-   = a : go SPEC (Left ls')
-  go !_ (Left  [])
-   = go SPEC (Right rs0)
-  go !_ (Right (a:rs'))
-   = a : go SPEC (Right rs')
-  go !_ (Right [])
-   = []
-\end{lstlisting}
-
-Not all is well, however.
-We can't always force constructor specialisation, because recursive types.
-Example of infinite looping with recursive constructors.
-
 
 \section{Example}
 
@@ -567,7 +385,7 @@ Talk about @vectorSizeIO@ and why it's useful.
 Reference \autoref{s:Future:SizeInference} for how to infer this.
 
 % -----------------------------------------------------------------------------
-\subsection{Optimisation and Drop Instructions}
+\subsection{Optimisation}
 \label{s:Optimisation}
 After we have fused two processes together, it may be possible to simplify the result before fusing in a third. Consider the result of fusing @group@ and @merge@ which we saw back in Figure~\ref{fig:Process:Fused}. At labels @F1@ and @F2@ are two consecutive @jump@ instructions.
 The update expressions attached to these instructions are also non-interfering, which means we can safely combine these instructions into a single @jump@.
@@ -581,9 +399,33 @@ Minimising the number of states in an intermediate process has the follow-on eff
 Another optimization is to notice that in some cases, when a heap variable is updated it is always assigned the value of another variable. In Fig.\ref{fig:Process:Fused}, the @v@ and @x1@ variables are only ever assigned the value of @b1@, and @b1@ itself is only ever loaded via a @pull@ instruction. Remember from \S\ref{s:Fusion:FusingPulls} that the variable @b1@ is the stream buffer variable. Values pulled from stream @sIn1@ are first stored in @b1@ before being copied to @v@ and @x1@. When the two processes to be fused share a common input stream, use of stream buffer variable allows one process to continue using the value that was last pulled from the stream, while the other moves onto the next one. 
 
 
-When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in Figure~\ref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. To increase the chance that we can perform copy-propagation, we need both processess to want to pull from the same stream at the same time. Moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early.
+% When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in Figure~\ref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. To increase the chance that we can perform copy-propagation, we need both processess to want to pull from the same stream at the same time. Moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early.
+% To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
 
-To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
+\section{What's the deal with drop anyway}
+\TODO{elsewhere}
+
+The purpose of the @drop@ instructions is to keep two consumers more closely synchronised.
+One consumer cannot start processing the next element until the other has finished processing the current element.
+Drop is not necessary for correctness, or even for ensuring boundedness of buffers: without it, the result program would still be correct, and one process could not `overtake' another by processing more than one element before the other one.
+
+If we have two consumers @P@ and @Q@, both pulling from the same channel @C@, they both need to agree about when to pull from the channel.
+Suppose that @P@ and @Q@ both pull from @C@, then push to their own output channel, @CP@ and @CQ@ respectively, drop their input, then loop back to pull again.
+If we are executing @P@, and it pulls from @C@, it can keep executing and push to its output channel @CP@, then drop the input.
+Now, @P@ has dropped its input, but cannot pull again yet, because there is no new value available to pull.
+There is no new value available to pull because the producer cannot \emph{push} to @C@ yet, because @Q@ has not consumed its input.
+Now, @Q@ can run, and pulls from its input.
+This transitions its input from \emph{pending} to \emph{have}, which means the producer still cannot push yet, until @Q@ drops its input.
+In this way, the drop allows the the producer to push only once all consumers have dealt with their input.
+Without drops, @P@ would be able to process the next element before @Q@ had finished the previous one.
+
+But is this actually useful? Is it mainly an aesthetic thing?
+What do we gain from keeping the two processes synchronised like this?
+One thing is that by synchronising the two processes together, when we fuse we will only have one copy of the code that pulls.
+So because @P@ can only start pulling again by the time @Q@ has dropped, this means @P@ and @Q@ must both be trying to pull at the same time, which means we can reuse the same instructions generated from the previous time they both pulled.
+This needs a concrete example.
+
+
 
 
 \section{Untyped interface}

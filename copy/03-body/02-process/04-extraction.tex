@@ -131,9 +131,51 @@ Constructor specialisation is not limited to boxing and unboxing, but works for 
 It even works for recursive types such as lists, which could produce an an infinite number of specialisations.
 Constructor specialisation must be careful to limit the specialisations to a finite number of \emph{useful} ones.
 
-TODO: An example here with interesting types.
+Information about the initial state can be very helpful in finding the most specific call patterns.
+In the following example, @go@ is first called with the call pattern (@go (Just _) (Just _)@).
+Using this as the `seed' from which we start exploring, we can see that the initial call pattern proceeds to the next call pattern (@go Nothing (Just _)@), followed by a call to (@go Nothing Nothing@).
+If we were to look at the body of @go@ without this initial seed, however, we would find the call patterns (@go Nothing _@) and (@go _ Nothing@).
+These call patterns from the unseeded body are less specific than the call patterns for the seed, which means using them would not allow the second argument to be specialised away.
+By starting from the initial seed, the extra information about the initial state can be propagated to the other states.
 
-With recursive types, there could be an infinite number of reachable call patterns.
+\begin{lstlisting}
+initial = go (Just 1) (Just 2)
+ where
+  go (Just _) b       = go Nothing b
+  go a       (Just _) = go a       Nothing
+  go Nothing Nothing  = 0
+\end{lstlisting}
+
+Not all specialisations are useful.
+To limit compilation time, memory usage and code blowup, it is important to limit the specialisations to those which will be used.
+That is, \emph{only} those which are reachable from the initial state.
+In the following example, the initial state is the call pattern (@go (Left _) (Right _)@).
+At each step, the arguments are flipped, so from the initial state the next reachable call pattern is (@go (Right _) (Left _)@).
+From here, we can get back to the original state.
+This means in total there are only two reachable call patterns.
+
+However, if we look at the body alone without the seed, the first two call patterns are (@go _ (Left _)@) and (@go _ (Right _)@).
+From here, more call patterns can be found: (@go _ (Left _)@) calls (@go (Left _) (Left a)@) and (@go (Left _) (Right _)@).
+Similarly, there are two call patterns reachable from @(go _ (Right _)@), and these are distinct from the two already seen.
+In this way, starting from the initial state means we do not have to generate all the possible specialisations.
+
+\begin{lstlisting}
+reachable = go (Left 1) (Right 2)
+ where
+  go (Left  a) b = go b (Left  a)
+  go (Right a) b = go b (Right a)
+\end{lstlisting}
+
+TODO: diagrams.
+
+Using the initial calls as the seed is important.
+This \emph{was} implemented, but it only occurred for locally bound functions, not for top-level bindings.
+The problem is that even though our examples were locally bound functions, other transforms such as let-floating occur before constructor specialisation, which means locally bound functions can be `floated' up to top-level bindings, where seeding does not work.
+The other issue is that top-level bound functions can be exported; if functions are exported, we cannot know their initial call pattern, as they may be called from other modules.
+So for exported top-level functions, we must seed the call-patterns using all initial calls in the current module, as well as those in the body.
+For non-exported top-level functions, we can be sure that the initial state is in the current module, and so use any initial calls outside of the body as the seed.
+
+When arguments are of recursive types, there can be an infinite number of reachable call patterns.
 Suppose we wish to reverse a linked list.
 We can write this using a helper function, which takes the list that is reversed so far, as well as the list to reverse.
 
@@ -150,7 +192,7 @@ First, the call to @go@ is seeded with the call pattern (@go [] _@).
 Then, at every step in the evaluation, a list constructor is moved from the second argument to the first, resulting in the infinite chain of call patterns, (@go [_] _@), (@go [_, _] _@), and so on.
 Usually, these specialisations would not be produced because they do not reduce allocation.
 However, in the original implementation, when @SPEC@ is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
-We fixed this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
+I implemented Roman Leshchinskiy's suggestion to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
 
 
 \section{Template Haskell}

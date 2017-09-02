@@ -196,50 +196,48 @@ I implemented Roman Leshchinskiy's suggestion to fix this by setting a limit on 
 
 
 \section{Template Haskell}
-Template Haskell is a metaprogramming extension for Haskell.
-Template Haskell is a limited form of staged computation, where the only `stages' are compile-time and run-time.
-It has two modes: splicing and quasiquoting.
-Splicing \verb/$$(f)/ expects the type of @f@ to be @Q (TExp t)@, and evaluates @f@ to an expression at compile time.
-The splice is replaced with the result expression.
-Quasiquoting \lstinline/[||x||]/ constructs the expression representation of @x@.
+Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template}.
+Template Haskell can be thought of as an untyped, limited form of staged computation, where the only `stages' are compile-time and run-time.
+There is also a typed variant, which we will use for defining a typesafe interface, while using the untyped variant for code generation.
+Let us look at the untyped variant first.
 
-The original Template Haskell paper \cite{sheard2002template} doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
-In the original paper, generated expressions don't have types.
-Typechecking does still occur on the expressions, though, but only after they have been spliced together.
-This is less of a problem for generation alone --- if you trust the generation code.
-But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
-Otherwise the type error will be very well hidden, somewhere inside the generated code.
-For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
-So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated (under an empty environment?) returns a value of type \lstinline|t|.
+Template Haskell extends regular Haskell with two syntactic constructs: quasiquoting and splicing.
+Quasiquoting converts the syntactic form of an expression to a value-level abstract syntax tree representation.
+For example, we can quasiquote some simple arithmetic using the syntax \lstinline/[|1 + 2|]/.
+Splicing is in some ways the opposite, as it takes a value-level abstract syntax tree, evaluates it at compile-time and converts it back to an expression which can be run at runtime.
+For example, we can splicing back the quasiquoted arithmetic using the syntax \lstinline/$([|1 + 2|])/, which will evaluate (@1 + 2@) at runtime.
 
-There is also a @Q@ monad which is used when constructing and splicing expressions.
-The @Q@ monad mainly gives a fresh name supply, so that when names are bound inside expressions they can be given unique names. This way they will not interfere with other bindings.
+Splicing and quasiquoting operate in the @Q@ monad.
+The @Q@ monad gives a fresh name supply, so that when names are bound inside expressions they can be given unique names.
+This way newly bound names will not interfere with other bindings.
 
-The obligatory example for staged computation is a power function, where the exponent is known at compile time, but the mantissa is not known until runtime.
-In general staged computation, the exponent is known one stage before the mantissa, but because Template Haskell only supports two stages, the exponent stage is necessarily compile-time.
+Let us look at a simple example of how to use Template Haskell.
+Suppose we wish to define a power function where the exponent is known at compile time, but the mantissa is not known until runtime.
 
-We define the @power@ function with the type \lstinline/Int -> Q (TExp (Int -> Int))/. This means it takes an integer at compile-time, and produces a computation in the quote monad (@Q@), returning an expression which, at runtime, will take an integer and return an integer.
+We define @power@ as a function with the type \lstinline/Int ->  Q Exp/.
+This means it takes an integer at compile-time, and produces a quoted expression in the quote monad.
+This expression will, once spliced in, have type \lstinline/Int ->  Int/.
 
 \begin{lstlisting}
-power :: Int -> Q (TExp (Int -> Int))
-power 0 = [||\i -> 1                       ||]
-power n = [||\i -> @$$(power (n - 1))@ i * i ||]
+power :: Int -> Q Exp
+power 0 = [|\i -> 1                      |]
+power n = [|\i -> @$(power (n - 1))@ i * i |]
 \end{lstlisting}
 
 The power function pattern matches on the exponent.
-When it is zero, we enter quasiquoting mode and construct a function that always returns 1.
+When it is zero, we enter quasiquoting mode and construct a function that always returns one.
 When the exponent is non-zero, we again enter quasiquoting mode, and construct a function.
-Inside the quasiquote, we need to handle the recursive case, so we enter back into splicing mode with \lstinline/@$$(power (n - 1))@/ to compute the one-smaller power, which returns the function expression, to which we apply @i@. Finally, we multiply the smaller power of @i@ with @i@ itself.
+Inside the quasiquote, we need to handle the recursive case, so we enter into splicing mode with \lstinline/@$(power (n - 1))@/ to compute the one-smaller power, which returns the function expression, to which we apply @i@. Finally, we multiply the smaller power of @i@ with @i@ itself.
 This function does not handle negative exponents: it is just to show the use of staging.
 
 We can then, in another module, define a specialised power function that computes the square.
 We define this as a top-level binding, by performing a splice, and inside that splice we call @power@ with the statically known at compile-time argument @2@.
-So the type inside the splice is \lstinline/Q (TExp (Int -> Int))/: a quoted computation returning an expression of type \lstinline/Int -> Int/.
-After this is spliced in, it unwraps the quote computation and expression and we end up reifying it to a real function of \lstinline/Int -> Int/.
+The type inside the splice is \lstinline/Q Exp/, and once splicing is complete the result is an expression of type \lstinline/Int ->  Int/.
+% After this is spliced in, it unwraps the quote computation and expression and we end up reifying it to a real function of \lstinline/Int -> Int/.
 
 \begin{lstlisting}
 power2 :: Int -> Int
-power2 = @$$(power 2)@
+power2 = @$(power 2)@
 \end{lstlisting}
 
 This is a ``top-level splice'', because it is not inside a quasiquotation.
@@ -257,20 +255,19 @@ Splicing expression
 
 It's a pretty roundabout way to multiply a number by itself. There are a lot of opportunities for simplifying that code. And while GHC should be able to remove these, it would be better to not introduce them in the first place.
 So let us fix it.
-The function @powerS'@ (@S@ for \emph{simpler}) takes the argument as a `real' argument, rather than returning an expression of function type: its type is \lstinline/Int -> Q (TExp Int) -> Q (TExp Int)/.
-We've moved the function from later (expression) to now (value).
-But the argument is still an expression.
+The function @powerS'@ (@S@ for \emph{simplified}) takes the argument as a `real' argument, rather than returning an expression of function type: its type is \lstinline/Int ->  Q Exp ->  Q Exp/.
+We have moved the function from later (expression) to now (value), but the argument is still a quoted expression.
 
 \begin{lstlisting}
-powerS' :: Int -> Q (TExp Int) -> Q (TExp Int)
-powerS' 0 i = [||1                          ||]
-powerS' n i = [||@$$(powerS' (n-1) i)@ * @$$(i)@||]
+powerS' :: Int -> Q Exp -> Q Exp
+powerS' 0 i = [|1                        |]
+powerS' n i = [|@$(powerS' (n-1) i)@ * @$(i)@|]
 \end{lstlisting}
 
 The definition of @powerS@ introduces the lambda binding as before, but passes the expression of this binding to the worker function.
 We enter quoting mode, then introduce a lambda. Then we go back into splicing mode, in order to call the helper function @powerS'@.
 Then, in order to pass the mantissa @i@ to the helper function, we need to go back into quoting mode.
-Note that the quoted expresssion \lstinline/[||i||]/ is \emph{open}: it refers to bindings outside the environment.
+Note that the quoted expresssion \lstinline/[|i|]/ is \emph{open}: it refers to bindings outside the environment.
 This means if you somehow kept a hold of that expression and used it in a different context, outside the lambda binding, it would be incorrect.
 So you can construct bad, ill-typed expressions with Template Haskell. This is certainly not ideal, but is just something to be aware of.
 
@@ -278,8 +275,8 @@ Is it worth noting that MetaOCaml has similar problems, including BER MetaOCaml?
 You don't need to rant about let-insertion in MetaOCaml: how it is allegedly safe, but it is not \emph{type} safe.
 
 \begin{lstlisting}
-powerS :: Int -> Q (TExp (Int -> Int))
-powerS n = [||\i -> @$$(powerS' n [||i||])@||]
+powerS :: Int -> Q Exp
+powerS n = [|\i -> @$(powerS' n [|i|])@|]
 \end{lstlisting}
 
 The output is a lot simpler now.
@@ -296,13 +293,25 @@ For more information on staging in general, \citet{rompf2010lightweight} takes t
 Meta-Repa similar idea but for flat data parallel computations, not really for streaming computations \cite{ankner2013edsl}.
 But it also uses Template Haskell, so that's worth mentioning.
 
-\subsection{Untyped expressions}
-We can also go between the typed and untyped representation.
-The type @Exp@ is an untyped Template Haskell expression.
-It still has a type, but this is not known or checked until it is spliced in.
-Like typed expressions, one can quasiquote untyped expressions with \lstinline/[|e|]/ and splice with \lstinline/@$(e)@/.
-There is only one pipe or dollar-sign in the untyped case, rather than two.
+\subsection{Typed expressions}
 
+One of the problems with Template Haskell shown above is that there are no types attached to expressions.
+Quasiquoting a string \lstinline/[|"one"|]/ and quasiquoting an integer \lstinline/[|1|]/ produce a value of the same type: @Q Exp@.
+
+The original Template Haskell paper  doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
+In the original paper, generated expressions don't have types.
+Typechecking does still occur on the expressions, though, but only after they have been spliced together.
+This is less of a problem for generation alone --- if you trust the generation code.
+But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
+Otherwise the type error will be very well hidden, somewhere inside the generated code.
+For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
+So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated (under an empty environment?) returns a value of type \lstinline|t|.
+
+We can use typed quasiquoting and typed splicing.
+Typed quasiquoting uses the same syntax except with two pipes, for example \lstinline/[||"one"||] :: Q (TExp String)/.
+Similarly, typed splicing uses two dollar signs: \lstinline/$$(f) :: String/, if \lstinline/f :: Q (TExp String)/.
+
+We can also go between the typed and untyped representation.
 One can convert from a typed expression to an untyped expression.
 This does not affect the expression itself, and once it is spliced in it will have the same type.
 It just throws away some type-level information.
@@ -316,6 +325,36 @@ This is an unsafe operation, because one can choose any type at all for the expr
 The expression is not checked against the chosen type until it is spliced in.
 \begin{lstlisting}
 unsafeTExpCoerce :: Q Exp -> Q (TExp a)
+\end{lstlisting}
+
+\section{Existential types}
+Need to explain existential types in order to talk about sources and sinks.
+
+\section{Sources and Sinks}
+The first thing to do is implement sources and sinks: pull and push streams.
+Folderol does use pull and push streams, but only as the end-points for computations.
+The input streams at the very start of computations will be sources, and the output streams at the very end are sinks.
+These are how we interface with the outside world.
+Streams inside the computation use internal communication, and can be fused away in the end. They can be implemented as values passed via function calls.
+
+\begin{lstlisting}
+data Source m a
+ = forall s.
+   Source
+ { init :: m s
+ , pull :: s -> m (Maybe a, s)
+ , done :: s -> m ()
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data Sink m a
+ = forall s.
+   Sink
+ { init :: m s
+ , push :: s -> a -> m s
+ , done :: s -> m ()
+ }
 \end{lstlisting}
 
 
@@ -351,33 +390,6 @@ sink   :: Q (TExp (Sink m a))   -> Channel a -> Network m (Channel a)
 The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
 
 Now show the generated code.
-
-\section{Types}
-The first thing to do is implement sources and sinks: pull and push streams.
-Folderol does use pull and push streams, but only as the end-points for computations.
-The input streams at the very start of computations will be sources, and the output streams at the very end are sinks.
-These are how we interface with the outside world.
-Streams inside the computation use internal communication, and can be fused away in the end. They can be implemented as values passed via function calls.
-
-\begin{lstlisting}
-data Source m a
- = forall s.
-   Source
- { init :: m s
- , pull :: s -> m (Maybe a, s)
- , done :: s -> m ()
- }
-\end{lstlisting}
-
-\begin{lstlisting}
-data Sink m a
- = forall s.
-   Sink
- { init :: m s
- , push :: s -> a -> m s
- , done :: s -> m ()
- }
-\end{lstlisting}
 
 \section{Size hints}
 \label{s:implementation:sizehints}
@@ -419,11 +431,55 @@ This transitions its input from \emph{pending} to \emph{have}, which means the p
 In this way, the drop allows the the producer to push only once all consumers have dealt with their input.
 Without drops, @P@ would be able to process the next element before @Q@ had finished the previous one.
 
-But is this actually useful? Is it mainly an aesthetic thing?
-What do we gain from keeping the two processes synchronised like this?
-One thing is that by synchronising the two processes together, when we fuse we will only have one copy of the code that pulls.
-So because @P@ can only start pulling again by the time @Q@ has dropped, this means @P@ and @Q@ must both be trying to pull at the same time, which means we can reuse the same instructions generated from the previous time they both pulled.
-This needs a concrete example.
+\begin{lstlisting}
+P = process
+  P1: c <- pull C
+  P2: push CP c
+  P3: drop C
+  P4: jump P1
+
+Q = process
+  Q1: c <- pull C
+  Q2: push CQ c
+  Q3: drop C
+  Q4: jump Q1
+\end{lstlisting}
+
+By synchronising the two processes together, when we fuse we will only have one copy of the code that pulls each element.
+Because @P@ can only start pulling again by the time @Q@ has dropped, this means @P@ and @Q@ must both be trying to pull at the same time, which means we can reuse the same instructions generated from the previous time they both pulled.
+The example @PQ_drop@ shows the fused process with drop instructions.
+Note that there is only one copy of each input process' code.
+On the other hand, @PQ_no_drop@ shows the fused process without drop instructions.
+Here, there are two copies of pushing to @CP@, though the main loop only executes one per iteration: pushing the current element to @CP@, and the previous element to @CQ@.
+As the processes get larger, and more processes are fused together, the issue of duplicating code becomes more serious.
+There are two parts to this: first, we need to hold the entire process in memory in order to generate its code.
+Secondly, as the generated assembly code gets larger, it is less likely to fit into the processor's cache.
+Smaller code is generally better for performance.
+Having two copies of the push to @CP@ means that any consumers of @CP@ must in turn have their code duplicated, with the pull instructions from @CP@ copied into both sites of the pushes.
+
+\TODO{diagrams}
+\begin{lstlisting}
+PQ_drop = process
+  P1Q1: c_buf <- pull C
+        c_p    = c_buf
+        c_q    = c_buf
+        push CP c_p
+        push CQ c_q
+        drop C
+        jump P1Q1
+
+PQ_no_drop = process
+  P1Q1:  c_buf <- pull C
+         c_p    = c_buf
+         c_q    = c_buf
+         push CP c_p
+  P2Q2:  c_buf <- pull c
+         c_p    = c_buf
+         push CP c_p
+         push CQ c_q
+         c_q    = c_buf
+         jump P2Q2
+\end{lstlisting}
 
 
 

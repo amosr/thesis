@@ -2,198 +2,13 @@
 \label{chapter:process:implementation}
 
 
-We have implemented this fusion system [the one described in chapter \ldots] in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
+We have implemented this fusion system \REFTODO{the one described in chapter} in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
 Rather than modifying the compiler to support our particular fusion system, we use Template Haskell, which allows us to perform code-generation at compile-time: a form of macro metaprogramming.
 
 This chapter explains how to generate code for processes, while taking advantage of the existing optimisations in the Glasgow Haskell Compiler (GHC).
 Generating code for a single process is fairly straightforward in itself; the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
 Haskell supports imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
 If we wish to get good performance, we must generate code closer to what the compiler expects.
-
-\section{All this boxing and unboxing}
-In Haskell, most values are boxed by default \citep{jones1991unboxed}.
-Boxed values are stored as pointers to heap objects, which can in turn reference other boxed or unboxed values.
-Boxed values are useful for implementing parametric polymorphism because they give a uniform representation to all the different types.
-A list which is polymorphic in its element type can use a pointer to refer to its values regardless of the actual element type.
-
-The problem with boxed values is that they require an extra allocation per object, as well as a pointer indirection for each access.
-This can cause performance issues in tight loops, particularly because most objects are immutable.
-
-Consider the following function, which loops over an array to compute its sum.
-It starts by calling the local function @loop@ with the initial loop index, and the initial sum.
-The definition of @loop@ checks if it has reached the end of the array, and if so returns the sum; otherwise it increments the running sum and proceeds to the next index.
-
-\begin{lstlisting}
-sum :: Vector Int -> Int
-sum vector = loop 0 0
- where
-  loop index running_sum
-   | index == length vector
-   = running_sum
-   | otherwise
-   = let value = vector ! index
-     in loop (index + 1) (running_sum + value)
-\end{lstlisting}
-
-It is not clear from the program source alone, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
-If this were compiled naively it would be rather disastrous for performance, as in order to process each element of the array, it must allocate two new boxed values.
-Hilariously, all of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
-While the garbage collector is tuned for small, short-lived objects, it is better to not introduce the garbage in the first place.
-
-Removing boxing is not a novel thing, and there are many ways to do this.
-The point to make is not that this is an interesting thing, just that we must know how it works in order to generate good code that fits it.
-Boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
-
-\begin{lstlisting}
-data Int = I# Int#
-\end{lstlisting}
-
-Now we know how machine-word integers are represented, we can look at an explicitly boxed version of @sum@.
-This is still using boxed integers, but all arithmetic is explicitly unboxing and reboxing.
-Unboxed literals are written as @0#@ or @1#@.
-Unboxed arithmetic are written as @+#@ or @==#@, and @!#@ for unboxed indexing.
-With explicit boxing, it should now be visible that the recursive call to @loop@ constructs new boxed integers.
-
-\begin{lstlisting}
-sum :: Vector Int -> Int
-sum vector = loop (I# 0#) (I# 0#)
- where
-  loop (I# index) (I# running_sum)
-   | index ==# length vector
-   = I# running_sum
-   | otherwise
-   = let value = vector !# index
-     in loop (I# (index +# 1#)) (I# (running_sum +# value))
-\end{lstlisting}
-
-Constructor specialisation \cite{peyton2007call} is a loop optimisation that can remove these boxed arguments to recursive calls.
-It looks at the constructors to recursive calls, and counts which ones are scrutinised or unwrapped at the start of the function definition.
-In this case, @loop@ is first (and later, as well) called with the constructors @I#@ for both arguments, and both arguments are scrutinised.
-So it creates a specialised version of @loop@ where both arguments are @I#@ constructors.
-This specialised version is the same as the original, except the arguments are known to be @I#@ constructors, which means the pattern matching on the arguments can be simplified away.
-We will call this specialised version @loop'I#'I#@.
-Then everywhere that @loop@ is called with @I#@ constructors, it will be replaced with a call to @loop'I#'I#@.
-So any function call that looks like (@loop (I# x) (I# y)@) is replaced by a call to our new function (@loop'I#'I# x y@).
-
-\begin{lstlisting}
-sum :: Vector Int -> Int
-sum vector = loop'I#'I# 0# 0#
- where
-  loop'I#'I# index running_sum
-   | index ==# length vector
-   = I# running_sum
-   | otherwise
-   = let value = vector !# index
-     in loop'I#'I# (index +# 1#) (running_sum +# value)
-\end{lstlisting}
-
-Constructor specialisation has removed all the boxing except for the final return value, which is only constructed once anyway.
-In this example, the original @loop@ function was no longer called, so it was able to be removed entirely.
-It is not always the case that the original function can be removed, and constructor specialisation can duplicate the code many times: once for each combination of constructors.
-This can cause quite a lot of copies of the original function, which can cause large intermediate programs that do not fit in memory.
-To alleviate this, GHC implements some heuristics to limit the number of duplicates created, as well as only creating specialisations if the original function is not too large.
-This makes sense for general purpose code, but for tight loops where we expect most of our runtime to be, we really want to be sure that all specialisations are created.
-For tight loops, we want to \emph{force} constructor specialisation to occur as much as possible.
-This is achieved by annotating the function to be specialised with the special constructor @SPEC@.
-Going back to the original @sum@ function, if we want to force constructor specialisation on @loop@, we can do this by adding the @SPEC@ to the function binding as well as all calls to it:
-
-\begin{lstlisting}
-sum :: Vector Int -> Int
-sum vector = loop SPEC 0 0
- where
-  loop SPEC index running_sum
-   | index == length vector
-   = running_sum
-   | otherwise
-   = let value = vector ! index
-     in loop SPEC (index + 1) (running_sum + value)
-\end{lstlisting}
-
-We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
-We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
-Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
-This means that in order to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
-
-Unboxed mutable references do exist, but are unsuitable because they can \emph{only} store unboxed values.
-Recursive types such as linked lists cannot be stored in unboxed references.
-We desire an unboxed representation when possible, and boxed representation when necessary.
-
-It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
-Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing stream fusion in MetaOCaml.
-So this will not necessarily map to other languages, but it is true in the particular case of GHC.
-
-In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
-The motivation here is that GHC does not track aliasing information of arrays stored in mutable references, but does track it for arrays as function arguments.
-
-\subsection{Extended constructor specialisation}
-
-Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, including types with multiple constructors such as (@Maybe a@) or (@Either a b@).
-It even works for recursive types such as lists, which could produce an an infinite number of specialisations.
-Constructor specialisation must be careful to limit the specialisations to a finite number of \emph{useful} ones.
-
-Information about the initial state can be very helpful in finding the most specific call patterns.
-In the following example, @go@ is first called with the call pattern (@go (Just _) (Just _)@).
-Using this as the `seed' from which we start exploring, we can see that the initial call pattern proceeds to the next call pattern (@go Nothing (Just _)@), followed by a call to (@go Nothing Nothing@).
-If we were to look at the body of @go@ without this initial seed, however, we would find the call patterns (@go Nothing _@) and (@go _ Nothing@).
-These call patterns from the unseeded body are less specific than the call patterns for the seed, which means using them would not allow the second argument to be specialised away.
-By starting from the initial seed, the extra information about the initial state can be propagated to the other states.
-
-\begin{lstlisting}
-initial = go (Just 1) (Just 2)
- where
-  go (Just _) b       = go Nothing b
-  go a       (Just _) = go a       Nothing
-  go Nothing Nothing  = 0
-\end{lstlisting}
-
-Not all specialisations are useful.
-To limit compilation time, memory usage and code blowup, it is important to limit the specialisations to those which will be used.
-That is, \emph{only} those which are reachable from the initial state.
-In the following example, the initial state is the call pattern (@go (Left _) (Right _)@).
-At each step, the arguments are flipped, so from the initial state the next reachable call pattern is (@go (Right _) (Left _)@).
-From here, we can get back to the original state.
-This means in total there are only two reachable call patterns.
-
-However, if we look at the body alone without the seed, the first two call patterns are (@go _ (Left _)@) and (@go _ (Right _)@).
-From here, more call patterns can be found: (@go _ (Left _)@) calls (@go (Left _) (Left a)@) and (@go (Left _) (Right _)@).
-Similarly, there are two call patterns reachable from @(go _ (Right _)@), and these are distinct from the two already seen.
-In this way, starting from the initial state means we do not have to generate all the possible specialisations.
-
-\begin{lstlisting}
-reachable = go (Left 1) (Right 2)
- where
-  go (Left  a) b = go b (Left  a)
-  go (Right a) b = go b (Right a)
-\end{lstlisting}
-
-TODO: diagrams.
-
-Using the initial calls as the seed is important.
-This \emph{was} implemented, but it only occurred for locally bound functions, not for top-level bindings.
-The problem is that even though our examples were locally bound functions, other transforms such as let-floating occur before constructor specialisation, which means locally bound functions can be `floated' up to top-level bindings, where seeding does not work.
-The other issue is that top-level bound functions can be exported; if functions are exported, we cannot know their initial call pattern, as they may be called from other modules.
-So for exported top-level functions, we must seed the call-patterns using all initial calls in the current module, as well as those in the body.
-For non-exported top-level functions, we can be sure that the initial state is in the current module, and so use any initial calls outside of the body as the seed.
-
-When arguments are of recursive types, there can be an infinite number of reachable call patterns.
-Suppose we wish to reverse a linked list.
-We can write this using a helper function, which takes the list that is reversed so far, as well as the list to reverse.
-
-\begin{lstlisting}
-reverse :: [Int] -> [Int]
-reverse xs0 = go [] xs0
- where
-  go zs []     = zs
-  go zs (x:xs) = go (x:zs) xs
-\end{lstlisting}
-
-The helper function @go@ could be specialised an infinite number of times, but this would lead to non-terminating compilation.
-First, the call to @go@ is seeded with the call pattern (@go [] _@).
-Then, at every step in the evaluation, a list constructor is moved from the second argument to the first, resulting in the infinite chain of call patterns, (@go [_] _@), (@go [_, _] _@), and so on.
-Usually, these specialisations would not be produced because they do not reduce allocation.
-However, in the original implementation, when @SPEC@ is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
-I implemented Roman Leshchinskiy's suggestion to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
-
 
 \section{Template Haskell}
 Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template}.
@@ -305,10 +120,10 @@ This is less of a problem for generation alone --- if you trust the generation c
 But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
 Otherwise the type error will be very well hidden, somewhere inside the generated code.
 For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
-So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated (under an empty environment?) returns a value of type \lstinline|t|.
+So the typed Template Haskell attaches a type argument to each expression: \lstinline|TExp t| is an expression that, when evaluated \emph{probably} returns a value of type \lstinline|t|.
 
 We can use typed quasiquoting and typed splicing.
-Typed quasiquoting uses the same syntax except with two pipes, for example \lstinline/[||"one"||] :: Q (TExp String)/.
+Typed quasiquoting uses the same syntax except with two pipes, for example \lstinline/[||"one"||]  :: Q (TExp String)/.
 Similarly, typed splicing uses two dollar signs: \lstinline/$$(f) :: String/, if \lstinline/f :: Q (TExp String)/.
 
 We can also go between the typed and untyped representation.
@@ -327,33 +142,271 @@ The expression is not checked against the chosen type until it is spliced in.
 unsafeTExpCoerce :: Q Exp -> Q (TExp a)
 \end{lstlisting}
 
-\section{Existential types}
-Need to explain existential types in order to talk about sources and sinks.
 
-\section{Sources and Sinks}
-The first thing to do is implement sources and sinks: pull and push streams.
-Folderol does use pull and push streams, but only as the end-points for computations.
-The input streams at the very start of computations will be sources, and the output streams at the very end are sinks.
-These are how we interface with the outside world.
-Streams inside the computation use internal communication, and can be fused away in the end. They can be implemented as values passed via function calls.
+\section{All this boxing and unboxing}
+In Haskell, most values are boxed by default \citep{jones1991unboxed}.
+Boxed values are stored as pointers to heap objects, which can in turn reference other boxed or unboxed values.
+Boxed values are useful for implementing parametric polymorphism because they give a uniform representation to all the different types.
+A list which is polymorphic in its element type can use a pointer to refer to its values regardless of the actual element type.
+
+The problem with boxed values is that they require an extra allocation per object, as well as a pointer indirection for each access.
+This can cause performance issues in tight loops, particularly because most objects are immutable.
+
+Consider the following function, which loops over an array to compute its sum.
+It starts by calling the local function @loop@ with the initial loop index, and the initial sum.
+The definition of @loop@ checks if it has reached the end of the array, and if so returns the sum; otherwise it increments the running sum and proceeds to the next index.
 
 \begin{lstlisting}
-data Source m a
- = forall s.
-   Source
- { init :: m s
- , pull :: s -> m (Maybe a, s)
- , done :: s -> m ()
+sum :: Vector Int -> Int
+sum vector = loop 0 0
+ where
+  loop index running_sum
+   | index == length vector
+   = running_sum
+   | otherwise
+   = let value = vector ! index
+     in loop (index + 1) (running_sum + value)
+\end{lstlisting}
+
+It is not clear from the program source alone, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
+If this were compiled naively it would be rather disastrous for performance, as in order to process each element of the array, it must allocate two new boxed values.
+Hilariously, all of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
+While the garbage collector is tuned for small, short-lived objects, it is better to not introduce the garbage in the first place.
+
+Removing boxing is not a novel thing, and there are many ways to do this.
+The point to make is not that this is an interesting thing, just that we must know how it works in order to generate good code that fits it.
+Boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
+
+\begin{lstlisting}
+data Int = I# Int#
+\end{lstlisting}
+
+Now we know how machine-word integers are represented, we can look at an explicitly boxed version of @sum@.
+This is still using boxed integers, but all arithmetic is explicitly unboxing and reboxing.
+Unboxed literals are written as @0#@ or @1#@.
+Unboxed arithmetic are written as @+#@ or @==#@, and @!#@ for unboxed indexing.
+With explicit boxing, it should now be visible that the recursive call to @loop@ constructs new boxed integers.
+
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop (I# 0#) (I# 0#)
+ where
+  loop (I# index) (I# running_sum)
+   | index ==# length vector
+   = I# running_sum
+   | otherwise
+   = let value = vector !# index
+     in loop (I# (index +# 1#)) (I# (running_sum +# value))
+\end{lstlisting}
+
+Constructor specialisation \cite{peyton2007call} is a loop optimisation that can remove these boxed arguments to recursive calls.
+It looks at the constructors to recursive calls, and counts which ones are scrutinised or unwrapped at the start of the function definition.
+In this case, @loop@ is first (and later, as well) called with the constructors @I#@ for both arguments, and both arguments are scrutinised.
+So it creates a specialised version of @loop@ where both arguments are @I#@ constructors.
+This specialised version is the same as the original, except the arguments are known to be @I#@ constructors, which means the pattern matching on the arguments can be simplified away.
+We will call this specialised version @loop'I#'I#@.
+Then everywhere that @loop@ is called with @I#@ constructors, it will be replaced with a call to @loop'I#'I#@.
+So any function call that looks like (@loop (I# x) (I# y)@) is replaced by a call to our new function (@loop'I#'I# x y@).
+
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop'I#'I# 0# 0#
+ where
+  loop'I#'I# index running_sum
+   | index ==# length vector
+   = I# running_sum
+   | otherwise
+   = let value = vector !# index
+     in loop'I#'I# (index +# 1#) (running_sum +# value)
+\end{lstlisting}
+
+Constructor specialisation has removed all the boxing except for the final return value, which is only constructed once anyway.
+In this example, the original @loop@ function was no longer called, so it was able to be removed entirely.
+It is not always the case that the original function can be removed, and constructor specialisation can duplicate the code many times: once for each combination of constructors.
+This can cause quite a lot of copies of the original function, which can cause large intermediate programs that do not fit in memory.
+To alleviate this, GHC implements some heuristics to limit the number of duplicates created, as well as only creating specialisations if the original function is not too large.
+This makes sense for general purpose code, but for tight loops where we expect most of our runtime to be, we really want to be sure that all specialisations are created.
+For tight loops, we want to \emph{force} constructor specialisation to occur as much as possible.
+This is achieved by annotating the function to be specialised with the special constructor @SPEC@.
+Going back to the original @sum@ function, if we want to force constructor specialisation on @loop@, we can do this by adding the @SPEC@ to the function binding as well as all calls to it:
+
+\begin{lstlisting}
+sum :: Vector Int -> Int
+sum vector = loop SPEC 0 0
+ where
+  loop SPEC index running_sum
+   | index == length vector
+   = running_sum
+   | otherwise
+   = let value = vector ! index
+     in loop SPEC (index + 1) (running_sum + value)
+\end{lstlisting}
+
+\subsection{Mutable references}
+\label{ss:extraction:mutablerefs}
+
+We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
+We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
+Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
+This means that in order to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
+
+Unboxed mutable references do exist, but are unsuitable because they can \emph{only} store unboxed values.
+Recursive types such as linked lists cannot be stored in unboxed references.
+We desire an unboxed representation when possible, and boxed representation when necessary.
+
+It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
+Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing stream fusion in MetaOCaml.
+So this will not necessarily map to other languages, but it is true in the particular case of GHC.
+
+In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
+The motivation here is that GHC does not track aliasing information of arrays stored in mutable references, but does track it for arrays as function arguments.
+
+\subsection{Extended constructor specialisation}
+
+Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, including types with multiple constructors such as (@Maybe a@) or (@Either a b@).
+It even works for recursive types such as lists, which could produce an an infinite number of specialisations.
+Constructor specialisation must be careful to limit the specialisations to a finite number of \emph{useful} ones.
+
+Information about the initial state can be very helpful in finding the most specific call patterns.
+In the following example, @go@ is first called with the call pattern (@go (Just _) (Just _)@).
+Using this as the `seed' from which we start exploring, we can see that the initial call pattern proceeds to the next call pattern (@go Nothing (Just _)@), followed by a call to (@go Nothing Nothing@).
+If we were to look at the body of @go@ without this initial seed, however, we would find the call patterns (@go Nothing _@) and (@go _ Nothing@).
+These call patterns from the unseeded body are less specific than the call patterns for the seed, which means using them would not allow the second argument to be specialised away.
+By starting from the initial seed, the extra information about the initial state can be propagated to the other states.
+
+\begin{lstlisting}
+initial = go (Just 1) (Just 2)
+ where
+  go (Just _) b       = go Nothing b
+  go a       (Just _) = go a       Nothing
+  go Nothing Nothing  = 0
+\end{lstlisting}
+
+Not all specialisations are useful.
+To limit compilation time, memory usage and code blowup, it is important to limit the specialisations to those which will be used.
+That is, \emph{only} those which are reachable from the initial state.
+In the following example, the initial state is the call pattern (@go (Left _) (Right _)@).
+At each step, the arguments are flipped, so from the initial state the next reachable call pattern is (@go (Right _) (Left _)@).
+From here, we can get back to the original state.
+This means in total there are only two reachable call patterns.
+
+However, if we look at the body alone without the seed, the first two call patterns are (@go _ (Left _)@) and (@go _ (Right _)@).
+From here, more call patterns can be found: (@go _ (Left _)@) calls (@go (Left _) (Left a)@) and (@go (Left _) (Right _)@).
+Similarly, there are two call patterns reachable from @(go _ (Right _)@), and these are distinct from the two already seen.
+In this way, starting from the initial state means we do not have to generate all the possible specialisations.
+
+\begin{lstlisting}
+reachable = go (Left 1) (Right 2)
+ where
+  go (Left  a) b = go b (Left  a)
+  go (Right a) b = go b (Right a)
+\end{lstlisting}
+
+TODO: diagrams.
+
+Using the initial calls as the seed is important.
+This \emph{was} implemented, but it only occurred for locally bound functions, not for top-level bindings.
+The problem is that even though our examples were locally bound functions, other transforms such as let-floating occur before constructor specialisation, which means locally bound functions can be `floated' up to top-level bindings, where seeding does not work.
+The other issue is that top-level bound functions can be exported; if functions are exported, we cannot know their initial call pattern, as they may be called from other modules.
+So for exported top-level functions, we must seed the call-patterns using all initial calls in the current module, as well as those in the body.
+For non-exported top-level functions, we can be sure that the initial state is in the current module, and so use any initial calls outside of the body as the seed.
+
+When arguments are of recursive types, there can be an infinite number of reachable call patterns.
+Suppose we wish to reverse a linked list.
+We can write this using a helper function, which takes the list that is reversed so far, as well as the list to reverse.
+
+\begin{lstlisting}
+reverse :: [Int] -> [Int]
+reverse xs0 = go [] xs0
+ where
+  go zs []     = zs
+  go zs (x:xs) = go (x:zs) xs
+\end{lstlisting}
+
+The helper function @go@ could be specialised an infinite number of times, but this would lead to non-terminating compilation.
+First, the call to @go@ is seeded with the call pattern (@go [] _@).
+Then, at every step in the evaluation, a list constructor is moved from the second argument to the first, resulting in the infinite chain of call patterns, (@go [_] _@), (@go [_, _] _@), and so on.
+Usually, these specialisations would not be produced because they do not reduce allocation.
+However, in the original implementation, when @SPEC@ is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
+I implemented Roman Leshchinskiy's suggestion to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
+
+\section{Sources and Sinks}
+In order to write meaningful streaming computations, we need to interact with the outside world.
+The processes in our process networks are pure and have no way of interacting with the world: they simply shuffle data along channels.
+At the start of the process network, for the inputs, we use \emph{sources} to pull from the outside, such as reading from a file.
+At the end of the process network, for the outputs, we use \emph{sinks} to push to the outside, such as writing to a file.
+
+These sources and sinks are really the pull and push streams we have seen before \REFTODO{pull and push}, but in this case we do not need to implement combinators over them; such plumbing will be expressed as processes in the process network.
+Sources and sinks are in many ways opposites of each other, but they also share many similarities, so let us refer to them collectively as \emph{endpoints}.
+
+Endpoints need to encapsulate some internal state: for example writing to a file requires a filehandle, and perhaps a buffer to fill before writing, to amortise the cost of the system call.
+As explained previously (\autoref{ss:extraction:mutablerefs}), using mutable references for this internal state would lead to poor performance due to boxing.
+We need to use the same approach of passing this state as function arguments so they can be unboxed by constructor specialisation.
+This is a tad more complicated than it sounds, because the each endpoint requires a different type of state: reading from a file requires a filehandle, while reading from an in-memory array requires the array and the current index.
+On the other hand, this state type is an internal thing and should not be exposed to the user, which rules out adding it as a type parameter on the endpoint.
+Just because we need to pass the state around as function arguments should not change the external interface.
+
+In order to `wrap up' the internal state type, so only the endpoint itself can inspect the internal state, while the user can only hold on to the abstract state and pass it to the endpoint, we use existentially quantified types.
+This is similar to how existential types are used in Stream Fusion \cite{coutts2007stream}, to hide the internal state of a pull stream.
+
+We say that each endpoint has an internal state type, and only it knows what the type is.
+We provide some operations with the state: a way to construct an initial state, for example opening the file and returning the handle; a pull or push function which takes the state and returns a new state; and a close function for when we have finished reading from or writing to the endpoint.
+
+\subsection{Sources}
+
+We define sources in Haskell with the following datatype (@Source a@), where the type parameter @a@ is the type of values to be pulled.
+The internal state type is bound to @s@, and we define a record with three fields.
+The first field, @sourceInit@, contains an effectful computation which returns the initial state.
+The second field, @sourcePull@, is a function which takes the current state and returns a pair containing the pulled value, and the updated state.
+The pulled value is wrapped in a @Maybe@, because streams are finite: @Nothing@ means the end of the stream, and (@Just v@) means the value @v@.
+Streams end only once, and after pulling a @Nothing@, the source should not be pulled on again.
+The third and final field, @sourceDone@, is a function which takes the current state and closes the stream.
+The source should not be pulled again after it is closed, but these invariants are not checked.
+
+\begin{lstlisting}[mathescape=true]
+data Source a
+ = $\exists$s. Source
+ { sourceInit ::      IO s
+ , sourcePull :: s -> IO (Maybe a, s)
+ , sourceDone :: s -> IO ()
  }
 \end{lstlisting}
 
+We can define a @Source@ that reads lines of text from a file.
+Here the internal state is simply a filehandle.
+To initialise the source, we open the file in reading mode, with the @openFile@ function.
+When the source is done, we close the file handle with @hClose@.
+To pull from the source, we define a helper function @pull@, which takes the filehandle as an argument.
+The @pull@ function checks whether the end of the file has been reached (@hIsEof@).
+If the end of the file, it returns @Nothing@.
+Otherwise, it reads a line from the handle (@hGetLine@) and wraps the line in a @Just@ constructor.
+
 \begin{lstlisting}
-data Sink m a
- = forall s.
-   Sink
- { init :: m s
- , push :: s -> a -> m s
- , done :: s -> m ()
+sourceReadFile :: FilePath -> Source String
+sourceReadFile filepath
+  = Source
+  { sourceInit = openFile ReadMode filepath
+  , sourcePull = pull
+  , sourceDone = hClose }
+ where
+  pull handle = do
+    eof <- hIsEof
+    case eof of
+     True  -> return Nothing
+     False -> Just <$> hGetLine handle
+\end{lstlisting}
+
+For the sake of example, this is a simplified version.
+Certainly, this could be improved in terms of error handling: what if the file does not exist; and performance: reading a single line at a time will not give the best performance.
+
+\subsection{Sinks}
+
+\begin{lstlisting}[mathescape=true]
+data Sink a
+ = $\exists$s. Sink
+ { sinkInit ::           IO s
+ , sinkPush :: s -> a -> IO s
+ , sinkDone :: s ->      IO ()
  }
 \end{lstlisting}
 

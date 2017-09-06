@@ -10,6 +10,56 @@ Generating code for a single process is fairly straightforward in itself; the pr
 Haskell supports imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
 If we wish to get good performance, we must generate code closer to what the compiler expects.
 
+\section{Constructing a process network}
+
+First, we will look at constructing a process network in @folderol@.
+Let us look at a simple example: we just want to read some file and do some things.
+\TODO{want a better example, some running example that goes through the whole thesis. Perhaps customer-transactions plus birthdays.}
+\begin{lstlisting}
+applyTransactions :: FilePath -> FilePath -> IO ()
+applyTransactions fileIn fileOut =
+  $$(fuse $ do
+     cust  <- source [||sourceOfFile fileCust||]
+     txns  <- source [||sourceOfFile fileTxns||]
+     cust' <- map    [||parseCust            ||] cust
+     txns' <- map    [||parseTxns            ||] txns
+
+     (newCust, invalid) <- groupLeft [||applyTxn||] cust' txns'
+
+     sink newCust [||sinkToFile fileOutCust   ||]
+     sink invalid [||sinkToFile fileOutInvalid||])
+\end{lstlisting}
+
+\begin{lstlisting}
+mapFilter :: FilePath -> FilePath -> IO ()
+mapFilter fileIn fileOut =
+  $$(fuse $ do
+     ins    <- source [||sourceOfFile fileIn||]
+     above  <- filter [||\i -> i > 0        ||] ins
+     double <- map    [||\i -> i * 2        ||] above
+     sink double      [||sinkToFile fileOut ||])
+\end{lstlisting}
+
+% We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
+% It has the following type.
+% \begin{lstlisting}
+% fuse :: Network () -> Q (TExp (IO ()))
+% \end{lstlisting}
+% That is, it takes a process network and returns the expression for the underlying @IO@ computation.
+% The process network @Network ()@ is a monad as well.
+% 
+% The process network first constructs a source that reads from a file.
+% \begin{lstlisting}
+% source :: Q (TExp (Source a))                -> Network (Channel a)
+% filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
+% map    :: Q (TExp (a -> b))     -> Channel a -> Network (Channel b)
+% sink   :: Q (TExp (Sink a))     -> Channel a -> Network (Channel a)
+% \end{lstlisting}
+% The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
+% 
+% Now show the generated code.
+% 
+
 \section{Template Haskell}
 Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template}.
 Template Haskell can be thought of as an untyped, limited form of staged computation, where the only `stages' are compile-time and run-time.
@@ -471,104 +521,125 @@ While our original process formulation \REFTODO{processes and fusion} used a glo
 Instead of a global heap, we will treat each label as a separate function definition that explicitly passes variables as function arguments.
 
 
-\section{Example}
-
-Look at a simple example first: we just want to read some file and do some things.
-It doesn't matter what.
-\begin{lstlisting}
-mapFilter :: FilePath -> FilePath -> IO ()
-mapFilter fileIn fileOut = do
-  @$$(fuse $ do
-     ins    <- source @[||sourceOfFile fileIn||]@
-     above  <- filter @[||\i -> i > 0        ||]@ ins
-     double <- map    @[||\i -> i * 2        ||]@ above
-     sink double      @[||sinkToFile fileOut ||]@)@
-\end{lstlisting}
-
-We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
-It has the following type.
-\begin{lstlisting}
-fuse :: Network () -> Q (TExp (IO ()))
-\end{lstlisting}
-That is, it takes a process network and returns the expression for the underlying @IO@ computation.
-The process network @Network ()@ is a monad as well.
-
-The process network first constructs a source that reads from a file.
-\begin{lstlisting}
-source :: Q (TExp (Source a))                -> Network (Channel a)
-filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
-map    :: Q (TExp (a -> b))     -> Channel a -> Network (Channel b)
-sink   :: Q (TExp (Sink a))     -> Channel a -> Network (Channel a)
-\end{lstlisting}
-The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
-
-Now show the generated code.
-
 \section{Single process example}
 Let us perform code generation for a single-process example.
-There is no fusion in this example, but it suffices to show the code generation part; a fused program would simply have a more complex process.
+There is no fusion in this example, but it suffices to show the code generation part; a program with multiple processes fused together would simply end up as a more complex process.
+
+In this example, we create a source to read from the file @fpIn@, then @map@ to take the @tail@ of each line, to remove the first character, and finally create a sink to write each tailed line to the file @fpOut@.
 
 \begin{lstlisting}
-run fpIn fpOut =
+tailsIO :: FilePath -> FilePath -> IO ()
+tailsIO fpIn fpOut =
  $$(fuse $ do
-  i <- source [||sourceOfFile fpIn||]
-  o <- map    [||\v -> v + 1      ||]
-  sink o      [||sinkToFile fpOut ||])
+  lines <- source [||sourceOfFile fpIn||]
+  tails <- map    [||\v -> tail v     ||]
+  sink tails      [||sinkToFile fpOut ||])
 \end{lstlisting}
+
+When we print the intermediate process network before code generation, we get the following.
+Sources and sinks are specified for @lines@ and @tails@, as in the code above.
+The map process starts at label @l0@, which pulls from the source @lines@.
+If the pull succeeds, it proceeds to @l1@, which then pushes to the sink @tails@.
+If the pull fails, it proceeds to @l3@, which closes the output sink before finishing processing at @l4@.
 
 \begin{lstlisting}
 NetworkGraph
-  sources: i = sourceOfFile fpIn
-  sinks:   o = sinkOfFile fpOut
+  sources: lines = sourceOfFile fpIn
+  sinks:   tails = sinkOfFile   fpOut
   processes:
     Process "map"
-      inputs:  i
-      outputs: o
+      inputs:  lines
+      outputs: tails
       initial: l0
       instructions:
-        l0   = Pull i l1 l3
-        l1 v = Push o (v + 1) l2
-        l2   = Drop i l0
-        l3   = Close o l4
+        l0   = Pull  lines l1       l3
+        l1 v = Push  tails (tail v) l2
+        l2   = Drop  lines l0
+        l3   = Close tails l4
         l4   = Done
 \end{lstlisting}
 
+Let us now go through the generated code, piece by piece.
+We start by unpacking the @lines@ source (@sourceOfFile fpIn@) and getting its initialisation function (@lines'init@), its pull function (@lines'pull@), and its close function (@lines'done@).
+We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because one cannot use accessor functions on existential types.
+We perform the same unpacking for the @tails@ sink.
+
 \begin{lstlisting}
-run fpIn fpOut = do
+tailsIO fpIn fpOut = do
   case sourceOfFile fpIn of
-   Source i'init i'pull i'done -> do
+   Source lines'init lines'pull lines'done -> do
     case sinkOfFile fpOut of
-     Sink o'init o'push o'done -> do
+     Sink tails'init tails'push tails'done -> do
+\end{lstlisting}
 
-      let l0 !_ i's o's = do
-            (v, i's') <- i'pull i's
+\begin{lstlisting}
+      let l0 !_ lines's tails's = do
+            (v, lines's') <- lines'pull lines's
             case v of
-             Nothing -> l3 SPEC i's' o's
-             Just v' -> l1 SPEC i's' o's v'
+             Nothing -> l3 SPEC lines's' tails's
+             Just v' -> l1 SPEC lines's' tails's v'
+\end{lstlisting}
 
-          l1 !_ i's o's v = do
-            o's' <- o'push o's v
-            l2 SPEC i's o's
+\begin{lstlisting}
+      let l1 !_ lines's tails's v = do
+            tails's' <- tails'push tails's v
+            l2 SPEC lines's tails's
+\end{lstlisting}
 
-          l2 !_ i's o's =
-            l0 SPEC i's o's
+\begin{lstlisting}
 
-          l3 !_ i's o's = do
-            o'done o's
-            l4 SPEC i's
-          l4 !_ i's = do
-            i'done i's
+      let l2 !_ lines's tails's =
+            l0 SPEC lines's tails's
+\end{lstlisting}
+
+\begin{lstlisting}
+
+      let l3 !_ lines's tails's = do
+            tails'done tails's
+            l4 SPEC lines's
+\end{lstlisting}
+
+\begin{lstlisting}
+
+      let l4 !_ lines's = do
+            lines'done lines's
             return ()
-      
-      i's0 <- i'init
-      o's0 <- o'init
-      l0 SPEC i's0 o's0
+\end{lstlisting}
+
+\begin{lstlisting}
+      lines's0 <- lines'init
+      tails's0 <- tails'init
+      l0 SPEC lines's0 tails's0
 \end{lstlisting}
 
 \section{Size hints}
 \label{s:implementation:sizehints}
 Talk about @vectorSizeIO@ and why it's useful.
 Reference \autoref{s:Future:SizeInference} for how to infer this.
+
+\section{Constructing processes}
+\begin{lstlisting}
+filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
+filter predicate as = do
+ bs <- channel
+ predicate' <- liftQ $ unTypeQ predicate
+ process (Next (Label 0) [])
+   [ (Label 0, InstructionBinding []
+              (pull as (Next (Label 1) []) (Next (Label 3) []))
+   , (Label 1, InstructionBinding [Var 0]
+              (If [|$predicate' $(var 0)|]
+                (Next (Label 2) [var 0])
+                (Next (Label 3) [])))
+   , (Label 2, InstructionBinding [Var 0]
+              (push bs (var 0) (Next (Label 3) [])))
+   , (Label 3, InstructionBinding []
+              (drop as (Next Label 0)))
+
+   , (Label 4, InstructionBinding []
+              (Done))]
+
+ return bs
+\end{lstlisting}
 
 \section{Types for constructing networks}
 

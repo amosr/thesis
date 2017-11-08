@@ -2,63 +2,17 @@
 \label{chapter:process:implementation}
 
 
-We have implemented this fusion system \REFTODO{processes and fusion} in a library called @folderol@\footnote{\url{https://github.com/amosr/folderol}}.
-Rather than modifying the compiler to support our particular fusion system, we use Template Haskell, which allows us to perform code-generation at compile-time: a form of macro metaprogramming.
+Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{processes and fusion}.
+Folderol uses Template Haskell, a form of macro meta-programming, to perform custom code-generation at compile-time.
+In this way, we can perform non-local\footnote{although not necessarily `global' in the whole-program sense} transforms over a process network, as well as providing fusion guarantees by allowing the programmer to designate when fusion failures should be compile-time errors.
+This is in contrast to fusion systems using local rewrite rules, which can only perform local shortcut fusion, and where the only means of telling when fusion did \emph{not} occur is to inspect intermediate code \REFTODO{shortcut; this will be expanded in an earlier chapter, so this is just a reminder}.
 
-This chapter explains how to generate code for processes, while taking advantage of the existing optimisations in the Glasgow Haskell Compiler (GHC).
-Generating code for a single process is fairly straightforward in itself; the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
-Haskell supports imperative language constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
-If we wish to get good performance, we must generate code closer to what the compiler expects.
-
-\section{Constructing a process network}
-
-First, we will look at constructing a process network in @folderol@.
-Let us look at a simple example: we just want to read some file and do some things.
-\TODO{want a better example, some running example that goes through the whole thesis. Perhaps customer-transactions plus birthdays.}
-\begin{lstlisting}
-applyTransactions :: FilePath -> FilePath -> IO ()
-applyTransactions fileIn fileOut =
-  $$(fuse $ do
-     cust  <- source [||sourceOfFile fileCust||]
-     txns  <- source [||sourceOfFile fileTxns||]
-     cust' <- map    [||parseCust            ||] cust
-     txns' <- map    [||parseTxns            ||] txns
-
-     (newCust, invalid) <- groupLeft [||applyTxn||] cust' txns'
-
-     sink newCust [||sinkToFile fileOutCust   ||]
-     sink invalid [||sinkToFile fileOutInvalid||])
-\end{lstlisting}
-
-\begin{lstlisting}
-mapFilter :: FilePath -> FilePath -> IO ()
-mapFilter fileIn fileOut =
-  $$(fuse $ do
-     ins    <- source [||sourceOfFile fileIn||]
-     above  <- filter [||\i -> i > 0        ||] ins
-     double <- map    [||\i -> i * 2        ||] above
-     sink double      [||sinkToFile fileOut ||])
-\end{lstlisting}
-
-% We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
-% It has the following type.
-% \begin{lstlisting}
-% fuse :: Network () -> Q (TExp (IO ()))
-% \end{lstlisting}
-% That is, it takes a process network and returns the expression for the underlying @IO@ computation.
-% The process network @Network ()@ is a monad as well.
-% 
-% The process network first constructs a source that reads from a file.
-% \begin{lstlisting}
-% source :: Q (TExp (Source a))                -> Network (Channel a)
-% filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
-% map    :: Q (TExp (a -> b))     -> Channel a -> Network (Channel b)
-% sink   :: Q (TExp (Sink a))     -> Channel a -> Network (Channel a)
-% \end{lstlisting}
-% The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
-% 
-% Now show the generated code.
-% 
+This chapter looks at the implementation, in particular how to generate efficient code for a fused process; other parts of this chapter are mere prerequisites for this.
+Generating code for a single process is fairly straightforward in itself: the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
+However, code generation needs to be tailored specifically to take advantage of the optimisations in the target language, which in this case is the Glasgow Haskell Compiler (GHC).
+Haskell does support imperative constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
+Mutable references are not optimised particularly well.
+If we wish to generate efficient code, we must --- perhaps surprisingly --- avoid mutable references, and generate code closer to what the compiler expects.
 
 \section{Template Haskell}
 Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template}.
@@ -210,6 +164,81 @@ What we are losing is good error locations. If there are bugs in the untyped cor
 This may make it hard to track down the original error location.
 But if the core is correct, this should not happen.
 So this is the idea at least.
+
+\section{Constructing a process network}
+
+Now let us construct an example process network in Folderol.
+In due course we will inspect its generated code, but first it is necessary to see how process networks are constructed.
+For this example we shall write a program to read input lines from a file, filter out all except those starting with the string \verb/"Good"/, and write the results to file.
+In a Unix-style environment, we would write this as ``@grep ^Good@''; the caret (@^@) meaning ``starting with''.
+For this reason we call the function @grepGood@.
+
+\begin{lstlisting}
+grepGood :: FilePath -> FilePath -> IO ()
+grepGood fileIn fileOut =
+  $$(fuse $ do
+     input  <- source [||sourceOfFile fileIn||]
+     goods  <- filter [||isPrefixOf "Good"  ||] input
+     sink      goods  [||sinkToFile fileOut ||])
+\end{lstlisting}
+
+The function @grepGood@ takes two arguments of type @FilePath@.
+These are the input and output filenames.
+Inside the definition, the Template Haskell splice \verb/$$(fuse ...)/ takes the process network as an argument, fuses the processes together, and generates output code.
+We are constructing the process network inside the Template Haskell splice at compile-time, while we wish to execute it at run-time.
+The process network is the static representation of the computation, and must be statically known and finite.
+
+Inside the process network, we start by creating a \emph{source} to read from the input file @fileIn@.
+The @source@ function constructs a process network which, at runtime, reads from a source.
+The @input@ binding in this case refers to the abstract name of the stream in the process network, rather than the runtime values of the stream.
+This is an important distinction, as expressions operating over runtime values need to be quasiquoted in order to delay them from compile-time to run-time.
+Thus, the argument to @source@ describing how to read from the input source (read from a file using @sourceOfFile@) must be surrounded in a (typed) Template Haskell quasiquote.
+
+Now we take the values in @input@ and filter them to those starting with the string \verb/"Good"/.
+Again considering the compile-time/run-time distinction, the fact that the @filter@ process uses @input@ as its input is known at compile-time, and is not quasiquoted; while the predicate, which depends on the run-time stream values, must be quasiquoted.
+We call the output filtered stream @goods@.
+
+Finally, we send the filtered output to a file, by creating a \emph{sink}.
+The @sink@ function is the opposite of @source@, and just like @source@ it requires the description of how to sink (writing to a file using @sinkToFile@) to be quasiquoted.
+
+Show the process network and the processes.
+Soon enough, we shall return to this.
+
+
+% \begin{lstlisting}
+% applyTransactions :: FilePath -> FilePath -> IO ()
+% applyTransactions fileIn fileOut =
+%   $$(fuse $ do
+%      cust  <- source [||sourceOfFile fileCust||]
+%      txns  <- source [||sourceOfFile fileTxns||]
+%      cust' <- map    [||parseCust            ||] cust
+%      txns' <- map    [||parseTxns            ||] txns
+% 
+%      (newCust, invalid) <- groupLeft [||applyTxn||] cust' txns'
+% 
+%      sink newCust [||sinkToFile fileOutCust   ||]
+%      sink invalid [||sinkToFile fileOutInvalid||])
+% \end{lstlisting}
+
+% We start with the Template Haskell splice \verb/$$(fuse ...)/. In the code it is blue. 
+% It has the following type.
+% \begin{lstlisting}
+% fuse :: Network () -> Q (TExp (IO ()))
+% \end{lstlisting}
+% That is, it takes a process network and returns the expression for the underlying @IO@ computation.
+% The process network @Network ()@ is a monad as well.
+% 
+% The process network first constructs a source that reads from a file.
+% \begin{lstlisting}
+% source :: Q (TExp (Source a))                -> Network (Channel a)
+% filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
+% map    :: Q (TExp (a -> b))     -> Channel a -> Network (Channel b)
+% sink   :: Q (TExp (Sink a))     -> Channel a -> Network (Channel a)
+% \end{lstlisting}
+% The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
+% 
+% Now show the generated code.
+% 
 
 
 

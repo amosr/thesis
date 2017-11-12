@@ -2,30 +2,46 @@
 \label{chapter:process:implementation}
 
 
-Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{processes and fusion}.
-Folderol uses Template Haskell, a form of macro meta-programming, to perform custom code-generation at compile-time.
-In this way, we can perform non-local\footnote{although not necessarily `global' in the whole-program sense} transforms over a process network, as well as providing fusion guarantees by allowing the programmer to designate when fusion failures should be compile-time errors.
-This is in contrast to fusion systems using local rewrite rules, which can only perform local shortcut fusion, and where the only means of telling when fusion did \emph{not} occur is to inspect intermediate code \REFTODO{shortcut; this will be expanded in an earlier chapter, so this is just a reminder}.
+Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{fusion}.
+Machine Fusion uses the topology of the entire process network to perform fusion.
+When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
+This coordination between all consumers means the fusion algorithm requires global knowledge of the process network.
+In contrast, shortcut fusion systems \REFTODO{shortcut} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
+In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
+This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
+In order to fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
 
-This chapter looks at the implementation, in particular how to generate efficient code for a fused process; other parts of this chapter are mere prerequisites for this.
+This chapter looks at the implementation of Folderol, in particular how to generate efficient code for a fused process.
 Generating code for a single process is fairly straightforward in itself: the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
-However, code generation needs to be tailored specifically to take advantage of the optimisations in the target language, which in this case is the Glasgow Haskell Compiler (GHC).
+However, code generation needs to be tailored specifically to take advantage of the optimisations in the target compiler, which in this case is the Glasgow Haskell Compiler (GHC).
 Haskell does support imperative constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
 Mutable references are not optimised particularly well.
 If we wish to generate efficient code, we must --- perhaps surprisingly --- avoid mutable references, and generate code closer to what the compiler expects.
 
 \section{Template Haskell}
-Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template}.
-Template Haskell can be thought of as an untyped, limited form of staged computation, where the only `stages' are compile-time and run-time.
-There is also a typed variant, which we will use for defining a typesafe interface, while using the untyped variant for code generation.
-Let us study the untyped variant first.
+Template Haskell is a metaprogramming extension for Haskell \cite{sheard2002template} which provides a limited form of staged computation, where the only `stages' are compile-time and runtime.
+There are two variants of Template Haskell: untyped and typed.
+Untyped Template Haskell does not enforce well-typedness of the generated program until after the program is generated, which means it is quite easy to generate ill-typed programs.
+Even though we can generate ill-typed programs, overall soundness is preserved because the generated program is still typechecked and compiled at compile-time.
+On the other hand, typed Template Haskell enforces well-typedness of the generated program by lifting types in the generated program up to the meta-level as types in the generator program.
+
+We use untyped Template Haskell for code generation.
+Performing typed code generation is equivalent to proving that the result program is well-typed, whereas untyped code generation requires no such proof.
+This makes the untyped version easier to implement.
+While typed code generation is no doubt possible, it is an interesting research problem on its own \CITE{Accelerate}.
+
+The problem with using untyped code generation is that if there are type errors they will not be found until quite late, once the generated code has been spliced into the main program.
+This means that when the programmer sees the type error, the error location will be in the generated code.
+That is, the error is shown in code the program wrote, rather than code the programmer wrote.
+This complicates finding the underlying cause of the error and fixing the problem.
+Type safety is a big problem when we wish to provide a library for other programmers: it is unacceptable to require a user of the library to understand the internal workings of code generation, in order to understand type errors.
+Typed Template Haskell allows us to provide a type-safe interface to users of the library.
 
 \subsection{Untyped expressions}
+\TODO{find a better example. This is placeholder.}
 
-Template Haskell extends regular Haskell with two syntactic constructs: quasiquoting and splicing.
-Quasiquoting and splicing allow us to jump back and forth between executing code at compile-time and generating code to be evaluated at run-time.
-
-Quasiquoting converts the syntactic form of an expression to an abstract syntax tree representation which can be manipulated.
+Template Haskell extends regular Haskell with two syntactic constructs: quasiquoting and splicing, for moving between runtime and compile-time stages.
+Quasiquoting converts a runtime expression to a compile-time value, while splicing performs the opposite conversion.
 For example, we can quasiquote some arithmetic using the syntax \lstinline/[|1+2|]/, which produces the corresponding abstract syntax tree for an infix operator with two integer arguments:
 
 \begin{lstlisting}
@@ -35,12 +51,12 @@ InfixE (Just (LitE (IntegerL 1))) (VarE GHC.Num.+) (Just (LitE (IntegerL 2)))
 Quasiquoting is a purely syntactic convenience, as any quasiquoted expressions could be produced using the abstract syntax tree constructors directly.
 That said, it is a particularly useful convenience which we will use extensively.
 
-Splicing is the opposite of quasiquoting: it takes a compile-time abstract syntax tree and converts it back to an expression which will be evaluated at runtime.
+Splicing takes a compile-time abstract syntax tree and converts it to an expression to be evaluated at runtime.
 For example, splicing back the quasiquoted arithmetic using the syntax \lstinline/$([|1+2|])/, will evaluate (@1+2@) at runtime.
 
 Splicing and quasiquoting operate in the @Q@ monad.
 The @Q@ monad gives a fresh name supply, so that when names are bound inside expressions they can be given unique names.
-This way newly bound names will not interfere with existing bindings.
+These fresh names ensure that newly bound names will not interfere with existing bindings.
 
 Now let us look at a concrete example of how to use Template Haskell.
 Suppose we wish to define a power function where the exponent is known at compile time, but the mantissa is not known until runtime.
@@ -53,13 +69,12 @@ Later we shall use typed Template Haskell to make this extra type information ex
 \begin{lstlisting}
 power :: Int -> Q Exp
 power 0 = [|\m -> 1                      |]
-power e = [|\m -> $(power (n - 1)) i * i |]
+power e = [|\m -> $(power (e - 1)) m * m |]
 \end{lstlisting}
 
 The @power@ function pattern-matches on the exponent.
 When the exponent is zero, we enter quasiquoting mode and construct a function that always returns one.
-This function ignores its input argument, the mantissa.
-When the exponent (@e@) is non-zero, we again enter quasiquoting mode and construct a function, taking the mantissa (@m@) as its argument.
+When the exponent is non-zero, we again enter quasiquoting mode and construct a function, taking the mantissa as its argument.
 Inside the quasiquote, we need to handle the recursive case for the one-smaller exponent (\lstinline/e - 1/), so we enter into splicing mode with \lstinline/$(power (e - 1))/ to compute the one-smaller power.
 The splice for the one-smaller power returns a function, to which we apply the mantissa.
 Finally, we multiply the one-smaller power of the mantissa by the mantissa itself.
@@ -70,44 +85,33 @@ The type inside the splice is \lstinline/Q Exp/, and once splicing is complete t
 
 \begin{lstlisting}
 power2 :: Int -> Int
-power2 = @$(power 2)@
+power2 = $(power 2)
 \end{lstlisting}
 
-% This is a ``top-level splice'' because it is not inside a quasiquotation.
-% Top-level splices can only refer to bindings imported from other modules, not ones defined locally.
-% For this reason, @power2@ must be defined in a different module to @power@.
-% Cross-stage persistence.
-
-The reason for specialising @power2@ is efficiency, so it is worth inspecting the resulting code to check that it is indeed efficient.
+The reason we specialised @power2@ was to produce optimised code, so it is worth inspecting the resulting code to check whether it is indeed optimal.
 The compiler option (@-ddump-splices@) outputs the result splices, as follows.
-% The names of variables have changed slightly for for readability.
 
 \begin{lstlisting}
 $(power 2) =
   \m0 -> (\m1 -> (\m2 -> 1) m1 * m1) m0 * m0
 \end{lstlisting}
 
-This is a roundabout way to multiply a number by itself, and there are a lot of opportunities for simplifying that code.
-While we expect the compiler to be able to remove these inefficiencies by beta reduction, it would be even better to not introduce them in the first place.
+This is a roundabout way to multiply a number by itself, and there are a lot of opportunities to simplify that code.
+While we expect the compiler to remove the extra lambdas by beta reduction, it would be even better to not introduce them in the first place.
 If we do not introduce inefficiencies in the first case, there is no uncertainty about whether the compiler will be able to remove them.
-The problem is that @power@ introduces a lambda for each recursive step, while we only really need one lambda at the top-level.
+The problem is that @power@ introduces a lambda for each recursive step, while we only want one lambda at the top-level.
 So let us fix this by defining a top-level function which introduces the lambda, and a recursive helper function to compute the power.
-
-The top-level function @powerS@ takes the exponent as an argument, then inside quasiquote, constructs a lambda expression for the mantissa (@m@).
-Now in order to call the recursive helper function, @powerS'@, which also returns an expression (@Q Exp@), we need to re-enter splicing mode.
-The helper @powerS'@ takes two arguments, the first being the exponent, and secondly the expression denoting the mantissa (@m@), since the actual mantissa is not known yet.
-To pass the expression denoting the mantissa, we need to switch once more into quasiquoting mode.
 
 \begin{lstlisting}
 powerS :: Int -> Q Exp
 powerS e = [|\m -> $(powerS' e [|m|])|]
 \end{lstlisting}
 
-We now define the recursive helper function, @powerS'@, with type \lstinline/Int ->  Q Exp ->  Q Exp/.
-Like the original @power@, it starts by pattern-matching on the exponent.
-Unlike in @power@, we have already bound the expression denoting the mantissa to the parameter @m@, so we need not introduce any lambdas.
-When the exponent is zero, we return the quasiquoted expression for one.
-When the exponent is non-zero, we recursively compute the one-smaller power, and multiply by the splice of the mantissa expression.
+The top-level function @powerS@ introduces the lambda for the mantissa inside a quasiquote, then calls the helper function @powerS'@.
+The exponent is a compile-time binding, while the mantissa is a runtime binding.
+When the helper function is called at compile-time, the exponent can be passed as-is, while the mantissa must be quasiquoted to wrap the runtime binding into a compile-time expression.
+
+The recursive helper function, @powerS'@, has type \lstinline/Int ->  Q Exp ->  Q Exp/.
 
 \begin{lstlisting}
 powerS' :: Int -> Q Exp -> Q Exp
@@ -115,9 +119,8 @@ powerS' 0 m = [|1                        |]
 powerS' e m = [|$(powerS' (e-1) m) * $(m)|]
 \end{lstlisting}
 
-% Note that the quoted expresssion \lstinline/[|m|]/ is \emph{open}: it refers to bindings outside the environment.
-% This means if you somehow kept a hold of that expression and used it in a different context, outside the lambda binding, it would be incorrect.
-% So you can construct bad, ill-typed expressions with Template Haskell. This is certainly not ideal, but is just something to be aware of.
+Like the original @power@ function, it pattern-matches on the exponent and in the recursive case multiplies by itself.
+The difference is that the mantissa is bound as a compile-time expression with type (@Q Exp@) rather than inside the quasiquote, so it must be spliced when it is used.
 
 The output for (@powerS 2@) is a lot simpler than that for (@power 2@).
 Whereas before there was a lambda introduced and applied at each recursive step, now there is only a single lambda.
@@ -127,48 +130,33 @@ $(powerS 2) =
   \m -> ((1 * m) * m)
 \end{lstlisting}
 
-There is still more we could do to improve the function: for example, (@1 * i@) could be replaced by @i@.
+There is still more we could do to improve the function: for example, (@1 * m@) could be replaced by @m@.
 However, this is sufficient to show the core splicing and quoting ideas behind Template Haskell.
 For more information on staging in general, \citet{rompf2010lightweight} takes this example further.
 
 \subsection{Typed expressions}
 
-One problem with Template Haskell shown above is that there are no types attached to expressions.
-Quasiquoting a string \lstinline/[|"one"|]/ and quasiquoting an integer \lstinline/[|1|]/ both produce a value of the same type: @Q Exp@.
-We can then use these expressions to construct larger, completely untypable expressions; for example we could try to subtract a string from an integer, which should surely fail: \lstinline/[|1 - "one"|]/.
-Typechecking does still occur on the generated expressions eventually, but only after they have been spliced in to the main program.
-This means that the when the programmer sees the type error, it may be nested arbitrarily deep within the generated code.
-That is, the error will be shown in code the program wrote, rather than code the programmer wrote.
-This complicates the matter of finding the root cause and fixing the problem.
-This is an even bigger problem when we wish to provide a library for other programmers: it is unacceptable to require a user of the library to understand the internal workings of code generation, in order to understand type errors.
-
-% The original Template Haskell paper doesn't include \emph{typed} Template Haskell, which is what we really want to talk about.
-% In the original paper, generated expressions don't have types.
-% Typechecking does still occur on the expressions, though, but only after they have been spliced together.
-% This is less of a problem for generation alone --- if you trust the generation code.
-% But when you want higher-order templates that take expressions as arguments, you want to be able to make sure your caller gives you an expression of the right type.
-% Otherwise the type error will be very well hidden, somewhere inside the generated code.
-% For the user, having to figure out where their input expression ended up inside the generated code, is a real hassle.
+% The problem with Template Haskell shown above is that there are no types attached to expressions.
+% Quasiquoting a string \lstinline/[|"one"|]/ and quasiquoting an integer \lstinline/[|1|]/ both produce a value of the same type: @Q Exp@.
+% We can then use these expressions to construct larger, completely untypable expressions; for example we could try to subtract a string from an integer, which should surely fail: \lstinline/[|1 - "one"|]/.
 
 Typed Template Haskell extends the Template Haskell we have seen with typed expressions, typed splicing and typed quasiquoting.
-The type of typed expressions, @TExp@, is annotated with a type argument denoting the type that the expression will have when spliced in.
+The type of typed expressions, @TExp@, is annotated with a meta-level (compile-time) type argument denoting the object-level type of the expression.
 Syntactically, typed quasiquotation uses two pipes, while typed splicing uses two dollar signs.
-For example, using a typed quasiquote on a string will produce a @String@-typed expression: \lstinline/[||"one"||] :: Q (TExp String)/
-Similarly, typed splicing eliminates the @Q@ monad and the @TExp@ wrapper, leaving only the result type: \lstinline/$$([||"one"||]) :: String/.
+For example, using a typed quasiquote on a string will produce a @String@-typed expression: (\lstinline/[||"one"||] :: Q (TExp String)/).
+Similarly, typed splicing eliminates the @Q@ monad and the @TExp@ wrapper, leaving only the result type: (\lstinline/$$([||"one"||]) :: String/).
 
 Typed expressions are invaluable for providing a typesafe way to construct process networks.
 We need to construct process networks at compile-time in order to fuse them at compile-time, while keeping the information required to execute them at runtime.
-Consider the standard @filter@ function for lists, with type \lstinline/(a ->  Bool) ->  [a] ->  [a]/.
-In order to implement a process network version of @filter@, the function argument of type \lstinline/(a ->  Bool)/ must be converted to an expression, as it will be evaluated at runtime.
-Providing a @filter@ function which takes as an argument the typed expression (\lstinline/Q (TExp (a ->  Bool))/) instead of the untyped expression (\lstinline/Q Exp/) means that type errors can be caught early.
+Consider the standard @filter@ function for lists, with type (\lstinline/(a ->  Bool) ->  [a] ->  [a]/).
+In order to implement a process network version of @filter@, the function argument of type (\lstinline/(a ->  Bool/) must be converted to an expression, as it will be evaluated and applied at runtime.
+Providing a process network @filter@ function which takes as an argument the typed expression (\lstinline/Q (TExp (a ->  Bool))/) instead of the untyped expression (\lstinline/Q Exp/) means that type errors can be caught early.
 
-However, for code generation the untyped variant is an easier target.
-While typesafe code generation is no doubt possible, it is an interesting research problem in its own right\CITE{Accelerate?}.
-Instead, we provide an untyped core for the processes and networks, then build on top of this to provide a typed interface for constructing networks.
+We provide an untyped core for the processes and networks, then build on top of this to provide a typed interface for constructing networks.
 For this reason, we need to be able to convert from typed expressions to untyped expressions.
-We can convert from a typed expression to an untyped expression using the @unTypeQ@ function, which has type \lstinline/Q (TExp a) ->  Q Exp/.
-This does not affect the expression itself, and once it is spliced in it will have the same type.
-It just throws away some type-level information.
+We can convert from a typed expression to an untyped expression using the @unTypeQ@ function, which has type (\lstinline/Q (TExp a) ->  Q Exp/).
+This does not affect the underlying expression, it just throws away the meta-level type information.
+The object-level type information remains, and once it is spliced in it will have the same type.
 
 % Conversely, if one is very careful, one can convert an untyped expression to a typed one.
 % This is an unsafe operation, because one can choose any type at all for the expression.
@@ -176,24 +164,18 @@ It just throws away some type-level information.
 % \begin{lstlisting}
 % unsafeTExpCoerce :: Q Exp -> Q (TExp a)
 % \end{lstlisting}
-
-By using untyped expressions for code generation, we do not lose any actual type safety, since the generated code will still end up being typechecked by the Haskell compiler.
-What we do lose are good error locations, but these errors will only occur if there are bugs in the code generator.
-Any type errors in the user of the library will be using the typesafe interface, with better error messages.
+ 
+% By using untyped expressions for code generation, we do not lose any actual type safety, since the generated code will still end up being typechecked by the Haskell compiler.
+% What we do lose are good error locations, but these errors will only occur if there are bugs in the code generator.
+% Any type errors in the user of the library will be using the typesafe interface, with better error messages.
 
 % Although it is possible to construct expressions with the wrong type, this generally requires explicitly unsafe operations.
 % Most of the time, this is unlikely to occur by accident alone.
 
-Meta-Repa \cite{ankner2013edsl} also uses Template Haskell for code generation, and provides a similar distinction between typed interface and untyped code generation.
-It provides a generalised abstract datatype (GADT) for its typed interface rather than using typed Template Haskell, but this is presumably only because it was implemented before typed Template Haskell.
-
 \section{Constructing a process network}
 
-Now let us construct an example process network in Folderol.
+The following example constructs a process network in Folderol.
 In due course we will inspect its generated code, but first it is necessary to see how process networks are constructed.
-For this example we shall write a program to read input lines from a file, filter out all except those starting with the string \lstinline/"Good"/, and finally write the results to file.
-In a Unix-style environment, we would write this as ``@grep ^Good@''; the caret (@^@) meaning ``starting with''.
-For this reason we call the function @grepGood@.
 
 \begin{lstlisting}
 grepGood :: FilePath -> FilePath -> IO ()
@@ -204,20 +186,24 @@ grepGood fileIn fileOut =
      sink      goods  [||sinkToFile   fileOut||])
 \end{lstlisting}
 
-The function @grepGood@ takes two arguments of type @FilePath@.
-These are the input and output filenames.
+This example reads input lines from a file, filters out all except those starting with the string \lstinline/"Good"/, and finally writes the results to file.
+In a Unix-style environment, we would write this as ``@grep ^Good@''; the caret (@^@) meaning ``starting with''.
+
+The function @grepGood@ takes two arguments of type @FilePath@ for the input and output filenames.
 Inside the definition, the Template Haskell splice \lstinline/$$(fuse ...)/ takes the process network as an argument, fuses the processes together, and generates output code.
-We are constructing the process network inside the Template Haskell splice at compile-time, while we wish to execute it at run-time.
+We are constructing the process network inside the Template Haskell splice at compile-time, while we wish to execute it at runtime.
 The process network is the static representation of the computation, and must be statically known and finite.
 
-Inside the process network, we start by creating a \emph{source} to read from the input file @fileIn@.
-The @source@ function constructs a process network which, at runtime, reads from a source.
+Inside the process network we start by creating a \emph{source} to read from the input file @fileIn@.
+The @source@ function creates an input stream in the process network which can be used by other processes.
 The @input@ binding in this case refers to the abstract name of the stream in the process network, rather than the runtime values of the stream.
-This is an important distinction, as expressions operating over runtime values need to be quasiquoted in order to delay them from compile-time to run-time.
-Thus, the argument to @source@ describing how to read from the input source (read from a file using @sourceOfFile@) must be surrounded in a (typed) Template Haskell quasiquote.
+This is an important distinction, as expressions operating over runtime values need to be quasiquoted in order to delay them from compile-time to runtime.
+Similarly, the input file @fileIn@ will not be known until runtime.
+The choice of source does not affect fusion, and does not need to be known at compile time.
+Since many sources depend on runtime values, the entire source is delayed until runtime and must be quasiquoted.
 
-Now we take the values in @input@ and filter them to those starting with the string \lstinline/"Good"/.
-Again considering the compile-time/run-time distinction, the fact that the @filter@ process uses @input@ as its input is known at compile-time, and is not quasiquoted; while the predicate, which depends on the run-time stream values, must be quasiquoted.
+Now we take the values in the @input@ stream and filter them to those starting with the string \lstinline/"Good"/.
+Again considering the compile-time/runtime distinction, the fact that the @filter@ process uses the stream named @input@ as its input is known at compile-time, and is not quasiquoted; while the predicate, which depends on the runtime stream values, must be quasiquoted.
 We call the output filtered stream @goods@.
 
 Finally, we send the filtered output to a file, by creating a \emph{sink}.
@@ -1012,4 +998,8 @@ PQ_no_drop = process
 \end{lstlisting}
 
 
+\section{Related work}
+Meta-Repa \cite{ankner2013edsl} also uses Template Haskell for code generation, and provides a similar distinction between typed interface and untyped code generation.
+It provides a generalised abstract datatype (GADT) for its typed interface rather than using typed Template Haskell.
+It was implemented before typed Template Haskell.
 

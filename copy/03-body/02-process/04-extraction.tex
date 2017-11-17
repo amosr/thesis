@@ -9,7 +9,7 @@ This coordination between all consumers means the fusion algorithm requires glob
 In contrast, shortcut fusion systems \REFTODO{shortcut} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
 In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
 This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
-In order to fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
+To fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
 
 This chapter looks at the implementation of Folderol, in particular how to generate efficient code for a fused process.
 Generating code for a single process is fairly straightforward in itself: the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
@@ -34,7 +34,7 @@ The problem with using untyped code generation is that if there are type errors 
 This means that when the programmer sees the type error, the error location will be in the generated code.
 That is, the error is shown in code the program wrote, rather than code the programmer wrote.
 This complicates finding the underlying cause of the error and fixing the problem.
-Type safety is a big problem when we wish to provide a library for other programmers: it is unacceptable to require a user of the library to understand the internal workings of code generation, in order to understand type errors.
+Type safety is a big problem when we wish to provide a library for other programmers: it is unacceptable to require a user of the library to understand the internal workings of code generation to understand type errors.
 Typed Template Haskell allows us to provide a type-safe interface to users of the library.
 
 \subsection{Untyped expressions}
@@ -88,7 +88,8 @@ power2 :: Int -> Int
 power2 = $(power 2)
 \end{lstlisting}
 
-The reason we specialised @power2@ was to produce optimised code, so it is worth inspecting the resulting code to check whether it is indeed optimal.
+The reason for this specialisation is to produce optimised code: by knowing the exponent at compile-time, we can perform the recursion once at compile-time rather than many times at runtime.
+It is therefore worth inspecting the resulting code to check whether it is indeed optimal.
 The compiler option (@-ddump-splices@) outputs the result splices, as follows.
 
 \begin{lstlisting}
@@ -98,7 +99,7 @@ $(power 2) =
 
 This is a roundabout way to multiply a number by itself, and there are a lot of opportunities to simplify that code.
 While we expect the compiler to remove the extra lambdas by beta reduction, it would be even better to not introduce them in the first place.
-If we do not introduce inefficiencies in the first case, there is no uncertainty about whether the compiler will be able to remove them.
+If we do not introduce simplification opportunities in the first case, there is no uncertainty about whether the compiler will be able to remove them.
 The problem is that @power@ introduces a lambda for each recursive step, while we only want one lambda at the top-level.
 So let us fix this by defining a top-level function which introduces the lambda, and a recursive helper function to compute the power.
 
@@ -147,7 +148,7 @@ For example, using a typed quasiquote on a string will produce a @String@-typed 
 Similarly, typed splicing eliminates the @Q@ monad and the @TExp@ wrapper, leaving only the result type: (\lstinline/$$([||"one"||]) :: String/).
 
 Typed expressions are invaluable for providing a typesafe way to construct process networks.
-We need to construct process networks at compile-time in order to fuse them at compile-time, while keeping the information required to execute them at runtime.
+We need to construct process networks at compile-time to fuse them at compile-time, while keeping the information required to execute them at runtime.
 Consider the standard @filter@ function for lists, with type (\lstinline/(a ->  Bool) ->  [a] ->  [a]/).
 In order to implement a process network version of @filter@, the function argument of type (\lstinline/(a ->  Bool/) must be converted to an expression, as it will be evaluated and applied at runtime.
 Providing a process network @filter@ function which takes as an argument the typed expression (\lstinline/Q (TExp (a ->  Bool))/) instead of the untyped expression (\lstinline/Q Exp/) means that type errors can be caught early.
@@ -173,6 +174,7 @@ The object-level type information remains, and once it is spliced in it will hav
 % Most of the time, this is unlikely to occur by accident alone.
 
 \section{Constructing a process network}
+\label{s:extraction:grepGood}
 
 The following example constructs a process network in Folderol.
 In due course we will inspect its generated code, but first it is necessary to see how process networks are constructed.
@@ -197,10 +199,10 @@ The process network is the static representation of the computation, and must be
 Inside the process network we start by creating a \emph{source} to read from the input file @fileIn@.
 The @source@ function creates an input stream in the process network which can be used by other processes.
 The @input@ binding in this case refers to the abstract name of the stream in the process network, rather than the runtime values of the stream.
-This is an important distinction, as expressions operating over runtime values need to be quasiquoted in order to delay them from compile-time to runtime.
+This is an important distinction, as expressions operating over runtime values need to be quasiquoted to delay them from compile-time to runtime.
 Similarly, the input file @fileIn@ will not be known until runtime.
 The choice of source does not affect fusion, and does not need to be known at compile time.
-Since many sources depend on runtime values, the entire source is delayed until runtime and must be quasiquoted.
+Since most sources depend on runtime values in some way, the entire source is delayed until runtime and must be quasiquoted.
 
 Now we take the values in the @input@ stream and filter them to those starting with the string \lstinline/"Good"/.
 Again considering the compile-time/runtime distinction, the fact that the @filter@ process uses the stream named @input@ as its input is known at compile-time, and is not quasiquoted; while the predicate, which depends on the runtime stream values, must be quasiquoted.
@@ -251,16 +253,24 @@ Soon enough, we shall return to this.
 
 
 \section{All this boxing and unboxing}
+\TODO{Reorganise: what does boxing have to do with fusion?}
+
 In Haskell, most values are boxed by default \citep{jones1991unboxed}.
 Boxed values are stored as pointers to heap objects, which can in turn reference other boxed or unboxed values.
-Boxed values are useful for implementing parametric polymorphism because they give a uniform representation to all the different types.
-A list which is polymorphic in its element type can use a pointer to refer to its values regardless of the actual element type.
+Pointers have a uniform representation regardless of the type of the object they point to.
+This uniform representation allows the same generated code for a polymorphic data structure or function to be used for any boxed type.
+A list which is polymorphic in its element type can use the same pointer type to refer to its values regardless of the actual element type.
 
-The problem with boxed values is that they require an extra allocation per object, as well as a pointer indirection for each access.
-This can cause performance issues in tight loops, particularly because most objects are immutable.
+The problem with boxed values is that they require at least one allocation per object and a pointer indirection for each access.
+Incrementing an unboxed integer stored in a register is a single instruction.
+Incrementing a boxed integer requires more work.
+First the value is read from memory into a register, where it is incremented.
+In Haskell most heap objects are immutable; rather than updating the original heap object, a new object must be allocated.
+Finally, the newly allocated object is filled in by copying the value from the register to memory.
+This copying and allocation makes boxed arithmetic at least an order of magnitude slower than unboxed arithmetic.
 
 Consider the following function, which loops over an array to compute its sum.
-It starts by calling the local function @loop@ with the initial loop index, and the initial sum.
+The function starts by calling the local function @loop@ with the initial loop index, and the initial sum.
 The definition of @loop@ checks if it has reached the end of the array, and if so returns the sum; otherwise it increments the running sum and proceeds to the next index.
 
 \begin{lstlisting}
@@ -275,23 +285,25 @@ sum vector = loop 0 0
      in loop (index + 1) (running_sum + value)
 \end{lstlisting}
 
-It is not clear from the program source alone, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
-If this were compiled naively it would be rather disastrous for performance, as in order to process each element of the array, it must allocate two new boxed values.
-Hilariously, all of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
-While the garbage collector is tuned for small, short-lived objects, it is better to not introduce the garbage in the first place.
+It is not explicit in the program source, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
+This function, if compiled naively, would spend more time boxing and unboxing than actually computing the sum.
+For each element of the array, the function allocates two new boxed values: the updated index and the updated sum.
+All of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
+While the garbage collector is tuned for small, short-lived objects, it is better to not create any garbage in the first place.
 
-Removing boxing is not a novel thing, and there are many ways to do this.
-The point to make is not that this is an interesting thing, just that we must know how it works in order to generate good code that fits it.
-Boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
+Compiler optimisations to replace boxed values with unboxed values are well-known, and there are many different ways to do this.
+The point to make is not that this is an interesting thing, just that we must know which optimisations our compiler performs to generate code that our compiler can optimise.
+
+In GHC, boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
 
 \begin{lstlisting}
 data Int = I# Int#
 \end{lstlisting}
 
 Now we know how machine-word integers are represented, we can look at an explicitly boxed version of @sum@.
-This is still using boxed integers, but all arithmetic is explicitly unboxing and reboxing.
+This version still uses boxed integers, but all arithmetic operations explicitly unbox and rebox the arguments and return values.
 Unboxed literals are written as @0#@ or @1#@.
-Unboxed arithmetic are written as @+#@ or @==#@, and @!#@ for unboxed indexing.
+Unboxed arithmetic operations are written as @+#@ or @==#@, and @!#@ for unboxed indexing.
 With explicit boxing, it should now be visible that the recursive call to @loop@ constructs new boxed integers.
 
 \begin{lstlisting}
@@ -355,14 +367,14 @@ sum vector = loop SPEC 0 0
 We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
 We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
 Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
-This means that in order to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
+This means that to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
 
 Unboxed mutable references do exist, but are unsuitable because they can \emph{only} store unboxed values.
 Recursive types such as linked lists cannot be stored in unboxed references.
 We desire an unboxed representation when possible, and boxed representation when necessary.
 
 It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
-Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing stream fusion in MetaOCaml.
+Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing Stream Fusion in MetaOCaml.
 So this will not necessarily map to other languages, but it is true in the particular case of GHC.
 
 In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
@@ -553,106 +565,240 @@ sinkToFile filepath
 
 \TODO{Spend a lot of time talking about why we need the state, but the examples only use the same filehandle. Need an example, eg to/from Vector or file IO with buffering, which uses the state.}
 
-\section{Process heap}
-While our original process formulation \REFTODO{processes and fusion} used a global heap of mutable variables, in our implementation we wish to take advantage of constructor specialisation for unboxing.
-Instead of a global heap, we will treat each label as a separate function definition that explicitly passes variables as function arguments.
-
-
-\section{Single process example}
-Let us perform code generation for a single-process example.
-There is no fusion in this example, but it suffices to show the code generation part; a program with multiple processes fused together would simply end up as a more complex process.
-
-In this example, we create a source to read from the file @fpIn@, then @map@ to take the @tail@ of each line, to remove the first character, and finally create a sink to write each tailed line to the file @fpOut@.
+\section{Code generation}
+We are now in a position to return to perform code generation on our @grepGood@ example (\autoref{s:extraction:grepGood}), which filters lines in a file.
+It has the following process network.
 
 \begin{lstlisting}
-tailsIO :: FilePath -> FilePath -> IO ()
-tailsIO fpIn fpOut =
- $$(fuse $ do
-  lines <- source [||sourceOfFile fpIn||]
-  tails <- map    [||\v -> tail v     ||]
-  sink tails      [||sinkToFile fpOut ||])
-\end{lstlisting}
-
-When we print the intermediate process network before code generation, we get the following.
-Sources and sinks are specified for @lines@ and @tails@, as in the code above.
-The map process starts at label @l0@, which pulls from the source @lines@.
-If the pull succeeds, it proceeds to @l1@, which then pushes to the sink @tails@.
-If the pull fails, it proceeds to @l3@, which closes the output sink before finishing processing at @l4@.
-
-\begin{lstlisting}
-NetworkGraph
-  sources: lines = sourceOfFile fpIn
-  sinks:   tails = sinkOfFile   fpOut
+Process network:
+  sources: input = sourceOfFile fileIn
+  sinks:   goods = sinkOfFile   fileOut
   processes:
-    Process "map"
-      inputs:  lines
-      outputs: tails
+    Process "filter"
+      inputs:  input
+      outputs: goods
       initial: l0
       instructions:
-        l0   = Pull  lines l1       l3
-        l1 v = Push  tails (tail v) l2
-        l2   = Drop  lines l0
-        l3   = Close tails l4
-        l4   = Done
+        l0   = Pull  input l1 l4
+        l1 e = If (isPrefixOf "Good" e)
+                          (l2 e)
+                           l3
+        l2 e = Push  goods e  l3
+        l3   = Drop  input    l0
+
+        l4   = Close goods l5
+        l5   = Done
 \end{lstlisting}
+
+Sources and sinks are specified for @input@ and @goods@.
+The right-hand side of each endpoint definition is the expression to construct the endpoint, used by code generation.
+
+Next there is room for multiple processes.
+In networks with multiple processes, the processes are fused together into a single process before code generation.
+Our example only has one process, the @filter@ process, which pulls from the source stream @input@ and pushes to the sink stream @goods@.
+
+The @filter@ process starts at label @l0@, which pulls from the @input@ stream.
+Labels @l1@ to @l3@ perform the filtering for each element, while labels @l4@ and @l5@ clean up and end the process once the @input@ stream is finished.
+
+The original process formulation \REFTODO{processes} used a global mutable heap.
+This would require a mutable reference for each variable in the heap.
+As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references, because we wish to take advantage of constructor specialisation for unboxing.
+Instead of a global mutable heap, we treat each label as a function with arguments.
+Each label definition has a list of variable names which are the function parameters and can be used in the body of the instruction.
+Likewise, each reference to a label, either as the initial state or next state of an instruction, has a list of expressions which are the function arguments.
+
+Labels @l1@ and @l2@ both take the current element as a parameter.
+The pull instruction at @l0@ has as its `success' destination the label @l1@ with no arguments.
+Pull expects its `success' destination label to take one extra argument, which will be called with the pulled element at runtime.
 
 Let us now go through the generated code, piece by piece.
-We start by unpacking the @lines@ source (@sourceOfFile fpIn@) and getting its initialisation function (@lines'init@), its pull function (@lines'pull@), and its close function (@lines'done@).
-We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because one cannot use accessor functions on existential types.
-We perform the same unpacking for the @tails@ sink.
 
 \begin{lstlisting}
-tailsIO fpIn fpOut = do
-  case sourceOfFile fpIn of
-   Source lines'init lines'pull lines'done -> do
-    case sinkOfFile fpOut of
-     Sink tails'init tails'push tails'done -> do
+grepGood fileIn fileOut =
+  case sourceOfFile fileIn of
+   Source input'init input'pull input'done ->
+    case sinkOfFile fileOut of
+     Sink goods'init goods'push goods'done -> do
 \end{lstlisting}
 
+First we unpack the @input@ source (@sourceOfFile fileIn@) to get its initialisation function (@input'init@), its pull function (@input'pull@), and its close function (@input'done@).
+We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because accessor functions cannot be used to unpack existential types.
+We perform the same unpacking for the @goods@ sink.
+These source and sink component functions are in scope for the rest of the @grepGood@ function.
+
 \begin{lstlisting}
-      let l0 !_ lines's tails's = do
-            (v, lines's') <- lines'pull lines's
+      let l0 _ input's goods's = do
+            (v, input's') <- input'pull input's
             case v of
-             Nothing -> l3 SPEC lines's' tails's
-             Just v' -> l1 SPEC lines's' tails's v'
+             Just v' -> l1 SPEC input's' goods's v'
+             Nothing -> l4 SPEC input's' goods's
 \end{lstlisting}
 
+Next, we define a function for each label of the process.
+We start with label @l0@.
+In the process @l0@ has no parameters, but we add extra parameters to each function during code generation.
+The first parameter is the @SPEC@ used to force constructor specialisation.
+The next two parameters are the current state of the @input@ source and @goods@ sink.
+
+The instruction for @l0@ pulls from @input@, so our function @l0@ must also pull from @input@ by calling the @input'pull@ function with the current state @input's@.
+The pulled value is bound to @v@, while the new state for the @input@ source is bound to @input's'@.
+We unpack the pulled value @v@ to check whether pull succeeded or the stream has finished.
+If the pull succeeds, we call the function for label @l1@, passing @SPEC@ for constructor specialisation, the updated @input@ source state, the unchanged @goods@ sink state, and the actual pulled value.
+If the stream has finished, we call the function for label @l4@, again with the specialisation and endpoint states.
+
+
 \begin{lstlisting}
-      let l1 !_ lines's tails's v = do
-            tails's' <- tails'push tails's v
-            l2 SPEC lines's tails's
+      let l1 _ input's goods's e = do
+            case isPrefixOf "Good" e of
+             True  -> l2 SPEC input's goods's e
+             False -> l3 SPEC input's goods's
 \end{lstlisting}
 
-\begin{lstlisting}
+The function for @l1@ takes as parameters the specialisation and endpoint state, as well as the current element (@e@).
+We check whether the current element starts with the string \lstinline/"Good"/; if so it calls @l2@ passing along current element, otherwise @l3@.
 
-      let l2 !_ lines's tails's =
-            l0 SPEC lines's tails's
+\begin{lstlisting}
+      let l2 _ input's goods's e = do
+            goods's' <- goods'push goods's e
+            l3 SPEC input's goods's'
 \end{lstlisting}
 
-\begin{lstlisting}
+The function for @l2@ pushes to the @goods@ sink by calling @goods'push@.
+The new @goods@ state is bound to @goods's'@ and passed to @l3@.
 
-      let l3 !_ lines's tails's = do
-            tails'done tails's
-            l4 SPEC lines's
+\begin{lstlisting}
+      let l3 _ input's goods's =
+            l0 SPEC input's goods's
 \end{lstlisting}
 
-\begin{lstlisting}
+The instruction for @l3@ drops the pulled value from @input@.
+Drop instructions exist solely as coordination hints for processes during fusion.
+For code generation, it just calls @l0@.
 
-      let l4 !_ lines's = do
-            lines'done lines's
+\begin{lstlisting}
+      let l4 _ input's goods's = do
+            goods'done goods's
+            l5 SPEC input's goods's
+\end{lstlisting}
+
+The function for @l4@ closes the @goods@ sink by calling @goods'done@ with the current state for @goods@.
+This invalidates the old state, but @goods'done@ does not return a new state.
+The function for @l5@ takes the current state for @goods@ as an argument, but does not use it.
+Once a process has closed an output stream it can no longer push to the stream or close the stream again, although this invariant is not checked.
+This means a process cannot use the state after closing an output stream, and we can safely reuse the old state to pass to @l5@.
+
+\begin{lstlisting}
+      let l5 _ input's goods's = do
+            input'done input's
             return ()
 \end{lstlisting}
 
+The last label, @l5@, closes the input sink and finishes the process.
+
 \begin{lstlisting}
-      lines's0 <- lines'init
-      tails's0 <- tails'init
-      l0 SPEC lines's0 tails's0
+      input's0 <- input'init
+      goods's0 <- goods'init
+      l0 SPEC input's0 goods's0
 \end{lstlisting}
 
-\section{Size hints}
+To start executing the process, we initialise the @input@ source and @goods@ sink, and call the initial label @l0@ with the endpoint states.
+
+\section{Vector endpoints}
+
+We might wish to perform array computations, rather than streaming from disk or network.
+In this case, we need a way to create a source from a vector, and to convert a sink to a vector.
+
+Creating a source from a vector is fairly easy.
+The source state is the index into the vector, and pulling from the source checks if the index is within the vector, looks up the element at that index, and increments the index.
+
+\begin{lstlisting}
+sourceOfVector :: Vector a -> Source a
+sourceOfVector vec
+  = Source init pull done
+ where
+  init               = return 0
+
+  pull ix
+   | ix < length vec = return (Just (unsafeIndex vec ix), ix + 1)
+   | otherwise       = return (Nothing, ix)
+
+  done _             = return ()
+\end{lstlisting}
+
+We use \lstinline/unsafeIndex/ to forgo the usual bounds checks, which would be redundant here.
+
+Converting a sink into a vector is a little more involved, but not overly so.
+The first complication is that the sink does not know upfront the size of the output stream.
+This means the sink must dynamically grow the output vector as it receives elements.
+It starts with a mutable vector of size 4, then every push checks if there is room for the new element, and doubles the vector if necessary.
+Once all elements are written, it freezes the mutable vector to an immutable one and discards the unused portion at the end of the vector.
+
+The second complication is that sinks do not `return' a value, so the sink must take an argument describing where to store the vector.
+Despite going to great lengths to avoid mutable references in code generation, some kind of mutable reference is unavoidable here.
+The boxing overheads described earlier are negligible in this case though, because the reference is only written to and read from once at the end of the process, rather than once for every iteration.
+
+\begin{lstlisting}
+sinkVector :: IORef (Vector a) -> Sink a
+sinkVector out
+  = Sink init push done
+ where
+  init = do
+    vec <- Mutable.unsafeNew 4
+    return (vec, 0)
+
+  push (vec, ix) e = do
+    vec' <- if ix < Mutable.length vec
+            then return vec
+            else Mutable.unsafeGrow vec (Mutable.length vec)
+    Mutable.unsafeWrite vec' ix e
+    return (vec', ix + 1)
+
+  done (vec, ix) = do
+    vec' <- unsafeFreeze (Mutable.unsafeSlice vec ix)
+    writeIORef out vec'
+\end{lstlisting}
+
+The runtime cost of resizing the vector, as well as the bounds check for every push, have a significant performance cost \REFTODO{benchmarks}.
+When the upper bound of the length of the output stream is known before streaming starts, we can take advantage of this knowledge by allocating a large enough vector to start with, removing the need for dynamic resizing and bounds checks.
+
+
+\begin{lstlisting}
+sinkVectorSize :: Int -> IORef (Vector a) -> Sink a
+sinkVectorSize maxSize out
+  = Sink init push done
+ where
+  init = do
+    vec <- Mutable.unsafeNew maxSize
+    return (vec, 0)
+
+  push (vec, ix) e = do
+    Mutable.unsafeWrite vec ix e
+    return (vec, ix + 1)
+
+  done (vec, ix) = do
+    vec' <- unsafeFreeze (Mutable.unsafeSlice vec ix)
+    writeIORef out vec'
+\end{lstlisting}
+
+By removing the bounds check for each push, we have made it faster at the expense of safety.
+The sink is no longer `safe', as if we pass too small an upper bound the program will write past the end of the allocated vector, violating another part of the program's memory or causing a segmentation fault.
+This puts the burden on the user of the sink to be very sure that the upper bound is correct.
+
+\subsection{Size hints}
 \label{s:implementation:sizehints}
-Talk about @vectorSizeIO@ and why it's useful.
-Reference \autoref{s:Future:SizeInference} for how to infer this.
+
+Ideally this size information would be tracked by the process network itself, rather than having to be specified by the user.
+In Stream Fusion, these size hints are attached to the constructor of the Stream datatype \cite{coutts2007rewriting}.
+
+\begin{lstlisting}
+data Size
+ = Exact Int
+ | Max   Int
+ | Unknown
+\end{lstlisting}
+
+Refer to \REFTODO{s:Future:SizeInference} for how to infer this.
+
 
 \section{Constructing processes}
 \begin{lstlisting}
@@ -968,7 +1114,7 @@ Note that there is only one copy of each input process' code.
 On the other hand, @PQ_no_drop@ shows the fused process without drop instructions.
 Here, there are two copies of pushing to @CP@, though the main loop only executes one per iteration: pushing the current element to @CP@, and the previous element to @CQ@.
 As the processes get larger, and more processes are fused together, the issue of duplicating code becomes more serious.
-There are two parts to this: first, we need to hold the entire process in memory in order to generate its code.
+There are two parts to this: first, we need to hold the entire process in memory to generate its code.
 Secondly, as the generated assembly code gets larger, it is less likely to fit into the processor's cache.
 Smaller code is generally better for performance.
 Having two copies of the push to @CP@ means that any consumers of @CP@ must in turn have their code duplicated, with the pull instructions from @CP@ copied into both sites of the pushes.

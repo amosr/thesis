@@ -285,13 +285,14 @@ sum vector = loop 0 0
      in loop (index + 1) (running_sum + value)
 \end{lstlisting}
 
-It is not explicit in the program source, but the loop index and the running sum are both boxed values, because their type (@Int@) is boxed.
+Inside the loop, the loop index and the running sum are both boxed values because their type (@Int@) is boxed; this is not explicit in the program source.
 This function, if compiled naively, would spend more time boxing and unboxing than actually computing the sum.
 For each element of the array, the function allocates two new boxed values: the updated index and the updated sum.
 All of these new boxed values except the very last iteration are used once by the next iteration and then thrown away.
 While the garbage collector is tuned for small, short-lived objects, it is better to not create any garbage in the first place.
 
 Compiler optimisations to replace boxed values with unboxed values are well-known, and there are many different ways to do this.
+\TODO{More concrete.}
 The point to make is not that this is an interesting thing, just that we must know which optimisations our compiler performs to generate code that our compiler can optimise.
 
 In GHC, boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
@@ -319,13 +320,13 @@ sum vector = loop (I# 0#) (I# 0#)
 \end{lstlisting}
 
 Constructor specialisation \cite{peyton2007call} is a loop optimisation that can remove these boxed arguments to recursive calls.
-It looks at the constructors to recursive calls, and counts which ones are scrutinised or unwrapped at the start of the function definition.
-In this case, @loop@ is first (and later, as well) called with the constructors @I#@ for both arguments, and both arguments are scrutinised.
-So it creates a specialised version of @loop@ where both arguments are @I#@ constructors.
-This specialised version is the same as the original, except the arguments are known to be @I#@ constructors, which means the pattern-matching on the arguments can be simplified away.
-We will call this specialised version @loop'I#'I#@.
-Then everywhere that @loop@ is called with @I#@ constructors, it will be replaced with a call to @loop'I#'I#@.
-So any function call that looks like (@loop (I# x) (I# y)@) is replaced by a call to our new function (@loop'I#'I# x y@).
+Constructor specialisation starts by looking at the constructor arguments to recursive calls, and notes which ones are scrutinised or unwrapped at the start of the function definition.
+In the explicitly boxed @sum@ function, @loop@ is first called with the constructors @I#@ for both arguments, and both of these arguments are scrutinised by @loop@.
+Based on this information, constructor specialisation creates a specialised version of @loop@ to be used when both arguments are @I#@ constructors.
+This specialised version is based on the original, except each argument of a known constructor is replaced by the constructor's arguments, and pattern matches on a known constructor are simplified away.
+We call this specialised version @loop'I#'I#@.
+Everywhere that @loop@ is called with @I#@ constructors, it is replaced by a call to the specialised function @loop'I#'I#@.
+For example, the initial call (@loop (I# 0#) (I# 0#)@) is replaced by (@loop'I#'I# 0# 0#@).
 
 \begin{lstlisting}
 sum :: Vector Int -> Int
@@ -340,14 +341,14 @@ sum vector = loop'I#'I# 0# 0#
 \end{lstlisting}
 
 Constructor specialisation has removed all the boxing except for the final return value, which is only constructed once anyway.
-In this example, the original @loop@ function was no longer called, so it was able to be removed entirely.
-It is not always the case that the original function can be removed, and constructor specialisation can duplicate the code many times: once for each combination of constructors.
-This can cause quite a lot of copies of the original function, which can cause large intermediate programs that do not fit in memory.
-To alleviate this, GHC implements some heuristics to limit the number of duplicates created, as well as only creating specialisations if the original function is not too large.
-This makes sense for general purpose code, but for tight loops where we expect most of our runtime to be, we really want to be sure that all specialisations are created.
-For tight loops, we want to \emph{force} constructor specialisation to occur as much as possible.
-This is achieved by annotating the function to be specialised with the special constructor @SPEC@.
-Going back to the original @sum@ function, if we want to force constructor specialisation on @loop@, we can do this by adding the @SPEC@ to the function binding as well as all calls to it:
+The original @loop@ function was no longer called, so it was able to be removed entirely.
+The original function cannot always be removed, and constructor specialisation can create many specialisations: one for each combination of constructors.
+When there are a lot of combinations, the computer might not have enough memory to store every specialised function at the same time.
+To alleviate this, GHC implements some heuristics to limit the number of specialisations, as well as only creating specialisations if the original function is not too large.
+This makes sense for general purpose code, but for tight loops where we expect most of our runtime to be, we need to be sure that all specialisations are created.
+For tight loops, we want to \emph{force} constructor specialisation to specialise everything.
+We force constructor specialisation by annotating the function to be specialised with an extra argument of the special constructor @SPEC@.
+Going back to the original version of the @sum@ function, we force constructor specialisation on @loop@ by adding the @SPEC@ annotation to the function binding as well as all calls to it:
 
 \begin{lstlisting}
 sum :: Vector Int -> Int
@@ -364,55 +365,102 @@ sum vector = loop SPEC 0 0
 \subsection{Mutable references}
 \label{ss:extraction:mutablerefs}
 
-We have seen that GHC is able to eliminate boxing from function arguments, and we will take advantage of this during code generation.
-We will make use of @SPEC@ to force constructor specialisation, to ensure as much can be unboxed as possible.
-Sadly, mutable references are stored boxed, and an analogous constructor specialisation transform does not exist for mutable references.
-This means that to get unboxed values, we must structure our generated code to pass values via function arguments instead of mutable references.
-
-Unboxed mutable references do exist, but are unsuitable because they can \emph{only} store unboxed values.
-Recursive types such as linked lists cannot be stored in unboxed references.
-We desire an unboxed representation when possible, and boxed representation when necessary.
+We have seen that GHC is able to unbox function arguments, and we will take advantage of this during code generation.
+We will make use of the @SPEC@ annotation to force constructor specialisation, to ensure as much can be unboxed as possible.
+The process calculus in \REFTODO{processes} uses a mutable heap with variable updates, which would be naturally expressed using a mutable reference for each variable.
+Sadly, mutable references in GHC contain boxed values, and an analogous constructor specialisation transform does not exist for unboxing mutable references.
+Were we to use mutable references, we would suffer the same allocation and pointer indirection problems of boxing described earlier.
+We must structure our generated code to pass values via function arguments instead of mutable references.
 
 It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
 Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing Stream Fusion in MetaOCaml.
-So this will not necessarily map to other languages, but it is true in the particular case of GHC.
+This technique will not necessarily map to other compilers, but it is true for GHC.
 
 In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
 The motivation here is that GHC does not track aliasing information of arrays stored in mutable references, but does track it for arrays as function arguments.
 
 \subsection{Extended constructor specialisation}
+% \TODO{Move this to Stream Fusion section?}
 
-Constructor specialisation is not limited to boxing and unboxing, but works for arbitrary constructors, including types with multiple constructors such as (@Maybe a@) or (@Either a b@).
-It even works for recursive types such as lists, which could produce an an infinite number of specialisations.
+Constructor specialisation is not limited to eliminating boxing, but works for arbitrary constructors, including types with multiple constructors such as (@Maybe a@) or (@Either a b@).
+It even works for recursive types such as lists, which produce an an infinite number of specialisations.
 Constructor specialisation must be careful to limit the specialisations to a finite number of \emph{useful} ones.
 
-Information about the initial state can be very helpful in finding the most specific call patterns.
-In the following example, @go@ is first called with the call pattern (@go (Just _) (Just _)@).
-Using this as the `seed' from which we start exploring, we can see that the initial call pattern proceeds to the next call pattern (@go Nothing (Just _)@), followed by a call to (@go Nothing Nothing@).
-If we were to look at the body of @go@ without this initial seed, however, we would find the call patterns (@go Nothing _@) and (@go _ Nothing@).
-These call patterns from the unseeded body are less specific than the call patterns for the seed, which means using them would not allow the second argument to be specialised away.
-By starting from the initial seed, the extra information about the initial state can be propagated to the other states.
+% To explore specialisations, we will look at an example that uses Stream Fusion, which relies heavily on constructor specialisation.
+% The following function @zip3@ takes three lists and zips the first list with the concatenation of the second and third list.
+% 
+% \begin{lstlisting}
+% zip3 :: [a] -> [b] -> [b] -> [(a,b)]
+% zip3 xs ys zs =  zip xs (ys ++ zs)
+% \end{lstlisting}
+% 
+% The following version of @zip3@ is the result of Stream Fusion before any constructor specialisation.
+% 
+% \begin{lstlisting}
+% zip3 :: [a] -> [b] -> [b] -> [(a,b)]
+% zip3 xs ys zs = go (Nothing, xs, Left ys)
+%  where
+%   go (Nothing,    [],             _) = []
+%   go (Nothing, x:xs',           bcs) =         go (Just  x, xs', bcs)
+% 
+%   go (Just  x,   xs', Left       []) =         go (Just  x, xs', Right zs)
+%   go (Just  x,   xs', Left  (y:ys')) = (x,y) : go (Nothing, xs', Left ys')
+% 
+%   go (Just  x,   xs', Right      []) = []
+%   go (Just  x,   xs', Right (z:zs')) = (x,z) : go (Nothing, xs', Right zs')
+% \end{lstlisting}
+% 
+% Stream Fusion produces a recursive function @go@ with a `stream state' argument of type @(Maybe a, [a], Either [b] [b])@.
+% The stream state for @zip@ is a triple containing a (@Maybe a@) for the most recent value read from the first input stream, and the stream state for each input stream.
+% When the (@Maybe a@) is @Nothing@, @zip@ reads from its first input stream; when @Just@, it reads from the second.
+% The input list @xs@ uses the list itself as its stream state.
+% The concatenation of @ys@ with @zs@ has as its stream state an @Either@ of each stream state.
+% 
+% Constructor specialisation's job here is to specialise as much of this state type as possible so it does not need to be allocated and inspected at runtime.
+% We start specialisation by looking at the initial call to the recursive function.
+% The initial call pattern is @go (Nothing, _, Left _)@.
+% Variables and non-constructor function applications in the call pattern are replaced by underscores, except for the recursive call itself.
+% Looking in the body of @go@, there are two applicable clauses for this call pattern.
+% The first returns the empty list, while the second calls @go (Just x, xs', Left bcs)@.
+% 
+% \begin{lstlisting}
+%   go'Nothing''Left [] _              = []
+%   go'Nothing''Left (x:xs) bcs        = go (Just x, xs', Left bcs)
+% \end{lstlisting}
+% 
+% 
+% \FigurePdf{figs/specconstr/zip3}{Constructor specislisations graph for zip3}{Constructor specialisations graph for @zip3@}
+% 
+% \autoref{figs/specconstr/zip3} shows the constructor call graph for @zip3@.
+% This graph shows which call patterns are accessible from each other.
+% In the top case, the call pattern @go (Just _, _, _)@
+
+The initial call to a recursive loop is very useful for finding the most specific call patterns.
+In the @initial@ example the recursive function @go@ takes two arguments of type (@Maybe Int@).
 
 \begin{lstlisting}
 initial = go (Just 1) (Just 2)
  where
-  go (Just _) b       = go Nothing b
-  go a       (Just _) = go a       Nothing
+  go (Just a) b       = go Nothing b
+  go a       (Just b) = go a       Nothing
   go Nothing Nothing  = 0
 \end{lstlisting}
 
-Not all specialisations are useful.
-To limit compilation time, memory usage and code blowup, it is important to limit the specialisations to those which will be used.
-That is, \emph{only} those which are reachable from the initial state.
-In the following example, the initial state is the call pattern (@go (Left _) (Right _)@).
-At each step, the arguments are flipped, so from the initial state the next reachable call pattern is (@go (Right _) (Left _)@).
-From here, we can get back to the original state.
-This means in total there are only two reachable call patterns.
+In this example @go@ is first called with the call pattern (@go (Just _) (Just _)@).
+In the body of @go@, there two recursive calls have call patterns (@go Nothing _@) and (@go _ Nothing@).
+Specialising @go@ for the initial call pattern results in the function @go'Just'Just@, which satisfies the equation (@forall a b. go (Just a) (Just b) = go'Just'Just a b@).
 
-However, if we look at the body alone without the seed, the first two call patterns are (@go _ (Left _)@) and (@go _ (Right _)@).
-From here, more call patterns can be found: (@go _ (Left _)@) calls (@go (Left _) (Left a)@) and (@go (Left _) (Right _)@).
-Similarly, there are two call patterns reachable from @(go _ (Right _)@), and these are distinct from the two already seen.
-In this way, starting from the initial state means we do not have to generate all the possible specialisations.
+\begin{lstlisting}
+  go'Just'Just a b    = go Nothing (Just b)
+\end{lstlisting}
+
+Specialising the function has exposed a new call pattern: @go Nothing (Just _)@.
+This call pattern is more specific than those in the body of @go@ because it has two constructors instead of one.
+The initial call pattern provides extra information which is not available in the body alone.
+
+The initial call pattern also helps filter out some unreachable specialisations.
+The only way to call the recursive function from the outside is through the initial call, which means only call patterns which are reachable from the initial state will ever be used.
+In the @reachable@ example the recursive function @go@ takes two arguments of type (@Either Int Int@).
 
 \begin{lstlisting}
 reachable = go (Left 1) (Right 2)
@@ -421,18 +469,30 @@ reachable = go (Left 1) (Right 2)
   go (Right a) b = go b (Right a)
 \end{lstlisting}
 
-\TODO{diagrams}
+In this example the initial call pattern is (@go (Left _) (Right _)@).
+At each recursive call the arguments are flipped, so the next call pattern from the initial is (@go (Right _) (Left _)@).
+From here, we can get back to the original call pattern.
+This means in total there are only two reachable call patterns.
 
-Using the initial calls as the seed is important.
-This \emph{was} implemented, but it only occurred for locally bound functions, not for top-level bindings.
-The problem is that even though our examples were locally bound functions, other transforms such as let-floating occur before constructor specialisation, which means locally bound functions can be `floated' up to top-level bindings, where seeding does not work.
-The other issue is that top-level bound functions can be exported; if functions are exported, we cannot know their initial call pattern, as they may be called from other modules.
-So for exported top-level functions, we must seed the call-patterns using all initial calls in the current module, as well as those in the body.
-For non-exported top-level functions, we can be sure that the initial state is in the current module, and so use any initial calls outside of the body as the seed.
+However, if we look at the body alone without the initial call pattern, the first two call patterns are (@go _ (Left _)@) and (@go _ (Right _)@).
+From here, more call patterns can be found: (@go _ (Left _)@) calls (@go (Left _) (Left a)@) and (@go (Left _) (Right _)@).
+Similarly, there are two call patterns reachable from @(go _ (Right _)@), and these are distinct from the two already seen.
+None of these extra call patterns will be used when we run the program.
+By starting from the initial call pattern, we avoid generating these unreachable specialisations.
 
-When arguments are of recursive types, there can be an infinite number of reachable call patterns.
+Using the initial calls pattern is important.
+This is described in the original constructor specialisation paper \cite{peyton2007call}, but only for locally bound functions, not for top-level functions.
+Although the examples above use locally bound functions, other transforms such as let-floating occur before constructor specialisation, which means locally bound functions are often `floated' up to top-level bindings, where the initial call patterns could not be used.
+We extended the implementation in GHC to track and use the initial call patterns of top-level functions.
+Top-level bound functions can be exported, while locally bound functions cannot.
+If functions are exported, we cannot know their initial call pattern as they may be called from other modules.
+For exported top-level functions, we must specialise on all initial calls in the current module, as well as those in the body.
+For non-exported top-level functions, we can be sure that the initial call is in the current module, and so specialise on all initial calls outside of the body.
+
+
+When a function has an argument of a recursive type, the function may have an infinite number of call patterns.
 Suppose we wish to reverse a linked list.
-We can write this using a helper function, which takes the list that is reversed so far, as well as the list to reverse.
+We can write this using a recursive helper function, which takes the list that is reversed so far, as well as the list to reverse.
 
 \begin{lstlisting}
 reverse :: [Int] -> [Int]
@@ -443,11 +503,14 @@ reverse xs0 = go [] xs0
 \end{lstlisting}
 
 The helper function @go@ could be specialised an infinite number of times, but this would lead to non-terminating compilation.
-First, the call to @go@ is seeded with the call pattern (@go [] _@).
-Then, at every step in the evaluation, a list constructor is moved from the second argument to the first, resulting in the infinite chain of call patterns, (@go [_] _@), (@go [_, _] _@), and so on.
-Usually, these specialisations would not be produced because they do not reduce allocation.
-However, in the original implementation, when @SPEC@ is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
-We implemented Roman Leshchinskiy's suggestion to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
+Here the initial call pattern is (@go [] _@), where the first argument is an empty list.
+Specialising on the initial call pattern exposes a new call pattern (@go (_:[]) _@), where the first argument has a list cons added to it.
+Specialising this pattern exposes yet another new call pattern, this time with a two-element list.
+This process can be repeated an infinite number of times.
+
+Constructor specialisation has some heuristics about which call patterns to specialise, and would not normally specialise on these call patterns because they do not eliminate any allocation.
+However, in the original implementation, when the @SPEC@ annotation is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
+We implemented a suggestion by Roman Leshchinskiy\footnote{\url{https://ghc.haskell.org/trac/ghc/ticket/5550\#comment:12}} to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
 
 \section{Sources and Sinks}
 In order to write meaningful streaming computations, we need to interact with the outside world.
@@ -600,10 +663,10 @@ Our example only has one process, the @filter@ process, which pulls from the sou
 The @filter@ process starts at label @l0@, which pulls from the @input@ stream.
 Labels @l1@ to @l3@ perform the filtering for each element, while labels @l4@ and @l5@ clean up and end the process once the @input@ stream is finished.
 
-The original process formulation \REFTODO{processes} used a global mutable heap.
+The original process formulation \REFTODO{processes} used a mutable heap.
 This would require a mutable reference for each variable in the heap.
 As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references, because we wish to take advantage of constructor specialisation for unboxing.
-Instead of a global mutable heap, we treat each label as a function with arguments.
+Instead of a mutable heap, we treat each label as a function with arguments.
 Each label definition has a list of variable names which are the function parameters and can be used in the body of the instruction.
 Likewise, each reference to a label, either as the initial state or next state of an instruction, has a list of expressions which are the function arguments.
 

@@ -1,0 +1,202 @@
+\section{Constructing processes}
+\begin{lstlisting}
+filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
+filter predicate as = do
+ bs <- channel
+ predicate' <- liftQ $ unTypeQ predicate
+ process (Next (Label 0) [])
+   [ (Label 0, InstructionBinding []
+              (pull as (Next (Label 1) []) (Next (Label 3) []))
+   , (Label 1, InstructionBinding [Var 0]
+              (If [|$predicate' $(var 0)|]
+                (Next (Label 2) [var 0])
+                (Next (Label 3) [])))
+   , (Label 2, InstructionBinding [Var 0]
+              (push bs (var 0) (Next (Label 3) [])))
+   , (Label 3, InstructionBinding []
+              (drop as (Next Label 0)))
+
+   , (Label 4, InstructionBinding []
+              (Done))]
+
+ return bs
+\end{lstlisting}
+
+\section{Types for constructing networks}
+
+Untyped names
+\begin{lstlisting}
+data Label = Label Name
+data Var = Var Name
+
+data ChannelU = ChannelU Name
+data Channel a = Channel { getChannel :: Channel }
+\end{lstlisting}
+
+
+\begin{lstlisting}
+data NetworkGraph
+ = NetworkGraph
+ { networkGraphSources   :: Map ChannelU Exp
+ , networkGraphSinks     :: Map ChannelU Exp
+ , networkGraphProcesses :: [Process]
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+type Network = StateT Q NetworkGraph
+\end{lstlisting}
+
+\begin{lstlisting}
+channel :: Network (Channel a)
+channel = Channel <$> runQ freshName
+\end{lstlisting}
+
+\begin{lstlisting}
+source :: Q (TExp (Source a)) -> Network (Channel a)
+source source = do
+ c  <- channel
+ s' <- unTypeQ source
+ tell graph { networkGraphSources = Map.singleton (getChannel c) s' }
+ return c
+\end{lstlisting}
+
+
+\begin{lstlisting}
+data Process
+ = Process
+ { processInputs       :: Set ChannelU
+ , processOutputs      :: Set ChannelU
+ , processInitial      :: Next
+ , processInstructions :: Map Label InstructionBinding
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data Next
+ = Next
+ { nextLabel    :: Label
+ , nextAssigns  :: [Exp]
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data InstructionBinding
+ = Info
+ { infoBindings     :: [Var]
+ , infoInstruction  :: Instruction
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data Instruction
+ = I'Pull ChannelU Next Next
+ | I'Push ChannelU Exp Next
+ | I'Jump Next
+ | I'Bool Exp Next Next
+ | I'Drop ChannelU Next
+ | I'CloseOutput Channel Next
+ | I'Done
+\end{lstlisting}
+
+\section{Types for code generation}
+
+\begin{lstlisting}
+data FusedNetwork
+ { fusedNetworkSources      :: Map ChannelU Exp
+ , fusedNetworkSinks        :: Map ChannelU Exp
+ , fusedNetworkInstructions :: Map Label InstructionBinding
+ , fusedNetworkInitial      :: Next
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+genNetwork1 :: NetworkGraph -> Q Exp
+\end{lstlisting}
+
+
+\begin{lstlisting}
+data SourceBound
+ { sourceBoundInit :: Exp
+ , sourceBoundPull :: Exp -> Exp
+ , sourceBoundDone :: Exp -> Exp
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data SinkBound
+ { sinkBoundInit :: Exp
+ , sinkBoundPush :: Exp -> Exp -> Exp
+ , sinkBoundDone :: Exp -> Exp
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data EnvironmentGlobal
+ { envGlobalSources :: Map ChannelU SourceBound
+ , envGlobalSinks   :: Map ChannelU SinkBound
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+data EnvironmentLocal
+ { envLocalSources :: Map ChannelU Exp
+ , envLocalSinks   :: Map ChannelU Exp
+ }
+\end{lstlisting}
+
+\begin{lstlisting}
+bindStates :: EnvironmentGlobal -> Q (EnvLocal, [Bind])
+updateState :: EnvironmentLocal -> Channel -> Exp -> EnvironmentLocal
+stateArguments :: EnvironmentLocal -> [Exp]
+initialiseAll :: EnvironmentGlobal -> (EnvironmentLocal -> Exp) -> Q Exp
+openEnvironment :: FusedNetwork -> (EnvironmentGlobal -> Q Exp) -> Q Exp
+\end{lstlisting}
+
+
+
+For a @Source@ expression (@s :: Exp (TExp (Source a))@):
+\begin{lstlisting}
+bindSource :: Exp -> (SourceBound -> Q Exp) -> Q Exp
+bindSource s with =
+ case $s of
+  Source init pull done -> do
+   s0 <- init
+   $(with (SourceBind
+         { sourceBoundState = [|s0|]
+         , sourceBoundPull  = \s -> [|pull $s|]
+         , sourceBoundDone  = \s -> [|done $s|]
+         }))
+\end{lstlisting}
+
+\begin{lstlisting}
+genNext :: EnvironmentBound -> Next -> Q Exp
+genNext env (Next label expressions) =
+  foldl AppE (expOfLabel label) arguments
+ where
+  arguments = spec : argumentsOfEnvironment env ++ expressions
+  spec = ConE 'SPEC
+\end{lstlisting}
+
+\begin{lstlisting}
+genInstruction :: EnvironmentBound -> Instruction -> Q Exp
+genInstruction env i = case i of
+  Pull c n n' -> [|do
+    (v,s') <- $(sourcePullOfEnvironment env)
+    case v of
+     Nothing -> $(genNext n' (updateEnvironmentState e c [|s'|]))
+     Just v' -> $(genNext n (updateEnvironmentState e c [|s'|])) v'
+    |]
+\end{lstlisting}
+
+\begin{lstlisting}
+genInstructionBinding :: EnvironmentGlobal -> InstructionBinding -> Q Exp
+genInstructionBinding global (InstructionBinding vars instr) = do
+  local <- envLocalOfGlobal global
+  code  <- genInstruction global local instr
+  return $ LamE spec $ lams (bindingsOfLocal local) $ lams (fmap bindOfVar vars) code
+ where
+  lams = foldl LamE
+  spec = ConP 'SPEC
+\end{lstlisting}
+

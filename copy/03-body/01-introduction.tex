@@ -2,117 +2,99 @@
 \label{chapter:introduction}
 
 All the data in the world won't tell you anything if you don't look at it.
-To learn from the data, we must query it.
-In fact, one query alone might not be sufficient.
+To learn from the data, we must ask it a question.
+We must query the data.
+Once we have learnt one thing, we will find ourselves wanting to know more.
+Knowledge is addictive.
+To learn many things from the data, we must not just ask it one question; we must interview it.
+We must query the data many times.
 
-Usually, we do not just want to learn one thing.
-We want to learn multiple things, so we must run multiple queries.
+When our data is too large to fit in memory, it must be read from disk or network.
+Reading data from disk takes longer than reading from memory, and reading over the network takes longer still.
+For a simple query, we will spend more time reading the data than performing the query part of the computation.
+We would like to limit the amount of time spent reading.
+We cannot avoid reading the data altogether, but we can limit the number of times we read the same data.
+If we perform multiple queries separately, each query needs to read the same data, and we end up reading the same data multiple times.
+We want to perform these multiple queries together, sharing the data among the queries, and reading the data only once.
 
-Our queries need to run in a reasonable amount of time; the sooner the better.
-Not only must we run multiple queries, but we need to run them at the same time.
+Our data can exceed the size of memory; the working set of our query program cannot.
+If our query program requires more memory than the computer has, it will crash before returning the answer.
+When we write a query, we need to be sure that it will not run out of memory when we run it today.
+With datasets that grow every day, we also need to be sure that the query will not run out of memory tomorrow or the day after.
+The memory usage should be constant regardless of the amount of data.
 
-When we have a lot of data, it can be hard to query.
-It can take a long time just to read the data off disk, even before we start processing it.
-As much as possible, we want to limit the amount of time spent reading.
-Limiting the amount of time spent reading is not easy; it is not something we can skip or avoid doing.
-We can, however, limit the number of times we read the same data.
-If we performed multiple queries separately, we would read the same data once for each query.
-What we want to do is perform these multiple queries together, reading the same data only once.
+Streaming lets us transform large datasets in constant memory.
+Stream transformers consume data element by element, processing the elements in sequential order.
+Stream transformers can only store a limited number of elements at a time, and cannot sort or reorder the elements.
+These heavy restrictions are worthwhile.
+We can write our queries as streaming programs, confident that they will not run out of memory.
 
-Data sets that are added to every day get larger every day.
-Our data sets are getting larger every day.
-We want to be confident that as our data set gets larger, our computation will not run out of memory.
-We want our computation to finish without running out of memory.
-The memory usage should be more or less constant, because this means no matter how much data we have to process, we can do it.
-If the memory usage increased with the amount of data, then one day, as our data grows, our program would not be able to fit inside memory.
-The program would crash.
+\section{Many queries}
 
-Streaming lets us run the same program on an ever-increasing data set, and be confident that it will finish eventually.
-Streaming ensures that the program will not run out of memory.
+We have many queries, and we have written each one as a separate streaming program.
+We wish to execute all the queries together, so we only pay once the overhead of reading from disk.
 
-
-I rarely remember dreams.
-I wake with a vague feeling, an emotional summary, but the details that produced this feeling are lost.
-Stream transformers suffer the same amnesia.
-Stream transformers must inspect each element, but there are too many elements to remember the whole stream.
-They must summarise, extracting the tasty bits and throwing away the bulk.
-Or they must read an element and directly write it to an output.
-
-Streaming lets us transform large inputs that wouldn't fit in memory.
-Suppose we have a batch processing task.
-Every day, we must take one set of files on disk, and transform them into another set.
-Every day, our input set grows.
-With streaming, we can be confident that if we do not run out of memory today, we will not run out of memory tomorrow.
-Tomorrow, and tomorrow, and tomorrow; the program will not die hereafter.
-
-When we have a query to perform over some input file, it is fine to execute it.
-We must execute it.
-But what do we do when we have multiple queries over the same input?
-A `query' is not an exact thing; there is no real difference between one query that computes two things, and two queries that compute one thing each.
-The only difference is that two queries will take twice as long.
-Suppose we have two queries over the same input data, both written separately.
-If we execute each query separately, we will end up traversing each file twice.
-We will spend more time shuffling data around than performing real computation.
-We would like to instead execute both queries at the same time.
-
-In order to execute both queries at the same time, we may be able to write a new query that combines the two together.
-If the two queries are simple, this compound query will remain quite simple.
-If one query is simple and the other is complex, writing the compound query will require awkward rearranging, yet achievable.
+If we have two queries to execute at the same time, we can write a new query that combines them together.
+If both queries are simple, the compound query will remain simple.
+If one query is simple and the other is complex, the compound query will be a bit more complex.
 If both queries are complex, the compound will be tremendously complex.
-As the queries get more complex these complexities compound.
-\TODO{This kind of rhetoric will not convince anybody who isn't already convinced, and will bore those who are.}
 
-Two queries at once is hard enough; when we start wanting to execute three or four or more queries, our gut can no longer guide us.
-We need a system to help us: a rigorous approach to transforming multiple queries over the same dataset into a single compound query.
-This is my thesis: a system for automatically compounding multiple queries, so they can be executed together, and this is faster than running multiple queries separately.
+Combining two queries is hard enough; when we want to combine three or more queries, we soon reach the limit of what can be achieved with intuition alone.
+As our queries become more complex and more numerous, the compound becomes exponentially more complex.
+We need a system to help us: a rigorous approach to transforming multiple queries into a single compound query.
+This transform is called fusion.
 
-The queries we wish to compound are streaming queries.
-Our focus is on streaming queries.
+\section{Push streams}
 
-The first part of this thesis is on compounding push streams.
+The first part of this thesis looks at fusing queries that use push streams.
 Push streams are those where the producer controls the flow of computation, and the flow of values.
-The producer pushes values into the consumer, and the consumer must deal with these values.
+The producer pushes values into the consumer, and the consumer must accept with these values.
 Producers determine the order in which values are given to consumers.
-This rules out most use-cases with multiple producers, such as appending streams, pairing them together, or merging two sorted streams so that the result remains sorted.
 
-These limitations make push queries restricted in expressivity, but as with any worthwhile restriction, we trade power here for power elsewhere.
-We can take any two push queries operating over the same input stream, and we can compound them together.
-All push queries can be compounded together.
-This makes compounding easy to predict and rely upon.
+In push streams, one producer can push to many consumers.
+Each query is a consumer, and the input file is the producer.
+By pushing the data to all the queries, we are able to perform any number of queries at the same time.
+Push streams allow us to take any queries operating over the same input and fuse them together.
+We can rely on fusion.
 
-For problems with a single input file, push queries are a perfect solution.
-Push queries can express any streaming computation with a single input file.
-The intution here is that with a single input file, there are only two options: perform some internal computation, or read the next element.
-A push computation will keep pushing values into the consumer until the file has been exhausted.
-In a pull computation with a single file, the consumer has two choices: pull the next element, or perform output.
-The push consumer effectively has the same options: to pull the next element, it just needs to return control to the push computation; to perform output, it can do that before returning.
+Push streams have limited expressivity, however.
+Push streams cannot support most use-cases with multiple input streams, such as appending streams, pairing them together, or merging sorted streams so that the result remains sorted.
+When we have multiple input files, the query has a particular order in which it needs to read elements from each file.
+In push streams, the producer imposes its order upon the consumer.
+The query has no choice in the matter.
+This limited expressivity is the price we pay for guaranteed fusion.
 
-When we have multiple input files, we cannot continue to use push queries.
+Trying to read from multiple input files as push streams is a bit like putting the files together and randomly interspersing the lines.
+You can read a line, but you don't know which file it came from until after you read it.
+
+For datasets with a single input file, push streams are a perfect solution.
+Push streams can express any streaming computation with a single input file, while guaranteeing that all queries over the same input can be fused together.
+
+\section{Pushing and pulling with Kahn process networks}
+
+When we have multiple input files, we can no longer use push queries.
 The consumer must choose which order to read from its input files.
 The consumer must pull from its inputs, rather than the inputs pushing.
-If the inputs pushed values, the consumer would have no control over the relative order in which the different inputs came.
-The producers would have that control.
-Having two push streams as inputs is equivalent to a single input stream, where each element is of type either; each element in the stream is either an element from the first input stream, or an element from the second input stream, but the consumer has no control of the order any more than a stream consumer has any control of the values in the stream.
 
 Pull streams, however, introduce their own problems.
-As push streams can only have one producer, pull streams can only have one consumer.
-The consumer is in control of the computation, and there can only be one controller.
-With one consumer, we are limited to one query.
+Just as push streams only support one producer, pull streams only support one consumer.
+In pull streams, the consumer is in control of the computation.
+There can only be one controller and there can only be one consumer.
+Having one consumer limits us to one query.
 Pull streams are unsuitable for performing multiple queries at the same time.
+
 
 Pull streams and push streams have one thing in common: there is a single point of control for the computation.
 Where the control lies differs: in push it is in the producer; in pull it is in the consumer.
 Our problem is that we are limited to a single point of control, while we have several queries.
-We must decide which query, then, should have control, and why.
-Stepping back, must we accept this limitation?
-Is it a fundamental truth that a program must have a single point of control? No, it is not!
 
 Having a single point of control is very useful for a machine; after all this is how single-threaded processors execute programs.
 But we wish to write better programs.
 We wish to help programmers write better programs.
-One of the ways to do that is by abstracting over the machine itself; abstracting over the accident of sequential shared state imperative programs; abstracting over the accident of a shared state imperative world.
+One of the ways to do that is by abstracting over the machine itself, and abstracting over the accident of sequential shared state imperative programs.
 
-It transpires that a single point of control is not necessary or ideal for streaming programs; what of multiple points of control?
+A single point of control is not necessary or ideal for streaming programs.
+We can write programs with multiple points of control: concurrent programs.
 Concurrent programs with shared state are absurdly difficult to write, and even harder to get right.
 A program's state space is quadratic in the number of points of control.
 This state space means for a programmer to reason about correctness, a programmer must reason about a quadratic number of cases.
@@ -123,30 +105,40 @@ Requiring concurrent programs to be deterministic tames the state space explosio
 We no longer have to reason about a quadratic number of states, because we know that whichever order the programs execute in, we will get the right result.
 
 We want a concurrent, deterministic streaming model.
-Such a model exists: Kahn Process Networks.
-Kahn Process Networks are networks of processes, communicating via channels.
-Streams flow along channels.
-Determinism is achieved by a few restrictions: all communication between processes is through channels; all reading from channels is blocking; all channels are owned by a single process.
-There is no shared state.
-There is no peeking to see if a channel has a value, before deciding whether to read it.
-There is no race between two processes to see which can read from a channel first.
-Kahn Process Networks are just swell.
+Such a model is called a Kahn Process Network.
+Kahn Process Networks are networks of concurrent processes, communicating via channels, with streams of elements flowing along channels.
+Determinism is achieved by a few restrictions: all communication between processes is through channels; all reading from channels is blocking; and all channels are owned by a single process.
+Kahn Process Networks turn non-deterministic concurrency into a deterministic computation.
 
+% There is no state shared between processes, which means the only way processes can communicate is through channels.
+% 
+% A process cannot peek to see if a channel has a value before deciding whether to read it.
+% Once a process is reading from a channel, it must wait until a value is available.
+% Peeking would allow a process to observe the non-determinism in scheduling.
+% 
+% There is no race between two processes to see which can read from a channel first.
+% Kahn Process Networks are just swell.
 
+Kahn Process Networks are a good computational method, but not the best execution strategy.
+Sending values across channels is expensive: we must lock the channel, copy the value onto the queue, and unlock it.
+By the time the consumer receives the value, it is unlikely to be in cache, and definitely no longer in a register.
+To ameliorate the concurrency overhead, implementations tend to chunk together values into arrays before sending them.
+This can only reduce the overhead; it can never remove it entirely.
+Instead, we wish to compile away the overhead.
+We take the processes in a Kahn Process Network, and convert it into a single process that does the job of all the processes together, without any communication.
 
-In general, not all queries can be compounded together.
-The appealing thing about push queries is that any two push queries over the same input can be compounded together.
-
-This compounding operation is called horizontal fusion.
-Horizontal in this case refers to how data flow graphs are arranged; nodes operating on the same input data, which can be performed in parallel or sequentially, are typically horizontally adjacent.
-Vertical fusion refers to nodes operating in a pipeline, where each node feeds values to the node below.
-
-Stream fusion is a rich area of research which has for the most part focussed on vertical fusion.
-
-The reason for compounding queries is to reduce execution time.
-It is quite important, then, that our compound query does not take longer to execute than the original queries, combined.
-In fact, we would like our compound query to execute in almost as little time as the slowest query on its own.
-What we would like is not always achievable, but it can be helpful to have something to strive for.
+% In general, not all queries can be compounded together.
+% 
+% This compounding operation is called horizontal fusion.
+% Horizontal in this case refers to how data flow graphs are arranged; nodes operating on the same input data, which can be performed in parallel or sequentially, are typically horizontally adjacent.
+% Vertical fusion refers to nodes operating in a pipeline, where each node feeds values to the node below.
+% 
+% Stream fusion is a rich area of research which has for the most part focussed on vertical fusion.
+% 
+% The reason for compounding queries is to reduce execution time.
+% It is quite important, then, that our compound query does not take longer to execute than the original queries, combined.
+% In fact, we would like our compound query to execute in almost as little time as the slowest query on its own.
+% What we would like is not always achievable, but it can be helpful to have something to strive for.
 
 
 

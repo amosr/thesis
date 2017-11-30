@@ -630,18 +630,18 @@ sinkToFile filepath
 
 \section{Code generation}
 We are now ready to perform code generation on our @grepGood@ example (\autoref{s:extraction:grepGood}), which filters lines in a file.
-It has the following process network.
+The example has the following process network.
 
 \begin{lstlisting}
 Process network:
-  sources: input = sourceOfFile fileIn
-  sinks:   goods = sinkOfFile   fileOut
-  processes:
+  Sources: input = sourceOfFile fileIn
+  Sinks:   goods = sinkOfFile   fileOut
+  Processes:
     Process "filter"
-      inputs:  input
-      outputs: goods
-      initial: l0
-      instructions:
+      Inputs:  input
+      Outputs: goods
+      Initial: l0
+      Instructions:
         l0   = Pull  input l1 l4
         l1 e = If (isPrefixOf "Good" e)
                           (l2 e)
@@ -653,28 +653,26 @@ Process network:
         l5   = Done
 \end{lstlisting}
 
-Sources and sinks are specified for @input@ and @goods@.
+In the first two lines of the process network, we specify the sources and sinks for @input@ and @goods@.
 The right-hand side of each endpoint definition is the expression to construct the endpoint, used by code generation.
 
-Next there is room for multiple processes.
-In networks with multiple processes, the processes are fused together into a single process before code generation.
+Under the @Processes@ heading, there is room for multiple processes.
+In networks with multiple processes, the processes would be fused together into a single process before code generation.
 Our example only has one process, the @filter@ process, which pulls from the source stream @input@ and pushes to the sink stream @goods@.
 
-The @filter@ process starts at label @l0@, which pulls from the @input@ stream.
-Labels @l1@ to @l3@ perform the filtering for each element, while labels @l4@ and @l5@ close the output stream and end the process once the @input@ stream is finished.
+The @filter@ process starts at label @l0@, the instruction for which pulls from the @input@ stream.
+The instructions for labels @l1@ to @l3@ perform the filtering for each element, while the instructions for labels @l4@ and @l5@ close the output stream and end the process once the @input@ stream is finished.
 
 The original process formulation \REFTODO{processes} used a mutable heap.
 This would require a mutable reference for each variable in the heap.
-As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references, because we wish to take advantage of constructor specialisation for unboxing.
-Instead of a mutable heap, we treat each label as a function with arguments.
-Each label definition has a list of variable names which are the function parameters and can be used in the body of the instruction.
-Likewise, each reference to a label, either as the initial state of a process or as the destination state of an instruction, has a list of expressions which are the function arguments.
+As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references; we must generate code that can be transformed by constructor specialisation.
+Instead of a mutable heap, we treat each label as a parameterised continuation.
+Each label definition has a list of variable names which are the continuation parameters and can be used in the body of the instruction.
+Each call to a continuation, either as the initial state of a process or as the destination of an instruction, has a list of expressions which are the arguments.
 
-Labels @l1@ and @l2@ both take the current element as a parameter.
-The pull instruction at @l0@ has as its `success' destination the label @l1@ with no arguments.
+The continuations at labels @l1@ and @l2@ both take the current element as a parameter.
+The pull instruction at @l0@ has label @l1@, with no arguments, as its `success' destination.
 Pull expects its `success' destination label to take one extra argument, which will be called with the pulled element at runtime.
-
-Even a process with only six labels generates quite a bit of code; we shall go through the generated code piece by piece rather than all at once.
 
 \begin{lstlisting}
 grepGood fileIn fileOut =
@@ -682,72 +680,61 @@ grepGood fileIn fileOut =
    Source input'init input'pull input'done ->
     case sinkOfFile fileOut of
      Sink goods'init goods'push goods'done -> do
-\end{lstlisting}
-
-First we unpack the @input@ source (@sourceOfFile fileIn@) to get its initialisation function (@input'init@), its pull function (@input'pull@), and its close function (@input'done@).
-We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because accessor functions cannot be used to unpack data structures with existential types.
-We perform the same unpacking for the @goods@ sink.
-These source and sink component functions are in scope for the rest of the generated @grepGood@ function.
-
-\begin{lstlisting}
       let l0 SPEC input's goods's = do
             (v, input's') <- input'pull input's
             case v of
              Just v' -> l1 SPEC input's' goods's v'
              Nothing -> l4 SPEC input's' goods's
-\end{lstlisting}
-
-Next, we define a function for each label of the process.
-We start with label @l0@.
-In the process @l0@ has no parameters, but we add extra parameters to each function during code generation.
-The first parameter is the @SPEC@ annotation used to force constructor specialisation.
-The next two parameters are the current states of the endpoints, @input@ and @goods@.
-
-The instruction for @l0@ pulls from @input@, so our function @l0@ must also pull from @input@ by calling the @input'pull@ function with the current state @input's@.
-The pulled value is bound to @v@, while the new state for the @input@ source is bound to @input's'@.
-We unpack the pulled value @v@ to check whether pull succeeded or the stream has finished.
-If the pull succeeds, we pass control to the function for label @l1@, passing the @SPEC@ annotation for constructor specialisation, the updated @input@ source state, the unchanged @goods@ sink state, and the actual pulled value.
-If the stream has finished, we pass control to the function for label @l4@, again with the constructor specialisation annotation and endpoint states.
-
-
-\begin{lstlisting}
       let l1 SPEC input's goods's e = do
             case isPrefixOf "Good" e of
              True  -> l2 SPEC input's goods's e
              False -> l3 SPEC input's goods's
-\end{lstlisting}
-
-The function for @l1@ takes as parameters the constructor specialisation annotation and endpoint states, as well as the current element.
-We check whether the current element starts with the string \lstinline/"Good"/; if so passing control and the current element to @l2@, otherwise passing control to @l3@.
-
-\begin{lstlisting}
       let l2 SPEC input's goods's e = do
             goods's' <- goods'push goods's e
             l3 SPEC input's goods's'
-\end{lstlisting}
-
-The function for @l2@ pushes to the @goods@ sink by calling @goods'push@.
-The new @goods@ state is bound to @goods's'@ and passed to @l3@.
-
-\begin{lstlisting}
       let l3 SPEC input's goods's =
             l0 SPEC input's goods's
-\end{lstlisting}
-
-The instruction for @l3@ drops the pulled value from @input@.
-Drop instructions exist solely as coordination hints for processes during fusion.
-For code generation, we loop back to @l0@.
-
-\begin{lstlisting}
       let l4 SPEC input's goods's = do
             goods'done goods's
             l5 SPEC input's
+      let l5 SPEC input's = do
+            input'done input's
+            return ()
+      input's0 <- input'init
+      goods's0 <- goods'init
+      l0 SPEC input's0 goods's0
 \end{lstlisting}
 
-The function for @l4@ closes the @goods@ sink.
-Because endpoint states must be used linearly, the call to @goods'done@ invalidates the old state without returning a new state.
-Further labels will not need the state; the sink is closed and can no longer be pushed to or closed again.
-When passing control to @l5@, we pass only the @input@ state and not the old @goods@ state.
+In the generated code for @grepGood@, we first unpack the @input@ source to get its initialisation function, its pull function, and its close function.
+We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because accessor functions cannot be used to unpack data structures with existential types.
+We perform the same unpacking for the @goods@ sink.
+
+Each label of the process is implemented by a function definition.
+In the process @l0@ has no parameters, but we add extra parameters to each function during code generation.
+The first parameter is the @SPEC@ annotation used to force constructor specialisation.
+The next two parameters are the current states of the endpoints, @input@ and @goods@.
+The instruction for @l0@ pulls from @input@ and checks whether the pull succeeds or the stream has ended.
+In either case the new @input@ state, @input's'@, is passed to the continuation.
+
+% The instruction for @l0@ pulls from @input@, so our function @l0@ must also pull from @input@ by calling the @input'pull@ function with the current state @input's@.
+% The pulled value is bound to @v@, while the new state for the @input@ source is bound to @input's'@.
+% We unpack the pulled value @v@ to check whether pull succeeded or the stream has finished.
+% If the pull succeeds, we pass control to the function for label @l1@, passing the @SPEC@ annotation for constructor specialisation, the updated @input@ source state, the unchanged @goods@ sink state, and the actual pulled value.
+% If the stream has finished, we pass control to the function for label @l4@, again with the constructor specialisation annotation and endpoint states.
+
+When the pull at @l0@ succeeds, the function for @l1@ takes the pulled element as a parameter, and checks whether the element starts with the string \lstinline/"Good"/.
+If so, the function for @l2@ pushes to the @goods@ sink by calling @goods'push@ before continuing to @l3@.
+Otherwise, control goes straight to @l3@.
+The instruction for @l3@ drops the pulled value from @input@.
+Drop instructions are coordination hints for processes during fusion; for code generation, we loop back to @l0@.
+
+When the input stream is finished, the function for @l4@ closes the @goods@ sink.
+The sink state is no longer required.
+The function for the last label, @l5@, closes the input source and finishes the process.
+
+% Because endpoint states must be used linearly, the call to @goods'done@ invalidates the old state without returning a new state.
+% Further labels will not need the state; the sink is closed and can no longer be pushed to or closed again.
+% When passing control to @l5@, we pass only the @input@ state and not the old @goods@ state.
 
 % The function for @l4@ closes the @goods@ sink by calling @goods'done@ with the current state for @goods@.
 % Because endpoint states must be used linearly, the call to @goods'done@ invalidates the old state @goods's@ without returning a new state.
@@ -759,29 +746,15 @@ When passing control to @l5@, we pass only the @input@ state and not the old @go
 % Reusing the old state works because the linearity is not enforced by the typecheker.
 % If necessary, it would 
 
-\begin{lstlisting}
-      let l5 SPEC input's = do
-            input'done input's
-            return ()
-\end{lstlisting}
 
-The function for the last label, @l5@, closes all sources and finishes the process.
-
-\begin{lstlisting}
-      input's0 <- input'init
-      goods's0 <- goods'init
-      l0 SPEC input's0 goods's0
-\end{lstlisting}
-
-With all the labels defined, we can execute the process.
-To start execution, we initialise the @input@ source and @goods@ sink, and call the initial label @l0@ with the endpoint states.
+To start execution, we initialise the endpoints and call the continuation for the initial label.
 
 \section{Vector endpoints}
 
-We might wish to perform array computations, rather than streaming from disk or network.
-In this case, we need a way to create a source from a vector, and to convert a sink to a vector.
+We wish to perform array computations, as well as than streaming from disk or network.
+In this case, we need a way to create a source that reads from a vector, and a sink that writes to a vector.
 
-Creating a source from a vector is straightforward.
+Creating a source that reads from a vector is straightforward.
 The source state is the index into the vector.
 Pulling from the source checks if the index is within the vector, looks up the element at that index, and increments the index.
 
@@ -793,43 +766,42 @@ sourceOfVector vec
   init               = return 0
 
   pull ix
-   | ix < length vec = return (Just (unsafeIndex vec ix), ix + 1)
+   | ix < length vec = return (Just (index vec ix), ix + 1)
    | otherwise       = return (Nothing, ix)
 
   done _             = return ()
 \end{lstlisting}
 
-We use \lstinline/unsafeIndex/ to forgo the usual bounds checks, which would be redundant here as the bounds check is already performed by @pull@.
-Unsafe versions of functions generally trade safety for speed, putting a larger burden of correctness on the user.
-
-Converting a sink into a vector is a little more involved.
-The first complication is that the sink does not know upfront the size of the output stream.
-The sink must dynamically grow the output vector as it receives elements.
+The other direction, a sink that writes to a vector, is a little more involved.
+The first complication is that we do not always know upfront the size of the output stream.
+We must dynamically grow the output vector as we receive elements.
 We start with a mutable vector of size 4, then every push checks if there is room for the new element, and doubles the size of the vector if necessary.
-Once all elements are written, we convert the mutable vector to an immutable one and discard the unused portion at the end of the vector.
+Once all elements are written, we convert the mutable vector to an immutable one, discarding any unused elements at the end of the vector.
 
 The second complication is that sinks do not `return' a value, so the sink must take an argument describing where to store the vector.
-Although we were able to avoid mutable references in code generation, some kind of mutable reference is unavoidable here.
-The boxing overheads described earlier are negligible in this case though, because the reference is only written to and read from once at the end of the process, rather than once for every iteration.
+We need a mutable reference for the vector.
+The reference is only written to and read from once at the end of the process, rather than once for every iteration, so the boxing overheads described earlier are negligible in this case.
+% Although we were able to avoid mutable references in code generation, some kind of mutable reference is required here.
 
+\TODO{IORef (Maybe a)?}
 \begin{lstlisting}
 sinkVector :: IORef (Vector a) -> Sink a
 sinkVector out
   = Sink init push done
  where
   init = do
-    vec <- Mutable.unsafeNew 4
+    vec <- Mutable.new 4
     return (vec, 0)
 
   push (vec, ix) e = do
     vec' <- if ix < Mutable.length vec
             then return vec
-            else Mutable.unsafeGrow vec (Mutable.length vec)
-    Mutable.unsafeWrite vec' ix e
+            else Mutable.grow vec (Mutable.length vec)
+    Mutable.write vec' ix e
     return (vec', ix + 1)
 
   done (vec, ix) = do
-    vec' <- unsafeFreeze (Mutable.unsafeSlice vec ix)
+    vec' <- freeze (Mutable.slice vec ix)
     writeIORef out vec'
 \end{lstlisting}
 
@@ -843,20 +815,19 @@ sinkVectorSize maxSize out
   = Sink init push done
  where
   init = do
-    vec <- Mutable.unsafeNew maxSize
+    vec <- Mutable.new maxSize
     return (vec, 0)
 
   push (vec, ix) e = do
-    Mutable.unsafeWrite vec ix e
+    Mutable.write vec ix e
     return (vec, ix + 1)
 
   done (vec, ix) = do
-    vec' <- unsafeFreeze (Mutable.unsafeSlice vec ix)
+    vec' <- freeze (Mutable.slice vec ix)
     writeIORef out vec'
 \end{lstlisting}
 
 By removing the bounds check for each push, we have made it faster at the expense of safety.
-The first two vector sinks used unsafe functions in such a way that they were still externally safe.
 This sink is not externally safe.
 If we pass a size of zero and connect it to a non-empty stream, the program will write past the end of the allocated vector, violating another part of the program's memory or causing a segmentation fault.
 This puts the burden on the user of the sink to be certain of the upper bound.
@@ -864,16 +835,21 @@ This puts the burden on the user of the sink to be certain of the upper bound.
 \subsection{Size hints}
 \label{s:implementation:sizehints}
 
-Knowing the size of streams allows the user to manually eliminate resizing and bounds checks.
+\TODO{Example of when we know the vector size ahead of time. Maps, filters, appends.}
+
+Knowing the size of streams allows us to eliminate resizing and bounds checks.
 It would be safer and more convenient to do this automatically.
 We have not implemented this automatic transform in Folderol, and it is left to future work.
 
 This knowledge about the size of streams is called a \emph{size hint}.
 A size hint can be represented using the type (@Maybe Int@), where @Just@ denotes a known upper bound and @Nothing@ denotes a completely unknown size.
-In Stream Fusion, these size hints are attached to the constructor of the Stream datatype \cite{coutts2007rewriting} and are used when converting a stream to a vector.
+Size hints were not present in original Stream Fusion \cite{coutts2007stream}, but were introduced in later work on fusion for strings \cite{coutts2007rewriting}.
+These size hints are attached to the constructor of the Stream datatype and are used when converting a stream to a vector.
 Stream transformers must transform the size hint of the stream as well as the stream itself.
 A @map@ transformer creates a new stream with the same number of elements, so the size hint is left unchanged.
-On the other hand, @concat@, which concatenates a stream of nested lists, produces a stream with any number of elements, so the size hint is unknown.
+A @filter@ transformer can produce a shorter stream, but the upper-bound is the original size, so the size hint is also left unchanged.
+On the other hand, the number of elements produced by concatenating a stream of nested lists (@concat@) depends more upon the values than the size of the input stream.
+For @concat@ the size hint is unknown.
 
 To implement size hints in Folderol, we note whether information is available at compile-time or not available until runtime.
 Whether a stream's size is `known' or `unknown' is compile-time information.
@@ -887,10 +863,125 @@ Processes, when creating an output stream, must specify its size hint based on t
 Sinks must be extended to take the size hint as an argument during construction.
 This is left to future work.
 
-\section{Other transforms}
-\TODO{Elsewhere.}
+\section{Transforming process networks}
+
+The fusion algorithm described in \REFTODO{processes and fusion} describes fusion for a pair of processes.
+To generate code we need to fuse whole process networks.
+We also perform some simplification on the processes.
+
+
+\subsection{Fusing a network}
+The fusion algorithm described in \REFTODO{processes and fusion} fuses pairs of processes at a time, but networks generally contain more than two processes.
+To fuse a whole network, we must repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
+
+The following example, @append2zip@, constructs a process network with three input streams.
+This is a partial process network which could be part of a larger network; the particular endpoints used are not relevant here.
+
+\begin{lstlisting}
+append2zip a b c =
+  ba <- append b a
+  bc <- append b c
+  z  <- zip ba bc
+  return z
+\end{lstlisting}
+
+This process network appends the input streams, then pairs together the elements in both appended streams.
+The prefix of both appended streams is the same, so the output will be the prefix paired with itself, followed by the two other streams paired together.
+
+
+\autoref{figs/hand/append2zip-swim} shows an example execution of @append2zip@.
+The execution is displayed as a sequence diagram.
+Each input stream and process is its own vertical line, which communicates with other processes by arrows.
+Since each process only produces one output stream, we conflate the output stream with the process that produces it; the process which produces @ba@ is written as @ba@. 
+Time flows downwards.
+The values for each input stream is shown above the stream's name.
+
+\begin{figure}
+\center
+\includegraphics{figs/hand/append2zip-swim.jpg}
+\caption[placeholder]{placeholder sequence diagram for an execution of @append2zip@.}
+\label{figs/hand/append2zip-swim}
+\end{figure}
+
+The execution has two sections.
+In the first section, all the values from the @b@ stream are pushed to both appends, then paired together.
+In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
+The consumer process, @zip@, alternates between pulling from each of the @append@ processes.
+The access pattern imposed by the consumer propagates through the @append@ processes and to the input streams.
+
+This example contains three processes, and we could perform fusion in three different orders.
+First, we could fuse the two appends together, then add the zip.
+The other two orders are very similar, fusing the zip with one of the appends, then adding the other append.
+
+If we fuse the two append processes together first, we interleave the appends without considering the access pattern of the zip process.
+A possible interleaving of the appends alone is to read all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
+For the shared prefix, this interleaving alternates between pushing to streams @ba@ and @bc@, then pushes the rest of the stream @ba@, then pushes the rest of the stream @bc@.
+When we try to fuse the zip with the fused appends, we get stuck.
+The zip needs to alternate between its inputs, which works for the shared prefix, but not for the remainder.
+Fusing the two appends together caused us to prematurely commit to an interleaving that is locally correct, but globally wrong.
+
+Fusion succeeds if we try one of the other orders where we fuse the zip with one of the appends first then adding the other append.
+The consumer, @zip@, must determine the order in which the appends push; fusing the zip first gives it this control.
+We start from the consumer and fuse them upwards with their producers, because this allows the consumer to impose its access pattern on the producers.
+
+
+\FigurePdf{figs/specconstr/append2zip}{Process network for append2zip}{Process network for append2zip}
+
+To decide which order to fuse a whole network in, we treat the process network as a dependency graph.
+\autoref{figs/specconstr/append2zip} shows the process network for @append2zip@, with producers at the top and consumers at the bottom.
+The @zip@ depends on both @append@ processes, and each @append@ processes depends on its two input streams.
+We find all the terminal processes, which are those consumers with no children processes that they produce to.
+In our example, @zip@ is the only terminal process.
+
+For each terminal process, we find its parents.
+In this case, the terminal process has multiple parents --- the two appends --- and we could fuse in either order.
+In general, one parent may depend on another parent.
+In this case we first fuse with the bottom-most parent, which consumes from the other parent.
+We repeatedly fuse each terminal process with its closest parent until there are no more parents.
+
+If there remain multiple processes after fusing each terminal process with all its ancestors, the remaining processes must not share ancestors.
+The remaining processes also cannot share descendents, since if they had descendents they would not be terminal.
+In this case, the processes are completely separate and could be executed separately, in any order or even in parallel.
+Having unconnected processes in the same process network is a degenerate case, as it could be represented as multiple process networks.
+We err on the side of caution, telling the programmer about anything even slightly unexpected.
+Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
+
+If at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
+\TODO{More about when fusion fails}
+
+This technique works in practice, but is not complete.
+The problem is that we commit too early to a particular interleaving.
+In \REFTODO{future of fusion} we investigate future work.
+By explicitly introducing non-determinism in the fused process, we can represent all possible interleavings, and do not have to commit to one too early.
+
+Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.
+Different orders will not affect the result, or whether things fuse.
+Different orders do affect the size of the intermediate process, before all processes are fused together.
+Fusing two unrelated processes which read from different streams introduces a lot of non-determinism: at each step of the fused process, either of the original processes can take a step.
+The two processes do not constrain each other and the result process will have a lot of states.
+Fusing related processes, for example a producer and a consumer, introduce less non-determinism because there are points when only one of the processes can run.
+When the consumer is waiting for a value, only the producer can run.
+Generally, for similar input processes, fusing related processes will produce a smaller process than fusing unrelated processes.
+The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
+Larger intermediate programs generally take longer to compile, so in future work it will still be preferable to fuse related processes before unrelated.
+
+\TODO{Not sure whether this non-determinism discussion will go here or in \REFTODO{future of fusion}}
+
+
+% \subsection{Fusing a pair of processes}
+% Fusing a pair of processes is slightly different because variables are passed as function arguments, instead of a global heap.
+% It also needs to take into account variable bindings per label, because of the locally-bound variables.
+% For a pair of labels, the variables is the union of variables in the original processes, as well as any \emph{new} channel buffers which need to be bound.
+% These are the ones which have an input state of \emph{have}.
 
 \subsection{Cull outputs}
+
+
+
+\begin{lstlisting}
+
+\end{lstlisting}
+
 After fusing a producer with a consumer, the result process is still a producer.
 The result process pushes to the output channel, as well as copying them into variables for the consumer to use.
 When there are multiple consumers reading from one producer, the result process must remain a producer until all consumers have been fused in.
@@ -900,22 +991,6 @@ This transform is a very simple transform to remove some extraneous stuff.
 
 % \subsection{Insert dups}
 % Let's pretend that the fusion process handles this case, as is the proof and paper version
-
-\subsection{Fusing a network}
-The fusion algorithm described in \REFTODO{processes and fusion} fuses \emph{pairs of processes} at a time, but network generally contain more than two processes.
-To fuse a whole network, we start by constructing a dependency graph of the process network.
-Then we find all the terminal processes: those with no successors, only predecessors.
-For each terminal process, fuse with each predecessor, and recurse.
-This is like a bottom-up transform.
-The rationale for starting from the bottom is that consumers force a particular access pattern on their producers.
-
-\TODO{expand}
-
-% \subsection{Fusing a pair of processes}
-% Fusing a pair of processes is slightly different because variables are passed as function arguments, instead of a global heap.
-% It also needs to take into account variable bindings per label, because of the locally-bound variables.
-% For a pair of labels, the variables is the union of variables in the original processes, as well as any \emph{new} channel buffers which need to be bound.
-% These are the ones which have an input state of \emph{have}.
 
 \subsection{Minimise}
 Minimise performs simple skip/jump contraction to remove superfluous states.

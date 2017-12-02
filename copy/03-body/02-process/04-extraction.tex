@@ -875,7 +875,7 @@ The fusion algorithm described in \REFTODO{processes and fusion} fuses pairs of 
 To fuse a whole network, we must repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
 
 The following example, @append2zip@, constructs a process network with three input streams.
-This is a partial process network which could be part of a larger network; the particular endpoints used are not relevant here.
+This example is a partial process network which could be part of a larger network; the particular endpoints for the input and output streams are not relevant here.
 
 \begin{lstlisting}
 append2zip a b c =
@@ -892,9 +892,9 @@ The prefix of both appended streams is the same, so the output will be the prefi
 \autoref{figs/hand/append2zip-swim} shows an example execution of @append2zip@.
 The execution is displayed as a sequence diagram.
 Each input stream and process is its own vertical line, which communicates with other processes by arrows.
-Since each process only produces one output stream, we conflate the output stream with the process that produces it; the process which produces @ba@ is written as @ba@. 
-Time flows downwards.
+Since each process only produces one output stream, we conflate the output stream with the process that produces it; the process which produces @ba@ is named @ba@. 
 The values for each input stream is shown above the stream's name.
+Time flows downwards.
 
 \begin{figure}
 \center
@@ -904,24 +904,25 @@ The values for each input stream is shown above the stream's name.
 \end{figure}
 
 The execution has two sections.
-In the first section, all the values from the @b@ stream are pushed to both appends, then paired together.
+In the first section, all the values from the @b@ stream are pushed to both @append@ processes, then paired together.
 In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
 The consumer process, @zip@, alternates between pulling from each of the @append@ processes.
-The access pattern imposed by the consumer propagates through the @append@ processes and to the input streams.
+The access pattern imposed by the consumer propagates upwards through the @append@ processes and to the input streams.
 
 This example contains three processes, and we could perform fusion in three different orders.
-First, we could fuse the two appends together, then add the zip.
-The other two orders are very similar, fusing the zip with one of the appends, then adding the other append.
+In one order, we could fuse the two @append@ processes together, then fuse with the @zip@ process.
+The other two orders fuse the @zip@ process with one of the @append@ processes, then fuse with the other @append@ process.
 
-If we fuse the two append processes together first, we interleave the appends without considering the access pattern of the zip process.
-A possible interleaving of the appends alone is to read all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
-For the shared prefix, this interleaving alternates between pushing to streams @ba@ and @bc@, then pushes the rest of the stream @ba@, then pushes the rest of the stream @bc@.
-When we try to fuse the zip with the fused appends, we get stuck.
-The zip needs to alternate between its inputs, which works for the shared prefix, but not for the remainder.
-Fusing the two appends together caused us to prematurely commit to an interleaving that is locally correct, but globally wrong.
+If we fuse the two @append@ processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
+There are many ways to interleave the two processes; one possibility is that the fused process reads all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
+For the shared prefix, this interleaving alternates between pushing to streams @ba@ and @bc@.
+After the shared prefix, this interleaving pushes the rest of the stream @ba@, then pushes the rest of the stream @bc@.
+When we try to fuse the @zip@ process with the fused @append@ processes with this interleaving, we get stuck.
+The @zip@ process needs to alternate between its inputs, which works for the shared prefix, but not for the remainder.
+Fusing the two @append@ processes together caused us to prematurely commit to an interleaving that is locally correct, but globally wrong.
 
-Fusion succeeds if we try one of the other orders where we fuse the zip with one of the appends first then adding the other append.
-The consumer, @zip@, must determine the order in which the appends push; fusing the zip first gives it this control.
+Fusion succeeds in the other order, where we fuse the @zip@ process with one of the @append@ processes first, then fuse with the other @append@ process.
+The consumer, @zip@, must dictate the order in which the @append@ processes push; fusing the @zip@ process first gives it this control.
 We start from the consumer and fuse them upwards with their producers, because this allows the consumer to impose its access pattern on the producers.
 
 
@@ -934,22 +935,55 @@ We find all the terminal processes, which are those consumers with no children p
 In our example, @zip@ is the only terminal process.
 
 For each terminal process, we find its parents.
-In this case, the terminal process has multiple parents --- the two appends --- and we could fuse in either order.
-In general, one parent may depend on another parent.
-In this case we first fuse with the bottom-most parent, which consumes from the other parent.
+The terminal process in our example has multiple parents --- the two @append@ processes --- and we could fuse in either order.
+In general, one parent may depend on another parent; in which case we first fuse with the parent which consumes from the other parent.
+This allows the consuming parent to impose its access pattern upon the producing parent.
 We repeatedly fuse each terminal process with its closest parent until there are no more parents.
 
-If there remain multiple processes after fusing each terminal process with all its ancestors, the remaining processes must not share ancestors.
+After fusing each terminal process with all its ancestors, there may remain multiple processes.
+This only occurs if the remaining processes do not share ancestors.
 The remaining processes also cannot share descendents, since if they had descendents they would not be terminal.
-In this case, the processes are completely separate and could be executed separately, in any order or even in parallel.
+This means the processes are completely separate and could be executed separately, in any order or even in parallel.
 Having unconnected processes in the same process network is a degenerate case, as it could be represented as multiple process networks.
 We err on the side of caution, telling the programmer about anything even slightly unexpected.
 Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
 
+The fusion algorithm for pairs of processes fails and does not produce a result process when two processes have conflicting access patterns on their shared inputs.
+As the access patterns are determined statically, apparent conflicts may in fact never occur at runtime; we must approximate.
 If at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
-\TODO{More about when fusion fails}
 
-This technique works in practice, but is not complete.
+\subsubsection{Future work}
+\TODO{This likely belongs elsewhere}
+
+This technique for determining fusion order is sound.
+Regardless of the order the processes are fused in, if fusion succeeds, the result process has the same meaning.
+This fusion order works for all examples we have tried \REFTODO{benchmarks}, but it is not complete.
+Completeness for the fusion order means that if there exists any order in which fusion succeeds, then the order described above also succeeds.
+Because we have not proved completeness, there may be process networks for which some fusion order would work, but for which technique would choose the wrong order which fails to fuse.
+
+Sometimes there is no fusion order, even though there should be.
+Some process networks which we can fuse by hand, cannot be fused in any order at all.
+The following example, @append3@, is very similar to @append2zip@ except it returns three output streams constructed by appending the three input streams in different orders.
+
+\begin{lstlisting}
+append3 a b c =
+  ab <- append a b
+  ac <- append a c
+  bc <- append b c
+  return (ab, ac, bc)
+\end{lstlisting}
+
+This process network can be executed with no buffering.
+First, read all of the @a@ input stream, then read the @b@ stream, then read the @c@ stream.
+There is no single consumer in this example which imposes its access pattern on its producers.
+No matter what order we try to fuse the processes, it will fail if the arbitrarily-chosen interleaving .
+
+
+We propose to solve this in future work \REFTODO{future of fusion} by modifying the fusion algorithm to work for any order.
+Rather than knowing that there exists always a order which would work, we can apply fusion in any order knowing that all orders produce the same result.
+
+\TODO{Are there cases which should fuse, but do not, regardless of the order?}
+
 The problem is that we commit too early to a particular interleaving.
 In \REFTODO{future of fusion} we investigate future work.
 By explicitly introducing non-determinism in the fused process, we can represent all possible interleavings, and do not have to commit to one too early.
@@ -964,8 +998,6 @@ When the consumer is waiting for a value, only the producer can run.
 Generally, for similar input processes, fusing related processes will produce a smaller process than fusing unrelated processes.
 The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
 Larger intermediate programs generally take longer to compile, so in future work it will still be preferable to fuse related processes before unrelated.
-
-\TODO{Not sure whether this non-determinism discussion will go here or in \REFTODO{future of fusion}}
 
 
 % \subsection{Fusing a pair of processes}

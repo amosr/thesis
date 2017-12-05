@@ -1,14 +1,12 @@
-% Only during draft mode: show overfull hboxes
-\overfullrule=2cm
+% Show overfull hboxes when editing/typesetting
+% \overfullrule=2cm
+
 \usepackage[drafting]{structure/00-00-style}
 \usepackage[doublespacing]{setspace}
-\usepackage{microtype}
 
 \usepackage[tt=false]{libertine}
 \usepackage[varqu]{zi4}
 \usepackage[libertine]{newtxmath}
-
-\bibliographystyle{apalike}
 
 \newcommand\ADDTOC[1] {
   \addcontentsline{toc}{chapter}{\hspace{\cftchapnumwidth}\tocEntry{#1}}

@@ -1,7 +1,6 @@
 \chapter{Implementation and code generation}
 \label{chapter:process:implementation}
 
-
 Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{fusion}.
 Machine Fusion uses the topology of the entire process network to perform fusion.
 When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
@@ -877,7 +876,7 @@ To fuse a whole network, we must repeatedly fuse pairs of processes together, bu
 
 
 There are many orders in which we could fuse the pairs.
-For $n$ processes, there are $n!$ different permutations and ($n$-1)! different ways to nest the parentheses.
+For $n$ processes, there are $n!$ different permutations and $(n-1)!$ different ways to nest the parentheses.
 For $3$ processes there are $12$ orders; for $4$ processes there are $144$; for $5$ processes there are $2,880$.
 It does not take many processes for there to become too many orders to try.
 For $10$ processes, there are more than a trillion possibilities.
@@ -885,8 +884,6 @@ Even if we could fuse one process in a single instruction, at 3GHz it would take
 If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
 
 We cannot try all the orders; we need a heuristic.
-
-\TODO{Something is wrong with LaTeX; parentheses inside math mode disappear. (x(y(z))) vs $(x(y(z)))$}
 
 The following example, @append2zip@, constructs a process network with three input streams.
 This example is a partial process network which could be part of a larger network; the particular endpoints for the input and output streams are not relevant here.

@@ -1,37 +1,61 @@
 
-% Had to comment this out as I was getting error
-% "Too many math alphabets used in version normal."
-% \usepackage{stmaryrd}
-
-\usepackage{alltt}
+%%% Symbols
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{mathtools}
+
+%%% Typewriter which can escape to math-mode
+\usepackage{alltt}
+
+%%% Figures and plots
 \usepackage{caption}
 \usepackage{float}
 \usepackage{graphicx}
-\usepackage{hyperref}
-
-\usepackage{makeidx}
-\usepackage{mathptmx}
-\usepackage{mathtools}
-\usepackage{textcase}
-\usepackage{url}
-\usepackage{style/utils}
-\usepackage{style/code}
-\usepackage{style/proof}
-\usepackage{style/keywords}
-\usepackage{style/layout}
-\usepackage{style/judgements}
-\usepackage{style/figure}
-
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat/show suggested version=false}
 \pgfplotsset{compat=1.12}
 \usetikzlibrary{shapes,arrows}
 
+
+%%% Hyperlinks
+% Internal within document
+\usepackage{hyperref}
+% External
+\usepackage{url}
+
+%%% Index generation
+\usepackage{makeidx}
+\makeindex
+
+%%% Case conversion, eg for headings
+\usepackage{textcase}
+
+%%% Utility commands
+\usepackage{style/utils}
+\usepackage{style/code}
+\makeatactive
+\usepackage{style/proof}
+\usepackage{style/keywords}
+\usepackage{style/layout}
+\usepackage{style/judgements}
+\usepackage{style/figure}
+
+%%% Bibliography
 \usepackage{natbib}
 % \citestyle{acmauthoryear}
 \let \cite = \citep
-\makeatactive
-\makeindex
+\bibliographystyle{apalike}
+
+
+
+%%% Disabled imports
+
+% Had to comment this out as I was getting error
+% "Too many math alphabets used in version normal."
+% \usepackage{stmaryrd}
+
+% This package was causing math-mode parentheses to disappear.
+%   $(x(y(z)))$ rendered as $xyz$
+% \usepackage{mathptmx}
+

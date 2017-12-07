@@ -866,12 +866,26 @@ This is left to future work.
 \section{Transforming process networks}
 
 The fusion algorithm described in \REFTODO{processes and fusion} describes fusion for a pair of processes.
-To generate code we need to fuse whole process networks.
-We also perform some simplification on the processes.
+To generate code we need to fuse process networks, which can contain many processes, by repeatedly fusing pairs of processes.
 
+The fused process tends to have more states than the input processes; the larger the input processes, the larger the fused process.
+When we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
+As the fused process becomes larger, fusing in the next process will take longer, and code generation will take longer.
+
+If the input process has a couple more states than necessary, this can turn into several unnecessary states in the fused process.
+When this fused process is used as the input to another fusion step, the unnecessary states compound.
+What started as a couple can become dozens, then hundreds, then thousands.
+As with compound interest on a loan, it is best to pay back early and often.
+
+At every fusion step, we perform some simplifications to remove unnecessary states and make the job of the next fusion step a bit easier.
+By making the input to fusion smaller we can produce smaller programs to begin with.
+It is better to simplify as we go rather than relying on a monolithic simplification at the end.
+
+Smaller intermediate code is not just a matter of reducing compilation time, either.
+Sometimes --- preferably rarely --- one does need to read and debug the intermediate code, and smaller code is generally easier to read.
+\TODO{Really?}
 
 \subsection{Fusing a network}
-The fusion algorithm described in \REFTODO{processes and fusion} fuses pairs of processes at a time, but networks generally contain more than two processes.
 To fuse a whole network, we must repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
 
 
@@ -1038,25 +1052,119 @@ Larger intermediate programs generally take longer to compile, so some heuristic
 % For a pair of labels, the variables is the union of variables in the original processes, as well as any \emph{new} channel buffers which need to be bound.
 % These are the ones which have an input state of \emph{have}.
 
-\subsection{Cull outputs}
+\subsection{Jump contraction}
+Between fusing each pair of processes in a process network, we want to simplify the fused process a bit.
+The fusion algorithm introduces some extra jump instructions in the fused process.
+Jump instructions do not provide any computational expressiveness, and we can make the process smaller by removing the jump instructions.
+Because the fusion algorithm is already quite complex and hard to prove correct, we remove the jump instructions in a separate step after fusion.
+It is easier to write two simple transforms than one complex transform.
 
+We call this transform that removes jump instructions \emph{jump contraction}.
+We will look at a fused process in order to understand jump contraction.
 
+In the following example, @map2@, we take an input stream and transform it twice in a pipeline.
 
 \begin{lstlisting}
-
+map2 = $$(fuse $ do
+  a <- source [||sourceOfFile "in.txt"||]
+  b <- map    [|| f ||] a
+  c <- map    [|| g ||] b
+  sink c      [||sinkToFile  "out.txt"||])
 \end{lstlisting}
 
-After fusing a producer with a consumer, the result process is still a producer.
-The result process pushes to the output channel, as well as copying them into variables for the consumer to use.
-When there are multiple consumers reading from one producer, the result process must remain a producer until all consumers have been fused in.
-Once all consumers of the output channel have been fused, assuming the output channel is not used as a sink, the output channel can be removed.
-The \emph{cull outputs} transform finds outputs that are not used by the rest of the networks; any pushes to these channels are replaced with jumps.
-This transform is a very simple transform to remove some extraneous stuff.
+This translates into the following process network with two processes; one for each @map@.
 
-% \subsection{Insert dups}
-% Let's pretend that the fusion process handles this case, as is the proof and paper version
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{8}
+  \hilineFst{9}
+  \hilineFst{10}
+  \hilineFst{11}
+  \hilineFst{12}
+  \hilineSnd{17}
+  \hilineSnd{18}
+  \hilineSnd{19}
+  \hilineSnd{20}
+  \hilineSnd{21}
+  }]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   c = sinkToFile  "out.txt"
+  Processes:
+    Process "map f a":
+      Inputs:  a; Outputs: b; Initial: b0
+      Instructions:
+        b0   = Pull  a b1 b3
+        b1 e = Push  b (f e) b2
+        b2   = Drop  a b0
+        b3   = Close b b4        
+        b4   = Done
 
-\subsection{Minimise}
+    Process "map g b":
+      Inputs:  b; Outputs: c; Initial: c0
+      Instructions:
+        c0   = Pull  b c1 c3      
+        c1 e = Push  c (g e) c2     
+        c2   = Drop  b c0
+        c3   = Close c c4         
+        c4   = Done
+\end{lstlisting}
+
+We fuse process (@map f a@) with process (@map f b@), to create a new process which pushes to outputs streams @b@ and @c@.
+The instructions of each input process are highlighted differently; the same highlighting is used in the fused process to illustrate which input process each instruction comes from.
+Each instruction in the fused process has a comment to the right describing the original process labels and the channel states.
+
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{8}
+  \hilineCom{9}
+  \hilineFst{10}
+  \hilineSnd{11}
+  \hilineSnd{12}
+  \hilineFst{13}
+  \hilineSnd{14}
+  \hilineFst{16}
+  \hilineSnd{17}
+  \hilineSnd{18}
+  \hilineCom{19}
+}]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   c = sinkToFile  "out.txt"
+  Processes:
+    Process "map f a / map g b"
+      Inputs:  a                  Outputs: b c                Initial: l0
+      Instructions:
+        l0   = Pull  a    l1 l7               -- b0, \{\},       c0, \{\}
+        l1 x = Jump      (l2 (f x))           -- b1, \{\},       c0, \{\}
+        l2 y = Push  b y (l3 y)               -- b1, \{have b\}, c0, \{have b\}
+        l3 y = Jump      (l4 y)               -- b2, \{\},       c0, \{have b\}
+        l4 y = Push  c (g y) l5               -- b2, \{\},       c1, \{\}
+        l5   = Drop  a    l6                  -- b2, \{\},       c2, \{\}
+        l6   = Jump       l0                  -- b0, \{\},       c2, \{\}
+
+        l7   = Close b    l8                  -- b3, \{\},       c0, \{closed b\}
+        l8   = Jump       l9                  -- b4, \{\},       c3, \{closed b\}
+        l9   = Close c    l10                 -- b4, \{\},       c3, \{closed b\}
+        l10  = Done                           -- b4, \{\},       c4, \{closed b\}
+\end{lstlisting}
+
+The fused process (@map f a / map g b@) produces to both streams.
+The instructions for labels @l0@ to @l6@ are the main loop for each element of the input stream; instructions for labels @l7@ to @l10@ apply once the input stream is finished.
+For the most part the fused process simply alternates between the two input processes.
+The only interesting part is labels @l1@ to @l3@, where the (@map f a@) process is trying to push to the stream @b@ while the (@map g b@) process is trying to pull from the same.
+The (@map f a@) process applies the function @f@ to the current element and pushes this value to the stream.
+The fused process also pushes the value to the stream, while keeping a copy to pass as a local variable to the other half of the fused process.
+The jump instruction at label @l1@ applies the @f@ function and passes it as an argument so it can be used twice without having to be recomputed.
+
+The fused process has eleven instructions, while the inputs each had five.
+The fused process has gotten bigger, and the four jump instructions comprise most of the growth.
+We would like to remove them.
+
+Looking at the jump instruction at label @l8@, we see that the close instruction at label @l7@ continues to @l8@, then follows the jump instruction to @l9@.
+We modify @l7@ to continue straight to @l9@ without the intermediate step, and remove the instruction at label @l8@ entirely.
+We can perform the same simplification at the jump instruction for label @l6@ by searching for occurences and replacing them with the jump's destination, @l0@.
+
+The jump instruction at label @l3@ is a bit more complicated because it is parameterised.
+
 Minimise performs simple skip/jump contraction to remove superfluous states.
 If label @l@ is @jump m[x=e]@, anywhere that jumps to @l@, we want to replace with a direct jump to @m[x=e]@.
 This is complicated by the variable updates attached to each label.
@@ -1072,14 +1180,51 @@ If we encounter the same label twice, it is time to stop unfolding the definitio
 
 This transform also performs a simple form of dead code removal, by removing unreachable labels.
 
-Why do we do this?
-The truth is that GHC supports these operations on recursive loops already.
-It is unlikely that we are gaining much in performance with such simple optimisations, because they will be performed by GHC later.
-There are two main reasons to do this.
-First, we can perform these simplifications between every pair of processes fused.
-By making the input to fusion smaller we can produce smaller programs to begin with.
-It is better to simplify as we go rather than relying on a monolithic simplification at the end.
-Secondly, this simplification transform makes the intermediate code smaller, making it easier to read and debug in the case that fusion fails.
+
+\subsection{Cull outputs}
+
+When one process in the network pushes to an output channel but no other processes read from the channel, we can simplify the process network by removing the channel and all instructions that push to it.
+This situation is unlikely to occur in the original process network; a programmer would not introduce a channel without using it.
+This situation does happen often in the intermediate process network after some processes have been fused.
+
+Even though the @b@ process is no longer used, the fusion algorithm leaves 
+When there are multiple consumers reading from one producer and we fuse a consumer with the producer, the result process must keep producing for the sake of the other consumers.
+
+
+\begin{lstlisting}
+map3 a =
+  (b,c) <- map'map f g a -- (pbc)
+  d <- map h b -- (pd)
+  return (c, d)
+\end{lstlisting}
+
+Now we fuse the fused process @pbc@ with the process @pd@, to create a new process named @pbcd@.
+The fused process produces three output streams, @b@, @c@ and @d@.
+The output stream @b@ is no longer used anywhere; it is not read by any other process or mentioned.
+At this point, we can simplify the @pbcd@ process and remove the pushes to @b@.
+
+
+\begin{lstlisting}
+map3 a =
+  (b,c,d) <- map'map'map f g h a -- (pbcd)
+  return (c, d)
+\end{lstlisting}
+
+To remove the pushes to stream @b@, we can replace every instruction (@Push b v l'@) with (@Jump l'@).
+
+In this case we were only able to remove the stream @b@ after fusing all processes together, but it is often possible to do it earlier.
+
+\begin{lstlisting}
+map3 a =
+  b <- map f a
+  c <- map g b
+  d <- map h b
+  return (c, d)
+\end{lstlisting}
+
+
+% \subsection{Insert dups}
+% Let's pretend that the fusion process handles this case, as is the proof and paper version
 
 
 

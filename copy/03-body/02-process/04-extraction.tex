@@ -1,6 +1,8 @@
 \chapter{Implementation and code generation}
 \label{chapter:process:implementation}
 
+\iffalse
+
 Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{fusion}.
 Machine Fusion uses the topology of the entire process network to perform fusion.
 When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
@@ -1052,11 +1054,12 @@ Larger intermediate programs generally take longer to compile, so some heuristic
 % For a pair of labels, the variables is the union of variables in the original processes, as well as any \emph{new} channel buffers which need to be bound.
 % These are the ones which have an input state of \emph{have}.
 
+\fi
+
 \subsection{Jump contraction}
 Between fusing each pair of processes in a process network, we want to simplify the fused process a bit.
-The fusion algorithm introduces some extra jump instructions in the fused process.
-Jump instructions do not provide any computational expressiveness, and we can make the process smaller by removing the jump instructions.
-Because the fusion algorithm is already quite complex and hard to prove correct, we remove the jump instructions in a separate step after fusion.
+The fusion algorithm introduces some extra jump instructions in the fused process, and we can often make the process smaller by removing the jump instructions.
+Because the fusion algorithm is already hard to prove correct, we do not wish to make it more complex; instead we remove the jump instructions in a separate step after fusion.
 It is easier to write two simple transforms than one complex transform.
 
 We call this transform that removes jump instructions \emph{jump contraction}.
@@ -1072,7 +1075,7 @@ map2 = $$(fuse $ do
   sink c      [||sinkToFile  "out.txt"||])
 \end{lstlisting}
 
-This translates into the following process network with two processes; one for each @map@.
+This translates into the following process network, which has two processes; one for each @map@.
 
 \begin{lstlisting}[linebackgroundcolor={
   \hilineFst{8}
@@ -1133,94 +1136,196 @@ Process network:
     Process "map f a / map g b"
       Inputs:  a                  Outputs: b c                Initial: l0
       Instructions:
-        l0   = Pull  a    l1 l7               -- b0, \{\},       c0, \{\}
-        l1 x = Jump      (l2 (f x))           -- b1, \{\},       c0, \{\}
-        l2 y = Push  b y (l3 y)               -- b1, \{have b\}, c0, \{have b\}
-        l3 y = Jump      (l4 y)               -- b2, \{\},       c0, \{have b\}
-        l4 y = Push  c (g y) l5               -- b2, \{\},       c1, \{\}
-        l5   = Drop  a    l6                  -- b2, \{\},       c2, \{\}
-        l6   = Jump       l0                  -- b0, \{\},       c2, \{\}
+        l0   = Pull  a       l1 l7            -- b0, \{\},       c0, \{\}
+        l1 w = Jump         (l2 (f w))        -- b1, \{\},       c0, \{\}
+        l2 x = Push  b x    (l3 x)            -- b1, \{have b\}, c0, \{have b\}
+        l3 y = Jump         (l4 y)            -- b2, \{\},       c0, \{have b\}
+        l4 z = Push  c (g z) l5               -- b2, \{\},       c1, \{\}
+        l5   = Drop  a       l6               -- b2, \{\},       c2, \{\}
+        l6   = Jump          l0               -- b0, \{\},       c2, \{\}
 
-        l7   = Close b    l8                  -- b3, \{\},       c0, \{closed b\}
-        l8   = Jump       l9                  -- b4, \{\},       c3, \{closed b\}
-        l9   = Close c    l10                 -- b4, \{\},       c3, \{closed b\}
+        l7   = Close b       l8               -- b3, \{\},       c0, \{closed b\}
+        l8   = Jump          l9               -- b4, \{\},       c3, \{closed b\}
+        l9   = Close c       l10              -- b4, \{\},       c3, \{closed b\}
         l10  = Done                           -- b4, \{\},       c4, \{closed b\}
 \end{lstlisting}
 
-The fused process (@map f a / map g b@) produces to both streams.
-The instructions for labels @l0@ to @l6@ are the main loop for each element of the input stream; instructions for labels @l7@ to @l10@ apply once the input stream is finished.
-For the most part the fused process simply alternates between the two input processes.
-The only interesting part is labels @l1@ to @l3@, where the (@map f a@) process is trying to push to the stream @b@ while the (@map g b@) process is trying to pull from the same.
-The (@map f a@) process applies the function @f@ to the current element and pushes this value to the stream.
+The fused process (@map f a / map g b@) produces to both streams @b@ and @c@.
+The fused process keeps pushing to stream @b@, even though we have fused a producer with a consumer.
+In this case there are no other consumers of stream @b@, but in general a stream may have multiple consumers.
+When a stream has multiple consumers and we fuse the producer with one of the consumers, the fused process must keep producing for the sake of the other consumers.
+In \autoref{section:implementation:cull-outputs} we shall see how to remove streams that have become redundant.
+
+For the most part the fused process alternates between the two input processes, but there is some finer coordination between labels @l1@ to @l3@, where the (@map f a@) process is trying to push to the stream @b@ while the (@map g b@) process is trying to pull from the same.
+When pushing, the (@map f a@) process applies the function @f@ to the current element and pushes this value to the stream.
 The fused process also pushes the value to the stream, while keeping a copy to pass as a local variable to the other half of the fused process.
-The jump instruction at label @l1@ applies the @f@ function and passes it as an argument so it can be used twice without having to be recomputed.
+We wish to compute the application of @f@ only once.
+The fused process has a jump instruction at label @l1@ which applies the function and passes it as an argument to the next instruction, where it can be shared between the two halves of the fused process.
 
 The fused process has eleven instructions, while the inputs each had five.
 The fused process has gotten bigger, and the four jump instructions comprise most of the growth.
-We would like to remove them.
+If we can remove these jump instructions, the result will only be a little larger than each input process.
 
 Looking at the jump instruction at label @l8@, we see that the close instruction at label @l7@ continues to @l8@, then follows the jump instruction to @l9@.
 We modify @l7@ to continue straight to @l9@ without the intermediate step, and remove the instruction at label @l8@ entirely.
-We can perform the same simplification at the jump instruction for label @l6@ by searching for occurences and replacing them with the jump's destination, @l0@.
+We can perform the same simplification at the jump instruction for label @l6@ by finding the occurence in the instruction for label @l5@ and replacing it with the jump's destination, @l0@.
 
-The jump instruction at label @l3@ is a bit more complicated because it is parameterised.
+The jump instruction at label @l3@ is parameterised and is referred to in the instruction for label @l2@.
+For parameterised jumps we must substitute the parameter names for their arguments, and the call (@l3 x@) becomes (@l4 x@).
 
-Minimise performs simple skip/jump contraction to remove superfluous states.
-If label @l@ is @jump m[x=e]@, anywhere that jumps to @l@, we want to replace with a direct jump to @m[x=e]@.
-This is complicated by the variable updates attached to each label.
-A label @l[u]@, which in turn jumps to @l'[u']@, must in fact be replaced with @l'[u'[u]]@, because the substitutions for both variable updates must be applied.
+Essentially, we are inlining each jump instruction into its use sites.
+This transform is more restricted than general inlining because the process language the destination continuations only allow applications of named labels.
 
-However, blindly joining the substitutions can duplicate work.
-If we have the following label update: (@l[x = expensive 2]@) where @expensive@ is some costly operation, and we also have @l'[a=x, b=x]@, we do not want to duplicate the call to @expensive@ as @l'[a = expensive 2, b = expensive 2]@.
-As a conservative approach, we only apply minimisation when all substitutions are only simple variables.
+The jump instruction at label @l1@ is referred to in the pull instruction at label @l0@.
+The call to @l1@ is not applied to all its arguments, because the pull instruction fills in the last argument with the pulled value.
+We cannot inline an under-applied continuation into the call-site at label @l0@, because the syntactic form for continuations has no way to introduce local functions.
+We could instead look at the jump instruction and inline the definition of the push instruction at label @l2@, but this exposes two complications.
 
-One must also beware of infinite loops, as in the case of @l = jump l[u]@.
-Now, when looking up the `next' label for @l@, we keep a set of labels already seen.
-If we encounter the same label twice, it is time to stop unfolding the definition.
+First, the push instruction refers to its parameter, @x@, twice.
+If we inlined the push instruction, we would have to substitute both occurrences of parameter @x@ with the value (@f w@), which would duplicate work.
+To avoid duplicating work, we can only inline if each parameter is mentioned at most once or is substituted by a variable or value which can be duplicated.
+We cannot remove the jump instruction at label @l1@.
 
-This transform also performs a simple form of dead code removal, by removing unreachable labels.
+The second complication is that by inlining an instruction into the jump instruction, we might duplicate the instruction.
+If there were two jump instructions which continued to the same push instruction and we inline the push instruction into both jumps, we have removed two simple instructions at the expense of duplicating the push instruction.
+To avoid duplicating instructions, we can only inline into the body of a jump if the next instruction's label is only mentioned once.
+The process representation our implementation uses means that counting mentions for a label is linear in the number of labels.
+There are surely better representations, but these would require extra bookkeeping when modifying the instruction during inlining.
+For now, our implementation only inlines references to jumps, and does not inline other instructions into jumps.
+
+After removing the jumps, we get the following process with eight states.
+
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{8}
+  \hilineCom{9}
+  \hilineFst{10}
+  \hilineSnd{11}
+  \hilineFst{12}
+  \hilineFst{14}
+  \hilineSnd{15}
+  \hilineCom{16}
+}]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   c = sinkToFile  "out.txt"
+  Processes:
+    Process "map f a / map g b"
+      Inputs:  a                  Outputs: b c                Initial: l0
+      Instructions:
+        l0   = Pull  a       l1 l7
+        l1 w = Jump         (l2 (f w))
+        l2 x = Push  b x    (l4 x)
+        l4 z = Push  c (g z) l5
+        l5   = Drop  a       l0
+
+        l7   = Close b       l9
+        l9   = Close c       l10
+        l10  = Done
+\end{lstlisting}
+
+We must be careful to ensure the transform terminates.
+If we have a jump instruction which jumps to itself, we cannot inline it recursively, because we would end up in an infinite loop.
+The implementation must keep track of which labels have been inlined, and avoid doing the same thing multiple times.
+% we construct a new process by starting from the initial label and exploring outwards.
+% At each step 
+% when inlining an instruction we keep a set of labels that we have inlined.
+% If we encounter the same label twice, it is time to stop unfolding the definition.
 
 
 \subsection{Cull outputs}
+\label{section:implementation:cull-outputs}
 
-When one process in the network pushes to an output channel but no other processes read from the channel, we can simplify the process network by removing the channel and all instructions that push to it.
-This situation is unlikely to occur in the original process network; a programmer would not introduce a channel without using it.
-This situation does happen often in the intermediate process network after some processes have been fused.
+When one process in the network pushes to an output stream but no other processes use the stream as an input, we can simplify the process network by removing the stream and replacing the instructions that mention the stream with jumps.
+This situation is unlikely to occur in the original process network because a programmer would not introduce a channel without using it, but it does happen often in the intermediate process network after some processes have been fused.
 
-Even though the @b@ process is no longer used, the fusion algorithm leaves 
-When there are multiple consumers reading from one producer and we fuse a consumer with the producer, the result process must keep producing for the sake of the other consumers.
+Continuing with the same @map2@ example, we can remove the stream @b@ after the two processes have been fused together.
+The fused process has two instructions that refer to the stream @b@: the push instruction at label @l2@, and the close instruction at label @l7@.
+We replace each instruction with a jump to the original instruction's destination, as follows.
 
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{8}
+  \hilineCom{9}
+  \hilineFst{10}
+  \hilineSnd{11}
+  \hilineFst{12}
+  \hilineFst{14}
+  \hilineSnd{15}
+  \hilineCom{16}
+}]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   c = sinkToFile  "out.txt"
+  Processes:
+    Process "map f a / map g b"
+      Inputs:  a                  Outputs: b c                Initial: l0
+      Instructions:
+        l0   = Pull  a       l1 l7
+        l1 w = Jump         (l2 (f w))
+        l2 x = Jump         (l4 x)
+        l4 z = Push  c (g z) l5
+        l5   = Drop  a       l0
 
-\begin{lstlisting}
-map3 a =
-  (b,c) <- map'map f g a -- (pbc)
-  d <- map h b -- (pd)
-  return (c, d)
+        l7   = Jump          l9
+        l9   = Close c       l10
+        l10  = Done
 \end{lstlisting}
 
-Now we fuse the fused process @pbc@ with the process @pd@, to create a new process named @pbcd@.
-The fused process produces three output streams, @b@, @c@ and @d@.
-The output stream @b@ is no longer used anywhere; it is not read by any other process or mentioned.
-At this point, we can simplify the @pbcd@ process and remove the pushes to @b@.
+By replacing each instruction with jumps, we have exposed more opportunities for jump contraction to remove states.
+For exposition we performed jump contraction before culling outputs, but in our implementation we perform cull outputs first.
+If we perform jump contraction again, we have the following result with six states.
+There is only one superfluous instruction: the jump instruction at label @l1@.
+We could remove this jump if we inlined the push instruction at label @l4@ into the jump, but this is not implemented yet.
+This is still a significant improvement over the original fused process, which had eleven states.
 
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{8}
+  \hilineCom{9}
+  \hilineFst{10}
+  \hilineFst{11}
+  \hilineSnd{13}
+  \hilineCom{14}
+}]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   c = sinkToFile  "out.txt"
+  Processes:
+    Process "map f a / map g b"
+      Inputs:  a                  Outputs: b c                Initial: l0
+      Instructions:
+        l0   = Pull  a       l1 l9
+        l1 w = Jump         (l4 (f w))
+        l4 z = Push  c (g z) l5
+        l5   = Drop  a       l0
 
-\begin{lstlisting}
-map3 a =
-  (b,c,d) <- map'map'map f g h a -- (pbcd)
-  return (c, d)
+        l9   = Close c       l10
+        l10  = Done
 \end{lstlisting}
 
-To remove the pushes to stream @b@, we can replace every instruction (@Push b v l'@) with (@Jump l'@).
+\subsubsection{Fusion must remain producer}
+\TODO{This subsubsection shows a concrete example of why fusing a producer with a consumer must keep the original stream around.  Is this necessary? It is hard to fit a concrete example in the flow up there, but it feels too late now. Maybe it should go even earlier, next to the fusion algorithm itself.}
 
-In this case we were only able to remove the stream @b@ after fusing all processes together, but it is often possible to do it earlier.
+The following example, @map3@, takes one input stream and transforms it once; then the transformed stream is used as the input for two separate transforms.
 
 \begin{lstlisting}
-map3 a =
-  b <- map f a
-  c <- map g b
-  d <- map h b
-  return (c, d)
+map3 = $$(fuse $ do
+  a <- source [||sourceOfFile "in.txt"||]
+  b <- map    [|| f ||] a
+  c <- map    [|| g ||] b
+  d <- map    [|| h ||] b
+  sink c      [||sinkToFile   "c.txt"||]
+  sink d      [||sinkToFile   "d.txt"||]
 \end{lstlisting}
+
+We can fuse the process that produces stream @b@ with the process that produces stream @c@.
+Fusing these two processes is producer/consumer fusion, because one process produces stream @b@ and the other consumes stream @b@.
+There is another consumer of stream @b@, which is the process that produces stream @d@.
+The fused process needs to keep producing to stream @b@ so that the producer of @d@ can consume the values as well.
+
+After fusing the producer of @b@ and the producer of @c@, we can fuse in another process, the producer of @d@.
+We now have all three processes fused together.
+This fusion of all three no longer needs to produce to stream @b@, but the fusion algorithm does not know that.
+We want to keep the fusion algorithm as simple as possible, so we always keep producers around.
+After fusion we can remove the now-redundant stream, and replace all instructions that refer to it with jumps.
 
 
 % \subsection{Insert dups}

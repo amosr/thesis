@@ -1075,7 +1075,7 @@ map2 = $$(fuse $ do
   sink c      [||sinkToFile  "out.txt"||])
 \end{lstlisting}
 
-This translates into the following process network, which has two processes; one for each @map@.
+This function is represented by the following process network, which has two processes; one for each @map@.
 
 \begin{lstlisting}[linebackgroundcolor={
   \hilineFst{8}
@@ -1302,7 +1302,7 @@ Process network:
 \end{lstlisting}
 
 \subsubsection{Fusion must remain producer}
-\TODO{This subsubsection shows a concrete example of why fusing a producer with a consumer must keep the original stream around.  Is this necessary? It is hard to fit a concrete example in the flow up there, but it feels too late now. Maybe it should go even earlier, next to the fusion algorithm itself.}
+\TODO{This subsubsection shows a concrete example of why fusing a producer with a consumer must keep the original stream around.  Is this helpful? It is hard to fit a concrete example in the flow up there, but it feels too late now. Maybe it should go even earlier, next to the fusion algorithm itself.}
 
 The following example, @map3@, takes one input stream and transforms it once; then the transformed stream is used as the input for two separate transforms.
 
@@ -1324,8 +1324,8 @@ The fused process needs to keep producing to stream @b@ so that the producer of 
 After fusing the producer of @b@ and the producer of @c@, we can fuse in another process, the producer of @d@.
 We now have all three processes fused together.
 This fusion of all three no longer needs to produce to stream @b@, but the fusion algorithm does not know that.
-We want to keep the fusion algorithm as simple as possible, so we always keep producers around.
-After fusion we can remove the now-redundant stream, and replace all instructions that refer to it with jumps.
+We want to keep the fusion algorithm as simple as possible, so the fusion algorithm always keeps producers around.
+After fusing all three we can remove the now-redundant stream @b@, and replace all instructions that refer to it with jumps.
 
 
 % \subsection{Insert dups}
@@ -1353,79 +1353,226 @@ After fusion we can remove the now-redundant stream, and replace all instruction
 % When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in Figure~\ref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. To increase the chance that we can perform copy-propagation, we need both processess to want to pull from the same stream at the same time. Moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early.
 % To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
 
-\section{Drop everything}
+\section{Drop in synchrony}
 \TODO{Elsewhere.}
 
-The purpose of the @drop@ instructions is to keep two consumers more closely synchronised.
-Coordinating drops between two consumers ensures that one consumer cannot start processing the next element until the other has finished processing the current element.
-Drop instructions are not necessary for correctness, or even for ensuring boundedness of buffers.
-Without drops, the result program is still correct, but one process can overtake another by one element.
-Overtaking leads to larger processes because there end up being two copies of the processing code.
+The @drop@ instructions exist to synchronise two consumers of the same input, so that both processes pull the same value at the same time.
+When fusing two consumers, the fusion algorithm uses drops when coordinating the processes to ensure that one consumer cannot start processing the next element until the other has finished processing the current element.
+Drop instructions are not necessary for correctness, or even for ensuring boundedness of buffers, but as we shall see they can lead to smaller processes.
 
-Suppose we have two consumer processes @P@ and @Q@, both pulling from the same channel @C@.
-Both processes need to agree about when to pull from the channel.
+The following example, @map2par@, has one input stream which is transformed twice.
+The `@par@' part of the name is because the two @map@ processes are in parallel as opposed to series; both processes consume the same input.
+This example is very similar to the @map2@ from earlier.
+The processes are the same, except for the input to the second @map@, and there is an extra sink.
 
 \begin{lstlisting}
-P = process
-  P1: c <- pull C
-  P2: push CP c
-  P3: drop C
-  P4: jump P1
-
-Q = process
-  Q1: c <- pull C
-  Q2: push CQ c
-  Q3: drop C
-  Q4: jump Q1
+map2par = $$(fuse $ do
+  a <- source [||sourceOfFile "in.txt"||]
+  b <- map    [|| f ||] a
+  c <- map    [|| g ||] a
+  sink b      [||sinkToFile   "b.txt"||]
+  sink c      [||sinkToFile   "c.txt"||])
 \end{lstlisting}
 
-The processes @P@ and @Q@ both pull from @C@, then push to their own output channel, @CP@ and @CQ@ respectively, drop their input, then loop back to pull again.
-If we execute @P@ and it pulls from @C@, it can keep executing and push to its output channel @CP@, then drop the input.
-Now, @P@ has dropped its input, but cannot pull again yet.
-There is no new value available to pull because the producer cannot push to @C@ yet, because @Q@ has not consumed its input.
-The producer cannot push until @Q@ pulls and drops its input.
-When @Q@ pulls from its input, the producer still cannot push until @Q@ drops its input.
-Without drops, @P@ would be able to start processing the next element before @Q@ had finished the previous one.
+This function is represented by the following process network.
 
-By synchronising the two processes together, when we fuse we will only have one copy of the code that pulls each element.
-Because @P@ can only start pulling again by the time @Q@ has dropped, this means @P@ and @Q@ must both be trying to pull at the same time, which means we can reuse the same instructions generated from the previous time they both pulled.
-The example @PQ_drop@ shows the fused process with drop instructions.
-Note that there is only one copy of each input process' code.
-On the other hand, @PQ_no_drop@ shows the fused process without drop instructions.
-In @PQ_no_drop@ there are two copies of pushing to @CP@, though the main loop only executes one per iteration: pushing the current element to @CP@, and the previous element to @CQ@.
-As the processes get larger, and more processes are fused together, the issue of duplicating code becomes more serious.
-There are two parts to this: first, we need to hold the entire process in memory to generate its code.
-Secondly, as the generated assembly code gets larger, it is less likely to fit into the processor's cache.
-Smaller code is generally better for performance.
-Having two copies of the push to @CP@ means that any consumers of @CP@ must in turn have their code duplicated, with the pull instructions from @CP@ copied into both sites of the pushes.
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{9}
+  \hilineFst{10}
+  \hilineFst{11}
+  \hilineFst{12}
+  \hilineFst{13}
+  \hilineSnd{18}
+  \hilineSnd{19}
+  \hilineSnd{20}
+  \hilineSnd{21}
+  \hilineSnd{22}
+  }]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   b = sinkToFile   "b.txt"
+           c = sinkToFile   "c.txt"
+  Processes:
+    Process "map f a":
+      Inputs:  a; Outputs: b; Initial: b0
+      Instructions:
+        b0   = Pull  a b1 b3
+        b1 e = Push  b (f e) b2
+        b2   = Drop  a b0
+        b3   = Close b b4        
+        b4   = Done
 
-\TODO{diagrams}
-\begin{lstlisting}
-PQ_drop = process
-  P1Q1: c_buf <- pull C
-        c_p    = c_buf
-        c_q    = c_buf
-        push CP c_p
-        push CQ c_q
-        drop C
-        jump P1Q1
-
-PQ_no_drop = process
-  P1Q1:  c_buf <- pull C
-         c_p    = c_buf
-         c_q    = c_buf
-         push CP c_p
-  P2Q2:  c_buf <- pull c
-         c_p    = c_buf
-         push CP c_p
-         push CQ c_q
-         c_q    = c_buf
-         jump P2Q2
+    Process "map g a":
+      Inputs:  a; Outputs: c; Initial: c0
+      Instructions:
+        c0   = Pull  a c1 c3      
+        c1 e = Push  c (g e) c2     
+        c2   = Drop  a c0
+        c3   = Close c c4         
+        c4   = Done
 \end{lstlisting}
 
+\autoref{figs/swim/map2par} shows an example execution of @map2par@ with the input stream containing the elements $[1, 2]$.
+This execution shows the communication between concurrent processes, where the input and output streams are also treated as concurrent processes.
+The input stream pushes to both map processes at the start and cannot push again until after both map processes have dropped.
+When the input stream pushes into the map processes, the value is stored in a single-element buffer in each map process.
+The input stream can only push when both its consumers' buffers are empty, and the pull instruction on each map process can only execute when its single-element buffer is not empty.
+The drop instruction clears the buffer, making room for the producer to push the next value.
+\TODO{Would it be clearer if drop instructions were represented as sending a message back to the producer? This picture is missing some of the communication.}
+At any point in time, both map processes are transforming the same element as each other because the next element is only available once both have dropped and agreed to read the next element.
 
-\section{Related work}
-Meta-Repa \cite{ankner2013edsl} also uses Template Haskell for code generation, and provides a similar distinction between typed interface and untyped code generation.
-It provides a generalised abstract datatype (GADT) for its typed interface rather than using typed Template Haskell.
-It was implemented before typed Template Haskell.
+\autoref{figs/swim/map2par-no-sync} shows a hypothetical execution if our process network semantics did not use drop instructions to synchronise between all consumers.
+The previous example showed concurrent execution between the processes, while this example shows a particular interleaving to highlight a case where one consumer overtakes the other by one element.
+As before, execution starts with the input stream pushing an element, and both map processes pull this element.
+Without drop synchronisation, the single-element buffer is cleared as soon as the process pulls, which means the input stream is free to push another element since both processes have pulled.
+Now the first map process executes and transforms both pushed elements.
+The first map process is finished with both elements before the second map process has even looked at the first.
+This is not a problem for concurrent execution: the execution results in the same value, and the buffer is still bounded.
+However, when we fuse this network into a single process we do not wish to use this interleaving, because the process would need to keep track of two consecutive elements at the same time.
+Keeping both elements means the process requires twice the number of live variables, which makes it less likely that both elements will fit in the available registers or cache.
 
+\TODO{Other options:} what if the producer could only push when all consumers are trying to pull?
+This is more restrictive and causes deadlock in @zip x y / zip y x@ case.
+
+\TODO{Size:} show fused process with and without drop synchronisation. Drop synchronisation makes it smaller.
+
+\TODO{SIMD?:} the bit above says we don't want to keep multiple consecutive elements at the same time.
+Maybe we do want to, in order to use SIMD instructions.
+In fact, for \autoref{figs/swim/map2par-no-sync} if we had vector instructions to compute @f@ and @g@ two elements at a time, that interleaving is exactly what we want.
+There are many other interleavings though, and we are not guaranteed to get this one.
+We do not want to rely on chance to find a SIMD interleaving.
+Future work may involve looking for the right interleavings to exploit SIMD instructions.
+
+
+\begin{figure}
+\center
+\begin{sequencediagram}
+\newthreadGAP{a}{@a@}{0.2}
+\newthreadGAP{mapf}{@map f@}{1.5}
+\newthreadGAP{b}{@b@}{1.5}
+\newthreadGAP{mapg}{@map g@}{1.5}
+\newthreadGAP{c}{@c@}{1.5}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 1}{mapg}
+}
+
+\parallelseq{
+  \mess{mapf}{Pull 1}{mapf}
+  \mess{mapf}{Push (f 1)}{b}
+  \mess{mapf}{Drop}{mapf}
+}{
+  \mess{mapg}{Pull 1}{mapg}
+  \mess{mapg}{Push (g 1)}{c}
+  \mess{mapg}{Drop}{mapg}
+}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 2}{mapg}
+}
+
+\parallelseq{
+  \mess{mapf}{Pull 2}{mapf}
+  \mess{mapf}{Push (f 2)}{b}
+  \mess{mapf}{Drop}{mapf}
+}{
+  \mess{mapg}{Pull 2}{mapg}
+  \mess{mapg}{Push (g 2)}{c}
+  \mess{mapg}{Drop}{mapg}
+}
+\end{sequencediagram}
+\caption[Concurrent sequence diagram for parallel maps]{sequence diagram for concurrent execution of @map2par@. }
+\label{figs/swim/map2par}
+\end{figure}
+
+\begin{figure}
+\center
+\begin{sequencediagram}
+\newthreadGAP{a}{@a@}{0.2}
+\newthreadGAP{mapf}{@map f@}{1.5}
+\newthreadGAP{b}{@b@}{1.5}
+\newthreadGAP{mapg}{@map g@}{1.5}
+\newthreadGAP{c}{@c@}{1.5}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 1}{mapg}
+}
+
+\mess{mapf}{Pull 1}{mapf}
+
+\mess{mapg}{Pull 1}{mapg}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 2}{mapg}
+}
+
+\mess{mapf}{Push (f 1)}{b}
+\mess{mapf}{Pull 2}{mapf}
+\mess{mapf}{Push (f 2)}{b}
+
+\mess{mapg}{Push (g 1)}{c}
+\mess{mapg}{Pull 2}{mapg}
+\mess{mapg}{Push (g 2)}{c}
+\end{sequencediagram}
+\caption[Hypothetical sequence diagram for parallel maps without drop synchronisation]{sequence diagram for parallel execution of two map processes, using a hypothetical execution semantics without drop synchronisation.}
+\label{figs/swim/map2par-no-sync}
+\end{figure}
+
+
+% By synchronising the two processes together, when we fuse we will only have one copy of the code that pulls each element.
+% Because @P@ can only start pulling again by the time @Q@ has dropped, this means @P@ and @Q@ must both be trying to pull at the same time, which means we can reuse the same instructions generated from the previous time they both pulled.
+% The example @PQ_drop@ shows the fused process with drop instructions.
+%                                     ~~~~~[BL: highlight?]~~~
+% Note that there is only one copy of each input process' code.
+% On the other hand, @PQ_no_drop@ shows the fused process without drop instructions.
+%                           ~~~~~~[BL: highlight?]~~~~~~~
+% In @PQ_no_drop@ there are two copies of pushing to @CP@, though the main loop only executes one per iteration: pushing the current element to @CP@, and the previous element to @CQ@.
+%                                                                                                     ~~~~[BL: examples]~~~~
+% As the processes get larger, and more processes are fused together, the issue of duplicating code becomes more serious.
+% There are two parts to this: first, we need to hold the entire process in memory to generate its code.
+% Secondly, as the generated assembly code gets larger, it is less likely to fit into the processor's cache.
+% Smaller code is generally better for performance.
+% Having two copies of the push to @CP@ means that any consumers of @CP@ must in turn have their code duplicated, with the pull instructions from @CP@ copied into both sites of the pushes.
+% 
+% \TODO{diagrams}
+% \begin{lstlisting}
+% PQ_drop = process
+%   P1Q1: c_buf <- pull C
+%         c_p    = c_buf
+%         c_q    = c_buf
+%         push CP c_p
+%         push CQ c_q
+%         drop C
+%         jump P1Q1
+% 
+% PQ_no_drop = process
+%   P1Q1:  c_buf <- pull C
+%          c_p    = c_buf
+%          c_q    = c_buf
+%          push CP c_p
+%   P2Q2:  c_buf <- pull c
+%          c_p    = c_buf
+%          push CP c_p
+%          push CQ c_q
+%          c_q    = c_buf
+%          jump P2Q2
+% \end{lstlisting}
+% 
+% Without drops, the result program is still correct, but one process can overtake another by one element.
+% Overtaking leads to larger processes because there end up being two copies of the processing code.
+% 
+% 
+% 
+% \section{Related work}
+% Meta-Repa \cite{ankner2013edsl} also uses Template Haskell for code generation, and provides a similar distinction between typed interface and untyped code generation.
+% It provides a generalised abstract datatype (GADT) for its typed interface rather than using typed Template Haskell.
+% It was implemented before typed Template Haskell.
+% 

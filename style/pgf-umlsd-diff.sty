@@ -1,0 +1,57 @@
+% \newthread with gap as argument
+\newcommand{\newthreadGAP}[4][gray!30]{
+  \newinst[#4]{#2}{#3}
+  \stepcounter{threadnum}
+  \node[below of=inst\theinstnum,node distance=0.8cm] (thread\thethreadnum) {};
+  \tikzstyle{threadcolor\thethreadnum}=[fill=#1]
+  \tikzstyle{instcolor#2}=[fill=#1]
+}
+
+
+% make the arrow self-loop less wide because otherwise text doesn't fit
+\renewcommand*{\messself}[3][1]{
+  \stepcounter{seqlevel}
+  \stepcounter{callevel} % push
+  \stepcounter{callselflevel}
+  \def\l\thecallevel{#1}
+  \def\f\thecallevel{#2}
+  \path
+(\f\thecallevel)+(\thecallselflevel*0.1-0.1,-\theseqlevel*\unitfactor-0.33*\unitfactor)
+node
+  (sct\thecallevel) {};
+  \addtocounter{seqlevel}{\l\thecallevel}
+  \draw[->,>=angle 60] ({sct\thecallevel}.east) node
+  (sce\thecallevel) {} -- ++(0.2,0) -- node[midway, right]{#3}
+++(0,-\l\thecallevel*\unitfactor) -- ++(-0.2,0);
+
+  \addtocounter{callevel}{-1} % pop
+  \addtocounter{callselflevel}{-1}
+}
+
+% add \detokenize to node definitions because the name can't contain parentheses
+\renewcommand*{\messanother}[4][0]{
+  \stepcounter{seqlevel}
+  \path
+  (#2)+(0,-\theseqlevel*\unitfactor-0.7*\unitfactor) node (mess from) {};
+  \addtocounter{seqlevel}{#1}
+  \path
+  (#4)+(0,-\theseqlevel*\unitfactor-0.7*\unitfactor) node (mess to) {};
+  \draw[->,>=angle 60] (mess from) -- (mess to) node[midway, above]
+  {#3};
+
+  \node (\detokenize{#3} from) at (mess from) {};
+  \node (\detokenize{#3} to) at (mess to) {};
+}
+
+\newcommand\parallelseq[2]{
+  \edef\seqlevelstart{\theseqlevel}
+  #1
+  \edef\seqlevelend{\theseqlevel}
+  \setcounter{seqlevel}{\seqlevelstart}
+  #2
+  \ifnum \seqlevelend>\theseqlevel
+  \setcounter{seqlevel}{\seqlevelend}
+  \fi
+  }
+
+

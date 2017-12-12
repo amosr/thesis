@@ -1,0 +1,116 @@
+\section{Sources and Sinks}
+In order to write meaningful streaming computations, we need to interact with the outside world.
+The processes in our process networks are pure and by themselves have no way of interacting with the world: they simply shuffle data along channels.
+To get values into the process network we use \emph{sources}; for example a source may read stream values from a file.
+To get values out of the process network we use \emph{sinks}; for example a sink may write stream values to a file.
+
+These sources and sinks are the pull and push streams we have seen before \REFTODO{background}, but in this case we do not need to implement combinators over them; such plumbing will be expressed as processes in the process network.
+Sources and sinks are conceptually duals of each other, and they share many similarities, so let us refer to them collectively as \emph{endpoints}.
+
+Endpoints need to encapsulate some internal state: for example writing to a file requires a filehandle, and perhaps a buffer to fill before writing, to amortise the cost of the system call.
+As explained previously (\autoref{ss:extraction:mutablerefs}), using mutable references for this internal state would lead to poor performance due to boxing.
+We need to use the same approach of passing this state as function arguments so they can be unboxed by constructor specialisation.
+Passing the state as function arguments is more complicated than it sounds, because each endpoint requires a different type of state: reading from a file requires a filehandle, while reading from an in-memory array requires the array and the current index.
+This state type is an internal thing and should not be exposed to the user, which rules out adding it as a type parameter on the endpoint.
+Just because we need to pass the state around as function arguments should not change the external interface.
+
+In order to `wrap up' the internal state type, so only the endpoint itself can inspect the internal state, while the user can only hold on to the abstract state and pass it to the endpoint, we use existentially quantified types.
+Existential types are used in a similar way in Stream Fusion \cite{coutts2007stream} to hide the internal state of a pull stream.
+
+We say that each endpoint has an internal state type, and only it knows what the type is.
+We provide some operations with the state: a way to construct an initial state, for example opening the file and returning the handle; a pull or push function which takes the state and returns a new state; and a close function for when we have finished reading from or writing to the endpoint.
+
+\subsection{Sources}
+
+We define sources in Haskell with the following datatype (@Source a@), where the type parameter @a@ is the type of values to be pulled.
+The internal state type is bound to @s@, and we define a record with three fields.
+The first field, @sourceInit@, contains an effectful computation which returns the initial state.
+The second field, @sourcePull@, is a function which takes the current state and returns a pair containing the pulled value, and the updated state.
+The pulled value is wrapped in a @Maybe@, because streams are finite: @Nothing@ means the end of the stream, and (@Just v@) means the value @v@.
+The third and final field, @sourceDone@, is a function which takes the current state and closes the stream.
+
+\begin{lstlisting}[mathescape=true]
+data Source a
+ = $\exists$s. Source
+ { sourceInit ::      IO s
+ , sourcePull :: s -> IO (Maybe a, s)
+ , sourceDone :: s -> IO ()
+ }
+\end{lstlisting}
+
+Streams end only once, and after pulling a @Nothing@, the source should not be pulled on again.
+We similarly require that the source is not pulled again after it is closed.
+The state must be used linearly: after passing a state to @sourcePull@, a new state is returned, and the old state must not be used again.
+This linearity constraint also enforces that @sourcePull@ cannot be called after @sourceDone@, since @sourceDone@ consumes the old state without producing a new state.
+
+We define a @Source@ that reads lines of text from a file.
+Here the internal state is the filehandle.
+To initialise the source, we open the file in reading mode.
+When the source is done, we close the file handle.
+To pull from the source, we use a helper function @pull@ which takes the filehandle as an argument.
+The @pull@ function checks whether the end of the file has been reached.
+If so, there are no more lines to read and @pull@ returns @Nothing@ along with the original filehandle.
+Otherwise, @pull@ reads a line from the file and wraps the line in a @Just@ constructor.
+
+\begin{lstlisting}
+sourceOfFile :: FilePath -> Source String
+sourceOfFile filepath
+  = Source
+  { sourceInit = openFile ReadMode filepath
+  , sourcePull = pull
+  , sourceDone = hClose }
+ where
+  pull handle = do
+    eof <- hIsEof
+    case eof of
+     True  -> return (Nothing, handle)
+     False -> do
+      line <- hGetLine handle
+      return (Just line, handle)
+\end{lstlisting}
+
+For the sake of example, this implementation of @sourceOfFile@ is a simplified version.
+Certainly, this could be improved in terms of error handling: what if the file does not exist; and performance: reading a single line at a time will not give the best performance.
+
+\subsection{Sinks}
+
+We define sinks in Haskell very similar to sources, above.
+The datatype (@Sink a@) represents a sink which accepts values pushed into it.
+Again, the internal state type is bound to the existential type variable @s@, and we define a record with three fields.
+The first and third fields are initialisation (@sinkInit@) and closing (@sinkDone@), and are the same as for sources.
+The second field, @sinkPush@, takes the current state and the value to push, and returns the new state.
+Unlike with (@Source a@) which pulls (@Maybe a@), we push a value of @a@ without the @Maybe@.
+Instead of pushing @Nothing@ to signal the end of the stream, we call @sinkDone@.
+
+\begin{lstlisting}[mathescape=true]
+data Sink a
+ = $\exists$s. Sink
+ { sinkInit ::           IO s
+ , sinkPush :: s -> a -> IO s
+ , sinkDone :: s ->      IO ()
+ }
+\end{lstlisting}
+
+Sinks also require that the states are used linearly.
+As with sources, this linearity constraint enforces that @sinkPush@ cannot be called after @sinkDone@, since @sinkDone@ consumes the old state without producing a new state.
+
+We define a @Sink@ that writes lines of text to a file.
+As with @sourceOfFile@, the internal state is a filehandle.
+Initialisation opens the file in write mode; when we are done we close the file.
+To push a value, the helper function @push@ writes the line to the file then returns the filehandle as the state.
+
+\begin{lstlisting}
+sinkToFile :: FilePath -> Sink String
+sinkToFile filepath
+  = Sink
+  { sinkInit = openFile WriteMode filepath
+  , sinkPush = push
+  , sinkDone = hClose }
+ where
+  pull handle line = do
+    hPutStrLn handle line
+    return handle
+\end{lstlisting}
+
+\TODO{Spend a lot of time talking about why we need the state, but the examples only use the same filehandle. Need an example, eg to/from Vector or file IO with buffering, which uses the state.}
+

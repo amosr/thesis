@@ -1,0 +1,29 @@
+\chapter{Implementation and code generation}
+\label{chapter:process:implementation}
+
+Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of Machine Fusion \REFTODO{fusion}.
+Machine Fusion uses the topology of the entire process network to perform fusion.
+When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
+This coordination between all consumers means the fusion algorithm requires global knowledge of the process network.
+In contrast, shortcut fusion systems \REFTODO{shortcut} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
+In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
+This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
+To fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
+
+This chapter looks at the implementation of Folderol, in particular how to generate efficient code for a fused process.
+Generating code for a single process is fairly straightforward in itself: the process language is a simple imperative language, and once the process network has been fused into a single process there is no longer any need for threading or inter-process communication.
+However, code generation needs to be tailored specifically to take advantage of the optimisations in the target compiler, which in this case is the Glasgow Haskell Compiler (GHC).
+Haskell does support imperative constructs like mutable references, but being a functional language, the optimisations in GHC are more geared towards functional programs.
+Mutable references are not optimised particularly well.
+If we wish to generate efficient code, we must --- perhaps surprisingly --- avoid mutable references, and generate code closer to what the compiler expects.
+
+\input{copy/03-body/04-extraction/s-th.tex}
+\input{copy/03-body/04-extraction/s-constructing.tex}
+\input{copy/03-body/04-extraction/s-boxing.tex}
+\input{copy/03-body/04-extraction/s-endpoints.tex}
+\input{copy/03-body/04-extraction/s-codegen.tex}
+\input{copy/03-body/04-extraction/s-vector-endpoints.tex}
+\input{copy/03-body/04-extraction/s-transforming.tex}
+\input{copy/03-body/04-extraction/s-drop.tex}
+\input{copy/03-body/04-extraction/s-related.tex}
+

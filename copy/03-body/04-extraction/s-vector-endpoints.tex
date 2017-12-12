@@ -1,0 +1,116 @@
+\section{Vector endpoints}
+
+We wish to perform array computations, as well as than streaming from disk or network.
+In this case, we need a way to create a source that reads from a vector, and a sink that writes to a vector.
+
+Creating a source that reads from a vector is straightforward.
+The source state is the index into the vector.
+Pulling from the source checks if the index is within the vector, looks up the element at that index, and increments the index.
+
+\begin{lstlisting}
+sourceOfVector :: Vector a -> Source a
+sourceOfVector vec
+  = Source init pull done
+ where
+  init               = return 0
+
+  pull ix
+   | ix < length vec = return (Just (index vec ix), ix + 1)
+   | otherwise       = return (Nothing, ix)
+
+  done _             = return ()
+\end{lstlisting}
+
+The other direction, a sink that writes to a vector, is a little more involved.
+The first complication is that we do not always know upfront the size of the output stream.
+We must dynamically grow the output vector as we receive elements.
+We start with a mutable vector of size 4, then every push checks if there is room for the new element, and doubles the size of the vector if necessary.
+Once all elements are written, we convert the mutable vector to an immutable one, discarding any unused elements at the end of the vector.
+
+The second complication is that sinks do not `return' a value, so the sink must take an argument describing where to store the vector.
+We need a mutable reference for the vector.
+The reference is only written to and read from once at the end of the process, rather than once for every iteration, so the boxing overheads described earlier are negligible in this case.
+% Although we were able to avoid mutable references in code generation, some kind of mutable reference is required here.
+
+\TODO{IORef (Maybe a)?}
+\begin{lstlisting}
+sinkVector :: IORef (Vector a) -> Sink a
+sinkVector out
+  = Sink init push done
+ where
+  init = do
+    vec <- Mutable.new 4
+    return (vec, 0)
+
+  push (vec, ix) e = do
+    vec' <- if ix < Mutable.length vec
+            then return vec
+            else Mutable.grow vec (Mutable.length vec)
+    Mutable.write vec' ix e
+    return (vec', ix + 1)
+
+  done (vec, ix) = do
+    vec' <- freeze (Mutable.slice vec ix)
+    writeIORef out vec'
+\end{lstlisting}
+
+The runtime cost of resizing the vector, as well as the bounds check for every push, have a significant performance cost \REFTODO{benchmarks}.
+When the upper bound of the length of the output stream is known ahead of time, we can take advantage of this knowledge by allocating a large enough vector to start with, removing the need for dynamic resizing and bounds checks.
+
+
+\begin{lstlisting}
+sinkVectorSize :: Int -> IORef (Vector a) -> Sink a
+sinkVectorSize maxSize out
+  = Sink init push done
+ where
+  init = do
+    vec <- Mutable.new maxSize
+    return (vec, 0)
+
+  push (vec, ix) e = do
+    Mutable.write vec ix e
+    return (vec, ix + 1)
+
+  done (vec, ix) = do
+    vec' <- freeze (Mutable.slice vec ix)
+    writeIORef out vec'
+\end{lstlisting}
+
+By removing the bounds check for each push, we have made it faster at the expense of safety.
+This sink is not externally safe.
+If we pass a size of zero and connect it to a non-empty stream, the program will write past the end of the allocated vector, violating another part of the program's memory or causing a segmentation fault.
+This puts the burden on the user of the sink to be certain of the upper bound.
+
+\subsection{Size hints}
+\label{s:implementation:sizehints}
+
+\TODO{Example of when we know the vector size ahead of time. Maps, filters, appends.}
+
+Knowing the size of streams allows us to eliminate resizing and bounds checks.
+It would be safer and more convenient to do this automatically.
+We have not implemented this automatic transform in Folderol, and it is left to future work.
+
+This knowledge about the size of streams is called a \emph{size hint}.
+A size hint can be represented using the type (@Maybe Int@), where @Just@ denotes a known upper bound and @Nothing@ denotes a completely unknown size.
+Size hints were not present in original Stream Fusion \cite{coutts2007stream}, but were introduced in later work on fusion for strings \cite{coutts2007rewriting}.
+These size hints are attached to the constructor of the Stream datatype and are used when converting a stream to a vector.
+Stream transformers must transform the size hint of the stream as well as the stream itself.
+A @map@ transformer creates a new stream with the same number of elements, so the size hint is left unchanged.
+A @filter@ transformer can produce a shorter stream, but the upper-bound is the original size, so the size hint is also left unchanged.
+On the other hand, the number of elements produced by concatenating a stream of nested lists (@concat@) depends more upon the values than the size of the input stream.
+For @concat@ the size hint is unknown.
+
+To implement size hints in Folderol, we note whether information is available at compile-time or not available until runtime.
+Whether a stream's size is `known' or `unknown' is compile-time information.
+If the stream's size is `known', the upper bound is available before streaming starts, but not until runtime.
+If the stream's size is `unknown', the size is not available until after streaming has finished.
+We represent this distinction using the type (@Maybe (TExp Int)@).
+The upper bound is wrapped in a Template Haskell expression as it is not known until runtime.
+
+Sources must be extended with a way to specify the size hint.
+Processes, when creating an output stream, must specify its size hint based on the size hints of the input streams.
+Sinks must be extended to take the size hint as an argument during construction.
+This is left to future work.
+
+
+

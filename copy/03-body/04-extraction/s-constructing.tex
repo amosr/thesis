@@ -1,0 +1,80 @@
+\section{Constructing a process network}
+\label{s:extraction:grepGood}
+
+The following example constructs a process network in Folderol.
+In due course we will inspect its generated code, but first it is necessary to see how process networks are constructed.
+
+\begin{lstlisting}
+grepGood :: FilePath -> FilePath -> IO ()
+grepGood fileIn fileOut =
+  $$(fuse $ do
+     input  <- source [||sourceOfFile fileIn ||]
+     goods  <- filter [||isPrefixOf   "Good" ||] input
+     sink      goods  [||sinkToFile   fileOut||])
+\end{lstlisting}
+
+This example reads input lines from a file, filters out all except those starting with the string \lstinline/"Good"/, and finally writes the results to file.
+In a Unix-style environment, we would write this as ``@grep ^Good@''; the caret (@^@) meaning ``starting with''.
+
+The function @grepGood@ takes two arguments of type @FilePath@ for the input and output filenames.
+Inside the definition, the Template Haskell splice \lstinline/$$(fuse ...)/ takes the process network as an argument, fuses the processes together, and generates output code.
+We are constructing the process network inside the Template Haskell splice at compile-time, while we wish to execute it at runtime.
+The process network is the static representation of the computation, and must be statically known and finite.
+
+Inside the process network we start by creating a \emph{source} to read from the input file @fileIn@.
+The @source@ function creates an input stream in the process network which can be used by other processes.
+The @input@ binding in this case refers to the abstract name of the stream in the process network, rather than the runtime values of the stream.
+This is an important distinction, as expressions operating over runtime values need to be quasiquoted to delay them from compile-time to runtime.
+Similarly, the input file @fileIn@ will not be known until runtime.
+The choice of source does not affect fusion, and does not need to be known at compile time.
+Since most sources depend on runtime values in some way, the entire source is delayed until runtime and must be quasiquoted.
+
+Now we take the values in the @input@ stream and filter them to those starting with the string \lstinline/"Good"/.
+Again considering the compile-time/runtime distinction, the fact that the @filter@ process uses the stream named @input@ as its input is known at compile-time, and is not quasiquoted; while the predicate, which depends on the runtime stream values, must be quasiquoted.
+We call the output filtered stream @goods@.
+
+Finally, we send the filtered output to a file, by creating a \emph{sink}.
+The @sink@ function is the opposite of @source@, and just like @source@ it requires the description of how to sink (writing to a file using @sinkToFile@) to be quasiquoted.
+
+\TODO{Show the process network and the processes.}
+Soon enough, we shall return to this.
+
+
+% \begin{lstlisting}
+% applyTransactions :: FilePath -> FilePath -> IO ()
+% applyTransactions fileIn fileOut =
+%   $$(fuse $ do
+%      cust  <- source [||sourceOfFile fileCust||]
+%      txns  <- source [||sourceOfFile fileTxns||]
+%      cust' <- map    [||parseCust            ||] cust
+%      txns' <- map    [||parseTxns            ||] txns
+% 
+%      (newCust, invalid) <- groupLeft [||applyTxn||] cust' txns'
+% 
+%      sink newCust [||sinkToFile fileOutCust   ||]
+%      sink invalid [||sinkToFile fileOutInvalid||])
+% \end{lstlisting}
+
+% We start with the Template Haskell splice \lstinline/$$(fuse ...)/. In the code it is blue. 
+% It has the following type.
+% \begin{lstlisting}
+% fuse :: Network () -> Q (TExp (IO ()))
+% \end{lstlisting}
+% That is, it takes a process network and returns the expression for the underlying @IO@ computation.
+% The process network @Network ()@ is a monad as well.
+% 
+% The process network first constructs a source that reads from a file.
+% \begin{lstlisting}
+% source :: Q (TExp (Source a))                -> Network (Channel a)
+% filter :: Q (TExp (a -> Bool))  -> Channel a -> Network (Channel a)
+% map    :: Q (TExp (a -> b))     -> Channel a -> Network (Channel b)
+% sink   :: Q (TExp (Sink a))     -> Channel a -> Network (Channel a)
+% \end{lstlisting}
+% The @source@ function takes a quasiquoted expression of how to construct the source at runtime.
+% 
+% Now show the generated code.
+% 
+
+
+
+

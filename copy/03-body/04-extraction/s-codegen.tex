@@ -1,0 +1,122 @@
+\section{Code generation}
+We are now ready to perform code generation on our @grepGood@ example (\autoref{s:extraction:grepGood}), which filters lines in a file.
+The example has the following process network.
+
+\begin{lstlisting}
+Process network:
+  Sources: input = sourceOfFile fileIn
+  Sinks:   goods = sinkOfFile   fileOut
+  Processes:
+    Process "filter"
+      Inputs:  input
+      Outputs: goods
+      Initial: l0
+      Instructions:
+        l0   = Pull  input l1 l4
+        l1 e = If (isPrefixOf "Good" e)
+                          (l2 e)
+                           l3
+        l2 e = Push  goods e  l3
+        l3   = Drop  input    l0
+
+        l4   = Close goods l5
+        l5   = Done
+\end{lstlisting}
+
+In the first two lines of the process network, we specify the sources and sinks for @input@ and @goods@.
+The right-hand side of each endpoint definition is the expression to construct the endpoint, used by code generation.
+
+Under the @Processes@ heading, there is room for multiple processes.
+In networks with multiple processes, the processes would be fused together into a single process before code generation.
+Our example only has one process, the @filter@ process, which pulls from the source stream @input@ and pushes to the sink stream @goods@.
+
+The @filter@ process starts at label @l0@, the instruction for which pulls from the @input@ stream.
+The instructions for labels @l1@ to @l3@ perform the filtering for each element, while the instructions for labels @l4@ and @l5@ close the output stream and end the process once the @input@ stream is finished.
+
+The original process formulation \REFTODO{processes} used a mutable heap.
+This would require a mutable reference for each variable in the heap.
+As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references; we must generate code that can be transformed by constructor specialisation.
+Instead of a mutable heap, we treat each label as a parameterised continuation.
+Each label definition has a list of variable names which are the continuation parameters and can be used in the body of the instruction.
+Each call to a continuation, either as the initial state of a process or as the destination of an instruction, has a list of expressions which are the arguments.
+
+The continuations at labels @l1@ and @l2@ both take the current element as a parameter.
+The pull instruction at @l0@ has label @l1@, with no arguments, as its `success' destination.
+Pull expects its `success' destination label to take one extra argument, which will be called with the pulled element at runtime.
+
+\begin{lstlisting}
+grepGood fileIn fileOut =
+  case sourceOfFile fileIn of
+   Source input'init input'pull input'done ->
+    case sinkOfFile fileOut of
+     Sink goods'init goods'push goods'done -> do
+      let l0 SPEC input's goods's = do
+            (v, input's') <- input'pull input's
+            case v of
+             Just v' -> l1 SPEC input's' goods's v'
+             Nothing -> l4 SPEC input's' goods's
+      let l1 SPEC input's goods's e = do
+            case isPrefixOf "Good" e of
+             True  -> l2 SPEC input's goods's e
+             False -> l3 SPEC input's goods's
+      let l2 SPEC input's goods's e = do
+            goods's' <- goods'push goods's e
+            l3 SPEC input's goods's'
+      let l3 SPEC input's goods's =
+            l0 SPEC input's goods's
+      let l4 SPEC input's goods's = do
+            goods'done goods's
+            l5 SPEC input's
+      let l5 SPEC input's = do
+            input'done input's
+            return ()
+      input's0 <- input'init
+      goods's0 <- goods'init
+      l0 SPEC input's0 goods's0
+\end{lstlisting}
+
+In the generated code for @grepGood@, we first unpack the @input@ source to get its initialisation function, its pull function, and its close function.
+We need to use a case analysis here, rather than the accessor functions @sourceInit@ etc, because accessor functions cannot be used to unpack data structures with existential types.
+We perform the same unpacking for the @goods@ sink.
+
+Each label of the process is implemented by a function definition.
+In the process @l0@ has no parameters, but we add extra parameters to each function during code generation.
+The first parameter is the @SPEC@ annotation used to force constructor specialisation.
+The next two parameters are the current states of the endpoints, @input@ and @goods@.
+The instruction for @l0@ pulls from @input@ and checks whether the pull succeeds or the stream has ended.
+In either case the new @input@ state, @input's'@, is passed to the continuation.
+
+% The instruction for @l0@ pulls from @input@, so our function @l0@ must also pull from @input@ by calling the @input'pull@ function with the current state @input's@.
+% The pulled value is bound to @v@, while the new state for the @input@ source is bound to @input's'@.
+% We unpack the pulled value @v@ to check whether pull succeeded or the stream has finished.
+% If the pull succeeds, we pass control to the function for label @l1@, passing the @SPEC@ annotation for constructor specialisation, the updated @input@ source state, the unchanged @goods@ sink state, and the actual pulled value.
+% If the stream has finished, we pass control to the function for label @l4@, again with the constructor specialisation annotation and endpoint states.
+
+When the pull at @l0@ succeeds, the function for @l1@ takes the pulled element as a parameter, and checks whether the element starts with the string \lstinline/"Good"/.
+If so, the function for @l2@ pushes to the @goods@ sink by calling @goods'push@ before continuing to @l3@.
+Otherwise, control goes straight to @l3@.
+The instruction for @l3@ drops the pulled value from @input@.
+Drop instructions are coordination hints for processes during fusion; for code generation, we loop back to @l0@.
+
+When the input stream is finished, the function for @l4@ closes the @goods@ sink.
+The sink state is no longer required.
+The function for the last label, @l5@, closes the input source and finishes the process.
+
+% Because endpoint states must be used linearly, the call to @goods'done@ invalidates the old state without returning a new state.
+% Further labels will not need the state; the sink is closed and can no longer be pushed to or closed again.
+% When passing control to @l5@, we pass only the @input@ state and not the old @goods@ state.
+
+% The function for @l4@ closes the @goods@ sink by calling @goods'done@ with the current state for @goods@.
+% Because endpoint states must be used linearly, the call to @goods'done@ invalidates the old state @goods's@ without returning a new state.
+% This means we no longer have a valid @goods@ state to pass to @l5@.
+% The function for @l5@ takes the current state for @goods@ as an argument, but does not use it.
+% Once a process has closed an output stream it must no longer push to the stream or close the stream again.
+% Since the process will not use the state after closing an output stream, we can safely reuse the old state to pass to @l5@.
+% 
+% Reusing the old state works because the linearity is not enforced by the typecheker.
+% If necessary, it would 
+
+
+To start execution, we initialise the endpoints and call the continuation for the initial label.
+
+

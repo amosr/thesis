@@ -1,27 +1,27 @@
 \section{Transforming process networks}
 
 The fusion algorithm described in \REFTODO{processes and fusion} describes fusion for a pair of processes.
-To generate code we need to fuse process networks, which can contain many processes, by repeatedly fusing pairs of processes.
+To generate code we need to fuse process networks, which can contain many processes.
+Rather than coming up with an algorithm to fuse multiple processes at once, we fuse process networks by repeatedly fusing pairs of processes.
 
-The fused process tends to have more states than the input processes; the larger the input processes, the larger the fused process.
+The fused process tends to have more states than the input processes, because the fused process has to do the work of both input processes.
+The larger the input processes, the larger the fused process.
 When we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
 As the fused process becomes larger, fusing in the next process will take longer, and code generation will take longer.
 
-If the input process has a couple more states than necessary, this can turn into several unnecessary states in the fused process.
-When this fused process is used as the input to another fusion step, the unnecessary states compound.
-What started as a couple can become dozens, then hundreds, then thousands.
-As with compound interest on a loan, it is best to pay back early and often.
+% The fusion algorithm also introduces some spurious states.
+% It is designed for simplicity of the fusion algorithm, at the expense of simplicity of the output.
+% If the input process has a couple more states than necessary, this can turn into several unnecessary states in the fused process.
+% When this fused process is used as the input to another fusion step, the unnecessary states compound.
+% What started as a couple can become dozens, then hundreds, then thousands.
+% As with compound interest on a loan, it is best to pay back early and often.
 
 At every fusion step, we perform some simplifications to remove unnecessary states and make the job of the next fusion step a bit easier.
 By making the input to fusion smaller we can produce smaller programs to begin with.
 It is better to simplify as we go rather than relying on a monolithic simplification at the end.
 
-Smaller intermediate code is not just a matter of reducing compilation time, either.
-Sometimes --- preferably rarely --- one does need to read and debug the intermediate code, and smaller code is generally easier to read.
-\TODO{Really?}
-
 \subsection{Fusing a network}
-To fuse a whole network, we must repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
+To fuse a whole network, we repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
 
 
 There are many orders in which we could fuse the pairs.
@@ -32,7 +32,66 @@ For $10$ processes, there are more than a trillion possibilities.
 Even if we could fuse one process in a single instruction, at 3GHz it would take forty minutes to try all orders.
 If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
 
-We cannot try all the orders; we need a heuristic.
+We cannot try all the orders; we need some way to choose the order.
+As we shall see in \autoref{s:extraction:future},
+
+\begin{lstlisting}
+append3 a b c =
+  ab <- append a b
+  ac <- append a c
+  bc <- append b c
+  return (ab, ac, bc)
+\end{lstlisting}
+
+\begin{lstlisting}
+zip3 a b c =
+  ab <- zip a b
+  ac <- zip a c
+  bc <- zip b c
+  return (ab, ac, bc)
+\end{lstlisting}
+
+
+\begin{figure}
+\begin{minipage}[t]{0.5\textwidth}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  b; a; c;
+  app1 [label="append"];
+  app2 [label="append"];
+  app3 [label="append"];
+  a -> app1; a -> app2;
+  b -> app1; b -> app3;
+  c -> app2; c -> app3;
+  app1 -> ab;
+  app2 -> ac;
+  app3 -> bc;
+}
+\end{dot2tex}
+\end{minipage}
+\begin{minipage}[t]{0.5\textwidth}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  b; a; c;
+  app1 [label="zip"];
+  app2 [label="zip"];
+  app3 [label="zip"];
+  a -> app1; a -> app2;
+  b -> app1; b -> app3;
+  c -> app2; c -> app3;
+  app1 -> ab;
+  app2 -> ac;
+  app3 -> bc;
+}
+\end{dot2tex}
+\end{minipage}
+\caption[Process network for `append3']{process networks for @append3@ and @zip3@.}
+\label{figs/procs/append3}
+\end{figure}
 
 The following example, @append2zip@, constructs a process network with three input streams.
 This example is a partial process network which could be part of a larger network; the particular endpoints for the input and output streams are not relevant here.
@@ -53,7 +112,8 @@ The prefix of both appended streams is the same, so the output will be the prefi
 The execution is displayed as a sequence diagram.
 Each input stream and process is represented as a vertical line, which communicates with other processes by arrows.
 The names of each stream and process are written above the line, and to fit on the page the names of the @append@ processes are written using (@++@), the list-append operator.
-% Each input stream pushes its values
+Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
+When input stream @b@ pushes its elements, it pushes to both its consumers at the same time.
 Time flows downwards.
 
 
@@ -177,6 +237,7 @@ As the access patterns are determined statically, apparent conflicts may in fact
 If at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
 
 \subsubsection{Future work}
+\label{s:extraction:future}
 \TODO{This likely belongs elsewhere}
 
 This technique for determining fusion order is sound, because any order is sound.

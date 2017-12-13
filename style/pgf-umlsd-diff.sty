@@ -29,6 +29,7 @@ node
 }
 
 % add \detokenize to node definitions because the name can't contain parentheses
+% draw white background underneath text, to make more readable over lines
 \renewcommand*{\messanother}[4][0]{
   \stepcounter{seqlevel}
   \path
@@ -36,7 +37,7 @@ node
   \addtocounter{seqlevel}{#1}
   \path
   (#4)+(0,-\theseqlevel*\unitfactor-0.7*\unitfactor) node (mess to) {};
-  \draw[->,>=angle 60] (mess from) -- (mess to) node[midway, above]
+  \draw[->,>=angle 60] (mess from) -- (mess to) node[midway, above=1pt, inner sep=1pt, fill=white]
   {#3};
 
   \node (\detokenize{#3} from) at (mess from) {};

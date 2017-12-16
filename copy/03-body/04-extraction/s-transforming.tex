@@ -33,65 +33,10 @@ Even if we could fuse one process in a single instruction, at 3GHz it would take
 If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
 
 We cannot try all the orders; we need some way to choose the order.
-As we shall see in \autoref{s:extraction:future},
-
-\begin{lstlisting}
-append3 a b c =
-  ab <- append a b
-  ac <- append a c
-  bc <- append b c
-  return (ab, ac, bc)
-\end{lstlisting}
-
-\begin{lstlisting}
-zip3 a b c =
-  ab <- zip a b
-  ac <- zip a c
-  bc <- zip b c
-  return (ab, ac, bc)
-\end{lstlisting}
-
-
-\begin{figure}
-\begin{minipage}[t]{0.5\textwidth}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  b; a; c;
-  app1 [label="append"];
-  app2 [label="append"];
-  app3 [label="append"];
-  a -> app1; a -> app2;
-  b -> app1; b -> app3;
-  c -> app2; c -> app3;
-  app1 -> ab;
-  app2 -> ac;
-  app3 -> bc;
-}
-\end{dot2tex}
-\end{minipage}
-\begin{minipage}[t]{0.5\textwidth}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  b; a; c;
-  app1 [label="zip"];
-  app2 [label="zip"];
-  app3 [label="zip"];
-  a -> app1; a -> app2;
-  b -> app1; b -> app3;
-  c -> app2; c -> app3;
-  app1 -> ab;
-  app2 -> ac;
-  app3 -> bc;
-}
-\end{dot2tex}
-\end{minipage}
-\caption[Process network for `append3']{process networks for @append3@ and @zip3@.}
-\label{figs/procs/append3}
-\end{figure}
+As we shall see in \autoref{s:extraction:future}, it is impossible to choose the right order by looking at the dependency graph alone; the correct order depends upon the implementation of each process.
+As future work we shall propose a fusion algorithm which is commutative and associative, which means we can fuse processes in any order.
+We shall start by explaining a heuristic which does not always choose the right order, but works for the benchmarks in \REFTODO{benchmarks}.
+\TODO{Maybe the explanation of why it has to be a heuristic should come first, but it makes it unappealing to start with an example where the heuristic doesn't work. If I explain the future work, it seems like there's no reason to explain the heuristic. Reorganise later.}
 
 The following example, @append2zip@, constructs a process network with three input streams.
 This example is a partial process network which could be part of a larger network; the particular endpoints for the input and output streams are not relevant here.
@@ -105,15 +50,18 @@ append2zip a b c =
 \end{lstlisting}
 
 This process network appends the input streams, then pairs together the elements in both appended streams.
-The prefix of both appended streams is the same, so the output will be the prefix paired with itself, followed by the two other streams paired together.
+The input streams are finite.
+The result of the two @append@ processes, @ba@ and @bc@, both start with a prefix of the elements from @b@ stream, followed by the elements of the second @append@ argument; stream @a@ or stream @c@ respectively.
+These two streams @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
 
 
 \autoref{figs/swim/append2zip} shows an example execution of @append2zip@.
 The execution is displayed as a sequence diagram.
-Each input stream and process is represented as a vertical line, which communicates with other processes by arrows.
-The names of each stream and process are written above the line, and to fit on the page the names of the @append@ processes are written using (@++@), the list-append operator.
+Each input stream and process is represented as a vertical line which communicates with other processes by arrows.
+The names of each stream and process are written above the line.
+To save space, the names of the @append@ processes are written using (@++@), the list-append operator.
 Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
-When input stream @b@ pushes its elements, it pushes to both its consumers at the same time.
+Input stream @b@ has multiple consumers, so when it pushes its elements it pushes to both its consumers at the same time.
 Time flows downwards.
 
 
@@ -174,28 +122,16 @@ The execution has two sections.
 In the first section, all the values from the @b@ stream are pushed to both @append@ processes, then paired together.
 In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
 The consumer process, @zip@, alternates between pulling from each of the @append@ processes.
-The access pattern imposed by the consumer propagates upwards through the @append@ processes and to the input streams.
-
-% \begin{lstlisting}
-% (ba * bc) * z
-% (bc * ba) * z
-% (ba * z ) * bc
-% (bc * z ) * ba
-% (z  * ba) * bc
-% (z  * bc) * ba
-% ba * (bc * z )
-% bc * (ba * z )
-% ba * (z  * bc)
-% bc * (z  * ba)
-% z  * (ba * bc)
-% z  * (bc * ba)
-% \end{lstlisting}
+The order in which a process pulls from its inputs is called its \emph{access pattern}.
+Each @append@ process can only push when the @zip@ process' buffer for that channel is empty: @append@ must wait for @zip@ to read the most recent element before pushing a new element.
+When each @append@ process is waiting, its producer---the input stream---must also wait before pushing the next element.
+This waiting propagates the @zip@ process' access pattern upwards through the @append@ processes and to the input streams.
 
 This example contains three processes.
 We could perform fusion in twelve different orders.
-Of these twelve orders, there are two main categories.
-The first category, we fuse the two @append@ processes together, then fuse with the @zip@ process.
-In the second category, we fuse the @zip@ process with one of the @append@ processes, then fuse with the other @append@ process.
+Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the @append@ processes with each other, or start by fusing the @zip@ process with one of the @append@ processes.
+% The first category, we fuse the two @append@ processes together, then fuse with the @zip@ process.
+% In the second category, we fuse the @zip@ process with one of the @append@ processes, then fuse with the other @append@ process.
 
 If we fuse the two @append@ processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
 There are many ways to interleave the two processes; one possibility is that the fused process reads all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
@@ -215,13 +151,16 @@ We start from the consumer and fuse them upwards with their producers, because t
 To decide which order to fuse a whole network in, we treat the process network as a dependency graph.
 \autoref{figs/specconstr/append2zip} shows the process network for @append2zip@, with producers at the top and consumers at the bottom.
 The @zip@ depends on both @append@ processes, and each @append@ processes depends on its two input streams.
-We find all the terminal processes, which are those consumers with no children processes that they produce to.
-In our example, @zip@ is the only terminal process.
 
-For each terminal process, we find its parents.
-The terminal process in our example has multiple parents --- the two @append@ processes --- and we could fuse in either order.
-In general, one parent may depend on another parent; in which case we first fuse with the parent which consumes from the other parent.
-This allows the consuming parent to impose its access pattern upon the producing parent.
+In this case @zip@ is the only consumer at the bottom of the dataflow graph, and we fuse it with one of its parent @append@ processes, then fuse the result process with the other @append@ process.
+\TODO{Modify example to have Source/Sink so we can say we start at the sinks and work fuse upwards towards the sources.}
+
+To fuse an arbitrary process network we start at the sinks at the bottom of the dataflow graph, and find each process which produces only to the sinks, which are the \emph{terminal} processes.
+For each terminal process, we find its parents and fuse the terminal process with its parents.
+When the terminal process has multiple parents, we need to choose which parent to fuse with first.
+In our example we can fuse the @zip@ process with its @append@ parents in any order.
+In general one parent may consume the other parent's output; in which case we first fuse with the consumer parent.
+This order allows the consuming parent to impose its access pattern upon the producing parent.
 We repeatedly fuse each terminal process with its closest parent until there are no more parents.
 
 After fusing each terminal process with all its ancestors, there may remain multiple processes.
@@ -240,11 +179,12 @@ If at any point we encounter a pair of processes which we cannot fuse together, 
 \label{s:extraction:future}
 \TODO{This likely belongs elsewhere}
 
-This technique for determining fusion order is sound, because any order is sound.
 Regardless of the order the processes are fused in, if fusion succeeds, the result process has the same meaning.
+This makes the heuristic described above \emph{sound}, in that it will never produce a wrong program.
 
-This fusion order works for the examples in \REFTODO{benchmarks}, but it is not complete.
-Completeness for the fusion order means that if there exists any order in which fusion succeeds, then the order described above also succeeds.
+The corrolary to soundness is \emph{completeness}, which is that it will always produce a right program.
+That is, if there exists any order in which fusion succeeds, then the order described above also succeeds.
+This heuristic is not complete, but it does works for all the examples in \REFTODO{benchmarks}.
 % For large process networks, there are many orders we could fuse the processes.
 % There are factorially many permutations of the set of processes, and on top of that, the fusion operation can be nested arbitrarily.
 % This factorial number of possibilities is because the fusion algorithm is non-associative and non-commutative.
@@ -260,14 +200,61 @@ append3 a b c =
   return (ab, ac, bc)
 \end{lstlisting}
 
+
+\begin{figure}
+\begin{minipage}[t]{0.5\textwidth}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  b; a; c;
+  app1 [label="append"];
+  app2 [label="append"];
+  app3 [label="append"];
+  a -> app1; a -> app2;
+  b -> app1; b -> app3;
+  c -> app2; c -> app3;
+  app1 -> ab;
+  app2 -> ac;
+  app3 -> bc;
+}
+\end{dot2tex}
+\end{minipage}
+\begin{minipage}[t]{0.5\textwidth}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  b; a; c;
+  app1 [label="zip"];
+  app2 [label="zip"];
+  app3 [label="zip"];
+  a -> app1; a -> app2;
+  b -> app1; b -> app3;
+  c -> app2; c -> app3;
+  app1 -> ab;
+  app2 -> ac;
+  app3 -> bc;
+}
+\end{dot2tex}
+\end{minipage}
+\caption[Process network for `append3']{process networks for @append3@ and @zip3@.}
+\label{figs/procs/append3-zip3}
+\end{figure}
+
+
 This process network can be executed with no buffering.
 First, read all of the @a@ input stream, then read the @b@ stream, then read the @c@ stream.
 There is no single consumer in this example which imposes its access pattern on its producers, so our heuristic fails.
 This process network can only be fused if the process that produces @ab@ and the process that produces @bc@ are first fused together.
 If we fused @ab@ and @ac@ together first, the fusion algorithm would make an arbitrary decision of whether to read the @b@ stream before, after, or interleaved with the @c@ stream.
 The heuristic described will not necessarily choose the right order.
+
 Looking at the dependency graph alone, it is impossible to tell which is the right order for fusion.
-If we replaced the @append@ processes with @zip@ processes, the dependency graph would remain the same, but either fusion order would work.
+If we take the @append3@ example and replace the @append@ processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
+\autoref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
+
+
 
 We propose to solve this in future work \REFTODO{future of fusion} by modifying the fusion algorithm to be commutative and associative.
 These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.

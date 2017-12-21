@@ -4,43 +4,140 @@
 All the data in the world won't tell you anything if you don't look at it.
 To learn from the data, we must ask it a question.
 We must query the data.
-Once we have learnt one thing, we will find ourselves wanting to know more.
-Knowledge is addictive.
+Once we have learnt one thing, we will find ourselves wanting to know more; knowledge is addictive.
 To learn many things from the data, we must not just ask it one question; we must interview it.
 We must query the data many times.
 
 When our data is too large to fit in memory, it must be read from disk or network.
 Reading data from disk takes longer than reading from memory, and reading over the network takes longer still.
-For a simple query, we will spend more time reading the data than performing the query part of the computation.
+For a simple query, we will spend more time reading the data than performing the computation part of the query.
 We would like to limit the amount of time spent reading.
 We cannot avoid reading the data altogether, but we can limit the number of times we read the same data.
-If we perform multiple queries separately, each query needs to read the same data, and we end up reading the same data multiple times.
+If we perform multiple queries over the same input data separately, each query needs to read the same data, and we end up reading the same data multiple times.
 We want to perform these multiple queries together, sharing the data among the queries, and reading the data only once.
 
 Our data can exceed the size of memory; the working set of our query program cannot.
-If our query program requires more memory than the computer has, it will crash before returning the answer.
+If our query program requires more memory than the computer has, it will not be able to compute the answer we desire.
 When we write a query, we need to be sure that it will not run out of memory when we run it today.
 With datasets that grow every day, we also need to be sure that the query will not run out of memory tomorrow or the day after.
-The memory usage should be constant regardless of the amount of data.
+Unless we want to add new memory to the computer every day, the memory usage should be as close as possible to constant, regardless of the data size.
 
 Streaming lets us transform large datasets in constant memory.
 Stream transformers consume data element by element, processing the elements in sequential order.
-Stream transformers can only store a limited number of elements at a time, and cannot sort or reorder the elements.
-These heavy restrictions are worthwhile.
-We can write our queries as streaming programs, confident that they will not run out of memory.
+Stream transformers can only store a limited number of elements at a time.
+These restrictions mean that we cannot, for example, sort all the input data, or read elements in random access.
+The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory.
+
+% If our input data is stored persistently on disk somewhere, we can perform multiple passes over the input if necessary.
+% For example, if we wish to read elements in random access, we may be able to emulate this 
+% This means that many streaming
+% We would like to keep the number of iterations over the input data to a minimum.
 
 \section{Many queries}
 
-We have many queries, and we have written each one as a separate streaming program.
-We wish to execute all the queries together, so we only pay once the overhead of reading from disk.
+Assume we have many queries, and we have written each one as a separate streaming program.
+We wish to execute all the queries together, so we only pay the overhead of reading from disk once.
 
-If we have two queries to execute at the same time, we can write a new query that combines them together.
+Suppose we have some historical share prices for a particular company.
+For each day, we have the share's open price at the start of the day, and the close price at the end of the day.
+
+\begin{lstlisting}
+data DailyPrice = DailyPrice
+  { date  :: Date
+  , open  :: Double
+  , close :: Double }
+\end{lstlisting}
+
+We wish to query this data.
+For simplicity, let us assume that we have the data in a lazy list, \lstinline/[DailyPrice]/.
+We can treat lazy lists as a kind of stream where the next value is computed on demand, so long as we are careful not to reuse the same list multiple times.
+When a list is only used once, its values can be computed, used, and collected by the garbage collector.
+If we reuse the same list, once its values are computed by one consumer they must be retained in memory until the other consumer uses them.
+List combinators provide a convenient way to write our example queries.
+% Later we shall see the that reading data as lazy lists can introduce memory problems when the list is used multiple times, but list combinators provide a convenient way to write queries for now.
+
+If we assume that the list of days are distinct, we can count how many days we have data for by just taking the length of the list.
+
+\begin{lstlisting}
+countDays :: [DailyPrice] -> Int
+countDays prices = length prices
+\end{lstlisting}
+
+We could make this slightly more interesting by only counting the days where the close price was above the open price.
+
+\begin{lstlisting}
+countProfitDays :: [DailyPrice] -> Int
+countProfitDays prices =
+ let profits = filter (\p -> open p < close p) prices
+ in  length profits
+\end{lstlisting}
+
+These queries are not very interesting on their own, but if we put them both together they will tell us a bit more about the company.
+If we wanted to compute both of these with regular lists, we could just construct a tuple and call both functions.
+This approach will loop over the list twice, as well as retaining the whole list in memory.
+
+\begin{lstlisting}
+countBoth :: [DailyPrice] -> (Int, Int)
+countBoth prices = (countDays prices, countProfitDays prices)
+\end{lstlisting}
+
+Instead, we need to \emph{fuse} the queries together, to be able to compute both in a single loop.
+We have had to put all the work of both queries inside a single fold.
+% The problem with this approach is that 
+
+\begin{lstlisting}
+countBoth :: [DailyPrice] -> (Int, Int)
+countBoth prices = foldl countCount (0, 0) prices
+ where
+  countCount (countDays0, countProfitDays0) price
+   = let countDays' = countDays0 + 1
+         countProfitDays'
+          | open p < close p
+          = countProfitDays0 + 1
+          | otherwise
+          = countProfitDays0
+     in (countDays', countProfitDays')
+\end{lstlisting}
+
+
+We can compute the average open price over all time as follows.
+
+\begin{lstlisting}
+averageOpen :: [DailyPrice] -> Double
+averageOpen prices =
+   mean $ map (\p -> open p) prices
+\end{lstlisting}
+
+This function takes a list of @DailyPrice@ records, extracts the open price of each record, then computes the average.
+The definition of @mean@ is worth looking at.
+We could define it quite easily as the sum divided by the length, but this would loop over the input stream twice. We cannot loop over the stream multiple times.
+
+\begin{lstlisting}
+mean :: [Double] -> Double
+mean xs =
+ let (sumxs,lenxs) = foldl go (0,0) xs
+ in  sumxs / lenxs
+ where
+  go (sumxs,lenxs) x = (sumxs + x, lenxs + 1)
+\end{lstlisting}
+
+The average open price over all time is somewhat interesting, but 
+
+\begin{lstlisting}
+weeklyAverageOpen :: Date -> [DailyPrice] -> Double
+weeklyAverageOpen now prices =
+ let windowed = filter (\p -> withinDays 7 now (date p)) prices
+     opens    = map    (\p -> open p) windowed
+ in  mean opens
+\end{lstlisting}
+
+If we have two queries to execute at the same time, we may be able to write a new query that combines them together.
 If both queries are simple, the compound query will remain simple.
 If one query is simple and the other is complex, the compound query will be a bit more complex.
 If both queries are complex, the compound will be tremendously complex.
 
 Combining two queries is hard enough; when we want to combine three or more queries, we soon reach the limit of what can be achieved with intuition alone.
-As our queries become more complex and more numerous, the compound becomes exponentially more complex.
+As our queries become more complex and more numerous, the compound becomes more complex.
 We need a system to help us: a rigorous approach to transforming multiple queries into a single compound query.
 This transform is called fusion.
 

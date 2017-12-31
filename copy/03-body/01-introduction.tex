@@ -50,91 +50,143 @@ data DailyPrice = DailyPrice
 
 We wish to query this data.
 For simplicity, let us assume that we have the data in a lazy list, \lstinline/[DailyPrice]/.
-We can treat lazy lists as a kind of stream where the next value is computed on demand, so long as we are careful not to reuse the same list multiple times.
+We can treat lazy lists as a kind of stream where the next value is computed on demand, as long as we are careful not to reuse the same list multiple times.
 When a list is only used once, its values can be computed, used, and collected by the garbage collector.
 If we reuse the same list, once its values are computed by one consumer they must be retained in memory until the other consumer uses them.
 List combinators provide a convenient way to write our example queries.
 % Later we shall see the that reading data as lazy lists can introduce memory problems when the list is used multiple times, but list combinators provide a convenient way to write queries for now.
 
-If we assume that the list of days are distinct, we can count how many days we have data for by just taking the length of the list.
+If we assume that the list of days are distinct, we can count how many days we have data for by folding over the list and incrementing the count for every element.
 
 \begin{lstlisting}
 countDays :: [DailyPrice] -> Int
-countDays prices = length prices
+countDays prices = foldl (\count _ -> count + 1) 0 prices
 \end{lstlisting}
 
-We could make this slightly more interesting by only counting the days where the close price was above the open price.
+We can write a slightly more interesting query if we only count the `profit' days where the close price was above the open price.
 
 \begin{lstlisting}
 countProfitDays :: [DailyPrice] -> Int
 countProfitDays prices =
  let profits = filter (\p -> open p < close p) prices
- in  length profits
+ in  foldl (\count _ -> count + 1) 0 profits
 \end{lstlisting}
 
-These queries are not very interesting on their own, but if we put them both together they will tell us a bit more about the company.
+These queries are not very useful on their own, but if we put them both together they will tell us a bit more about the company.
 If we wanted to compute both of these with regular lists, we could just construct a tuple and call both functions.
-This approach will loop over the list twice, as well as retaining the whole list in memory.
+This approach will loop over the list twice as well as retaining the whole list in memory, which is unsuitable for streaming.
+
+Instead, we must \emph{fuse} the queries together, combining the two into a single function that computes both.
+We put the work of both queries inside a single loop over the list, which stores as loop state the count of all days, and the count of `profit' days.
+To count all days we increment the count for each element, essentially applying the original fold for each element.
+To count the `profit' days we must perform both the filter and the fold inside the loop, so we only apply the fold if the filter predicate is true.
 
 \begin{lstlisting}
 countBoth :: [DailyPrice] -> (Int, Int)
-countBoth prices = (countDays prices, countProfitDays prices)
-\end{lstlisting}
-
-Instead, we need to \emph{fuse} the queries together, to be able to compute both in a single loop.
-We have had to put all the work of both queries inside a single fold.
-% The problem with this approach is that 
-
-\begin{lstlisting}
-countBoth :: [DailyPrice] -> (Int, Int)
-countBoth prices = foldl countCount (0, 0) prices
+countBoth prices = loop 0 0 prices
  where
-  countCount (countDays0, countProfitDays0) price
-   = let countDays' = countDays0 + 1
-         countProfitDays'
+  loop sCountDays sCountProfitDays (p:prices')
+   = let sCountDays' = sCountDays + 1
+         sCountProfitDays'
           | open p < close p
-          = countProfitDays0 + 1
+          = sCountProfitDays + 1
           | otherwise
-          = countProfitDays0
-     in (countDays', countProfitDays')
+          = sCountProfitDays
+     in loop sCountDays' sCountProfitDays' prices
+  loop sCountDays sCountProfitDays []
+   = (sCountDays, sCountProfitDays)
 \end{lstlisting}
 
+This fused query is more efficient than running both queries separately as it only requires a single traversal, but we have lost the composability benefits of using high-level combinators.
+We have had to intertwine all the logic of the folds and the filter into a single place.
+This program is not too hard to write by hand, but it is more complex than each original query individually.
 
-We can compute the average open price over all time as follows.
+A more interesting query is to compute the sum of the \emph{gap}.
+The gap is the difference between one day's close price and the next day's open price, which tells us how perception of the stock changed overnight while the market was closed.
+We can compute this by pairing each day with the day after, finding the difference between each pair, then summing the differences.
 
 \begin{lstlisting}
-averageOpen :: [DailyPrice] -> Double
-averageOpen prices =
-   mean $ map (\p -> open p) prices
+sumGap :: [DailyPrice] -> Double
+sumGap prices =
+ let pairs       = zip prices (tail prices)
+     differences = map (\(p,pTail) -> close p - open pTail) pairs
+ in  sum differences
 \end{lstlisting}
 
-This function takes a list of @DailyPrice@ records, extracts the open price of each record, then computes the average.
-The definition of @mean@ is worth looking at.
-We could define it quite easily as the sum divided by the length, but this would loop over the input stream twice. We cannot loop over the stream multiple times.
+We wish to perform all three queries together, but because this query is a bit more complex than the previous ones, let us start by looking at how we can write this query on its own as a single loop.
 
 \begin{lstlisting}
-mean :: [Double] -> Double
-mean xs =
- let (sumxs,lenxs) = foldl go (0,0) xs
- in  sumxs / lenxs
+sumGap' :: [DailyPrice] -> Double
+sumGap' prices = loop 0 prices
  where
-  go (sumxs,lenxs) x = (sumxs + x, lenxs + 1)
+  loop sSum []
+   = sSum
+  loop sSum (p:prices')
+   = let sSum'
+          | (pTail:_) <- prices'
+          = sSum + (close p - open pTail)
+          | otherwise
+          = sSum
+     in loop sSum' prices'
 \end{lstlisting}
 
-The average open price over all time is somewhat interesting, but 
+% \begin{lstlisting}
+% sumGap' :: [DailyPrice] -> Double
+% sumGap' prices = loop 0 prices
+%  where
+%   loop sSum (p:pTail:prices')
+%    = let diff  = close p - open pTail
+%          sSum' = sSum + diff
+%      in loop sSum' (pTail:prices')
+%   loop sSum [p]
+%    = sSum
+%   loop sSum []
+%    = sSum
+% \end{lstlisting}
+
+The main difference between this loop and the one for @countBoth@ is that this loop looks at the two elements at the start of the list in order to compare two adjacent days.
+
+To perform all three queries, @sumGap@, @countDays@, and @countProfitDays@.
 
 \begin{lstlisting}
-weeklyAverageOpen :: Date -> [DailyPrice] -> Double
-weeklyAverageOpen now prices =
- let windowed = filter (\p -> withinDays 7 now (date p)) prices
-     opens    = map    (\p -> open p) windowed
- in  mean opens
+sumGapCount :: [DailyPrice] -> (Int, Int, Double)
+sumGapCount prices = loop 0 0 0 prices
+ where
+  loop sCountDays sCountProfitDays sSum []
+   = (sCountDays, sCountProfitDays, sSum)
+  loop sCountDays sCountProfitDays sSum (p:prices')
+   = let sCountDays' = sCountDays + 1
+         sCountProfitDays'
+          | open p < close p
+          = sCountProfitDays + 1
+          | otherwise
+          = sCountProfitDays
+         sSum'
+          | (pTail:_) <- prices'
+          = sSum + (close p - open pTail)
+          | otherwise
+          = sSum
+     in loop sCountDays' sCountProfitDays' sSum' prices
 \end{lstlisting}
 
-If we have two queries to execute at the same time, we may be able to write a new query that combines them together.
-If both queries are simple, the compound query will remain simple.
-If one query is simple and the other is complex, the compound query will be a bit more complex.
-If both queries are complex, the compound will be tremendously complex.
+
+
+% \begin{lstlisting}
+% sumGap' :: [DailyPrice] -> Double
+% sumGap' prices = init
+%  where
+%   init []          = 0
+%   init (p:prices') = loop 0 p prices'
+% 
+%   loop sSum pTail []
+%    = sSum
+%   loop sSum pTail (p:prices')  
+%    = let diff   = p - pTail
+%          pTail' = p
+%          sSum'  = sSum + diff
+%      in  loop sSum' pTail' prices'
+% \end{lstlisting}
+
 
 Combining two queries is hard enough; when we want to combine three or more queries, we soon reach the limit of what can be achieved with intuition alone.
 As our queries become more complex and more numerous, the compound becomes more complex.

@@ -8,19 +8,19 @@ Once we have learnt one thing, we will find ourselves wanting to know more; know
 To learn many things from the data, we must not just ask it one question; we must interview it.
 We must query the data many times.
 
-When our data is too large to fit in memory, it must be read from disk or network.
+When our data is too large to fit in memory, we must read it from disk or network.
 Reading data from disk takes longer than reading from memory, and reading over the network takes longer still.
-For a simple query, we will spend more time reading the data than performing the computation part of the query.
+When we query data over disk or network, we can spend more time reading the data than performing the computation part of the query.
 We would like to limit the amount of time spent reading.
-We cannot avoid reading the data altogether, but we can limit the number of times we read the same data.
+We cannot avoid reading the data altogether, but we may be able to limit the number of times we read the same data.
 If we perform multiple queries over the same input data separately, each query needs to read the same data, and we end up reading the same data multiple times.
-We want to perform these multiple queries together, sharing the data among the queries, and reading the data only once.
+Ideally, we would like to perform multiple queries together, sharing the data among the queries, and reading the data only once.
 
 Our data can exceed the size of memory; the working set of our query program cannot.
 If our query program requires more memory than the computer has, it will not be able to compute the answer we desire.
-When we write a query, we need to be sure that it will not run out of memory when we run it today.
-With datasets that grow every day, we also need to be sure that the query will not run out of memory tomorrow or the day after.
-Unless we want to add new memory to the computer every day, the memory usage should be as close as possible to constant, regardless of the data size.
+When we write a query, we need to be sure that it will not run out of memory.
+With datasets that grow every day, we also need to be sure that the query will not run out of memory when we execute it tomorrow or the day after.
+Unless we want to keep adding new memory to the computer as the dataset grows, the memory usage should be as close as possible to constant, regardless of the data size.
 
 Streaming lets us transform large datasets in constant memory.
 Stream transformers consume data element by element, processing the elements in sequential order.
@@ -32,6 +32,162 @@ The upside of these restrictions is that if we can write our queries as streamin
 % For example, if we wish to read elements in random access, we may be able to emulate this 
 % This means that many streaming
 % We would like to keep the number of iterations over the input data to a minimum.
+
+\section{The stuff streams are made of}
+
+Highlight the fact that we are working with finite streams.
+
+If we can represent each query as a fold over a single input, then combining multiple queries becomes quite easy.
+Sometimes the hard part is figuring out how to represent the query as a fold.
+
+The first question is how to represent streams.
+
+We want a moderately interesting query with: map on input stream; multiple folds at the end; probably a filter.
+
+\begin{lstlisting}
+query1 inputs =
+  let xs = map (+1) inputs
+      y  = maximum xs
+      z  = sum inputs
+  in (last inputs, y / z)
+\end{lstlisting}
+
+\subsection{Push streams}
+
+
+\begin{lstlisting}
+-- data Push a = Maybe a -> IO ()
+data Push a r = Push
+  { push :: a -> IO ()
+  , done :: IO r }
+\end{lstlisting}
+
+The map function for a push stream is a bit backwards: rather than taking the input stream as an argument and returning the output stream, it takes the output stream and returns the input stream.
+The returned input stream can then be passed to another stream transformer which expects a stream to push to.
+We suffix the names of push stream transformers with ``@o@'' for ``output''.
+
+\begin{lstlisting}
+map_o :: (a -> b) -> Push b r -> Push a r
+\end{lstlisting}
+
+In the definition of push streams above, the element type appears to the left of the function arrow, making push streams \emph{contravariant} in the element type.
+Most stream representations are \emph{functors}, while push streams are \emph{cofunctors}.
+With push streams we have to write the program in a backwards way, because our program is constructing a description of what to do with a value once it gets it.
+We have to start at the end of the computation, say what we want to do with the result, and work backwards to turn the result into a push stream which accepts the input.
+
+To implement a fold using push streams, the fold takes a mutable reference which is where to store the result once it is available, as well as the usual fold arguments, and returns the push stream.
+
+\begin{lstlisting}
+## fold_o :: IORef b -> (b -> a -> b) -> b -> Push a
+fold_o :: (r -> a -> r) -> r -> Push a r
+\end{lstlisting}
+
+\begin{lstlisting}
+dup_oo :: (b -> c -> d) -> Push a b -> Push a c -> Push a d
+\end{lstlisting}
+
+Here is the @query1@ query from earlier using push streams.
+
+\begin{lstlisting}
+query1'push inputs = do
+  yref    <- newIORef
+  zref    <- newIORef
+  lastref <- newIORef
+
+  ypush   <- fold_o (flip (max . Just)) Nothing
+  zpush   <- fold_o sum 0
+  lpush   <- fold_o (const . Just) Nothing
+
+  folds   <- dup3_ooo ypush zpush lpush
+  x       <- map_o (+1) folds
+
+  drain inputs x
+
+  y       <- readIORef yref
+  z       <- readIORef zref
+  l       <- readIORef lref
+
+  return (l, y / z)
+\end{lstlisting}
+
+The push version executes in a single loop over the input, but requires quite a bit of extra boilerplate, and the logic is backwards.
+If we annotate push streams with a return value we might be able to clean it up a bit.
+
+\begin{lstlisting}
+query1'push = do
+  y   <- fold_o (flip (max . Just)) Nothing
+  z   <- fold_o sum 0
+  l   <- fold_o (const . Just) Nothing
+
+  yz  <- dup_oo (/) y z
+  lyz <- dup_oo (,) l yz
+
+  map (+1) lyz
+\end{lstlisting}
+
+
+This is still not as nice as it could be.
+
+\subsection{Icicle}
+
+Push queries let us do many things at once with the same stream, but they are not as natural to program in as plain old lists.
+Icicle is a query language for performing folds with push streams, which aims to provide nice syntax to make it closer to dealing with lists.
+Icicle also has a type-system for ensuring that queries can be executed in a single pass.
+
+\begin{lstlisting}
+   let x = input + 1
+in let y = max x
+in let z = sum x
+in (last x, y / z)
+\end{lstlisting}
+
+As a fold...
+\begin{lstlisting}
+let (l,m,s) =
+  foldl (\(l,m,s) input ->
+          let x = input + 1
+          in (Just x, maybe (Just x) (max x) m, s + x))
+        (Nothing, Nothing, 0)
+(l, m / s)
+\end{lstlisting}
+
+Using the foldl applicative library
+\begin{lstlisting}
+let x = fmap (+1) inputs
+    yz = (/) <$> maximum <*> sum
+    lyz = (,) <$> last <*> yz
+in fold lyz x
+\end{lstlisting}
+
+More Icicle query examples.
+\begin{lstlisting}
+table stocks { open : Int; close : Int }
+query
+  more = filter open > close of count;
+  less = filter open < close of count;
+  mean = filter open > close of sum open / count;
+\end{lstlisting}
+
+Query example where we can't compute, but could rewrite as a group:
+\begin{lstlisting}
+table kvs { key : Date; value : Real }
+query avg = let k = last key
+            in filter (key == k) of mean value;
+\end{lstlisting}
+
+
+\subsection{Pull streams}
+
+\begin{lstlisting}
+data Pull a = IO (Maybe a)
+\end{lstlisting}
+
+\subsection{Polarized}
+Mixture of push and pull, but requires manually classifying streams in the process network as push or pull.
+As with push streams on their own, if we embed push stream transformations inside polarized dataflow, we still need to write the push streams in an awkard, backwards way.
+Cannot fuse \lstinline/unzip . zip/, which might not seem useful because it is superfluous, but it is possible that a larger program would have this somewhere inside it.
+
+\subsection{Kahn process networks}
 
 \section{Many queries}
 

@@ -189,6 +189,14 @@ Cannot fuse \lstinline/unzip . zip/, which might not seem useful because it is s
 
 \subsection{Kahn process networks}
 
+Push streams require a computation to have one producer which pushes to arbitrarily many consumers, which in turn may push to many consumers.
+This structure is a tree, rooted at the top-most producer.
+Pull streams, likewise, can only have one consumer and many producers: again a tree, this time rooted at the bottom-most consumer.
+Programs, however, are not trees; they are \emph{networks}, and they can mention the same variables as many times as they want.
+We use abstract syntax trees to represent programs, but in order to fit a network into a tree we must prune the `bad' branches; in an AST we refer to variables by name rather than occurrence.
+It feels as though we are constantly butting our heads against the disconnect between a program's true meaning and the tree representation we are so used to.
+
+
 \section{Many queries}
 
 Assume we have many queries, and we have written each one as a separate streaming program.

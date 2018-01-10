@@ -23,6 +23,18 @@
             year = {2002},
 }
 
+% Push-based query execution where there's a top-level that continually loops over all the data pushing it to all the queries.
+% New queries are registered and added to the "data path" so that it will also receive next pushed value.
+% This way all the queries are reading the same part of the data at the same time.
+@inproceedings{arumugam2010datapath,
+  title={The DataPath system: a data-centric analytic processing engine for large data warehouses},
+  author={Arumugam, Subi and Dobra, Alin and Jermaine, Christopher M and Pansare, Niketan and Perez, Luis},
+  booktitle={Proceedings of the 2010 ACM SIGMOD International Conference on Management of data},
+  pages={519--530},
+  year={2010},
+  organization={ACM}
+}
+
 % B ------------------
 
 @article{babu2001continuous,
@@ -66,6 +78,40 @@
 
 % K ------------------
 
+% An odd mixture of push and pull.
+% Shows an example transformation from pull to push, but this is very vague and ill-specified, and I am not sure whether this is a mechanical transform they have implemented, or something they did by hand.
+% Neither do they specify the requirements for this transform to work or be valid; I do not see how `merge' could be transformed in this way. Would it fail explicitly or silently produce the wrong program? 
+% "In its full generality, the transformation between a Volcano [pull] and a push engine is still under development. For the results presented here, we have implemented the push version directly ..."
+% In the updated 2016 version on arxiv, they do not mention transformation from push to pull, or pull at all, so they might have given up on this idea.
+%
+% I must read Neumann to see why push is better than pull; I would have thought that inlining the `pull' function would solve this problem.
+% "Compilation strategies have been proposed ... to optimise away the overheads of traditional database abstractions like the Volcano model"
+%
+% The running example is (hash-join (group-fold S) (filter R)).
+% This example is a hash-join, not a streaming ordered join.
+% The push version of the hash join requires that its left parent pushes all the values before the right parent starts pushing, so the consumer asks when to be pushed into, which is an interesting mixture of pulling and pushing.
+%
+% The LMS approach is definitely promising.
+@article{klonatos2014building,
+  title={Building efficient query engines in a high-level language},
+  author={Klonatos, Yannis and Koch, Christoph and Rompf, Tiark and Chafi, Hassan},
+  journal={Proceedings of the VLDB Endowment},
+  year={2014},
+}
+
+% http://15721.courses.cs.cmu.edu/spring2017/papers/20-compilation/krikellas-icde2010.pdf
+% Generating C code, but it's quite hard to decipher the conceptual essence.
+% Briefly mentions lots of things without really going into enough detail on any of them.
+% Conclusion: yes, we should generate code.
+@inproceedings{krikellas2010generating,
+  title={Generating code for holistic query evaluation},
+  author={Krikellas, Konstantinos and Viglas, Stratis D and Cintra, Marcelo},
+  booktitle={Data Engineering (ICDE), 2010 IEEE 26th International Conference on},
+  pages={613--624},
+  year={2010},
+  organization={IEEE}
+}
+
 % L ------------------
 
 % M ------------------
@@ -93,6 +139,37 @@
 
 % N ------------------
 
+% https://wiki.epfl.ch/edicpublic/documents/Candidacy%20exam/hyper-code-generation.pdf
+% Problems with iterator model:
+% * pull function is called for each tuple - many times
+% * pull function is function pointer - expensive
+% * poor code locality and "complex book keeping"
+% These points are valid if comparing to a non-compiled query, but inlining / fusion solves all of these!
+% And push on its own would have this problem too, because it still needs function pointers etc.
+%
+% Push as described is funny mixture of push/pull, as it has a "produce" function to bubble upward to tell an operator to start sending values down.
+%
+% This paper introduces two things: push-based model and inlining.
+% Together, these gave a significant speedup.
+% No evidence is given that uncompiled push is better than uncompiled pull.
+%
+% Perhaps we could say this differently, as "fusion lets us turn a simple pull-based model into the nice loops"
+%
+%  The comparison to a compiled pull model is JVM-based, which is bad at inlining and so performs badly, suffering from the problems described.
+%
+% "Data is not pulled by operators but pushed towards the operators. This results in much better code and data locality."
+% ????
+@article{neumann2011efficiently,
+  title={Efficiently compiling efficient query plans for modern hardware},
+  author={Neumann, Thomas},
+  journal={Proceedings of the VLDB Endowment},
+  volume={4},
+  number={9},
+  pages={539--550},
+  year={2011},
+  publisher={VLDB Endowment}
+}
+
 % S ------------------
 
 @inproceedings{shaikhha2016architect,
@@ -102,6 +179,23 @@
   year={2016}
 }
 
+% https://arxiv.org/pdf/1610.09166.pdf
+% Disputes the claims made in neumann2011efficiently, that push is inherently faster:
+% "As we show, if compared fairly, push and pull based engines have very similar performance, with individual strengths and weaknesses, and neither is a clear winner. Push engines have in essence only been considered in the context of query compilation, conflating the potential advantages of the push paradigm with those of code inlining. "
+%
+% Defines the relationship between loop fusion and operator pipelining for query execution.
+% Push engine = fold fusion
+% Pull engine = unfold
+%
+% Filters in push can have degrade branch prediction because they introduce a new loop; similar to Stream-Fusion's filter problem of not inlining the recursive loop.
+% And this is what they do! They take Stream-Fusion's Skip and implement it in a database "pull engine".
+% 
+@article{shaikhha2016push,
+  title={Push vs. Pull-Based Loop Fusion in Query Engines},
+  author={Shaikhha, Amir and Dashti, Mohammad and Koch, Christoph},
+  journal={arXiv preprint arXiv:1610.09166},
+  year={2016}
+}
 
 % T ------------------
 

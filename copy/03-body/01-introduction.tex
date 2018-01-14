@@ -33,6 +33,106 @@ The upside of these restrictions is that if we can write our queries as streamin
 % This means that many streaming
 % We would like to keep the number of iterations over the input data to a minimum.
 
+\section{An interview of queries}
+Why would we want to run many queries?
+Suppose we have a file containing historical prices for a particular stock.
+The file contains many records.
+Each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
+
+Records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype:
+
+\begin{lstlisting}
+data Record = Record
+ { date :: Date
+ , cost :: Double }
+\end{lstlisting}
+
+To demonstrate the kinds of queries we want to run on this data, we will assume for now that the data fits in memory and write the queries using list operations.
+In some circumstances we can use lazy evaluation to execute list operations in a streaming fashion, but when a list is used multiple times, the computed elements must be kept in memory until the .
+In this case, because we want to execute multiple queries over the input we will be mentioning the same thing many times.
+List operations require that the input data be stored completely in memory.
+Let us assume that we have the data in a lazy list, \lstinline/[Record]/.
+We can treat lazy lists as a kind of stream where the next value is computed on demand, as long as we are careful not to reuse the same list multiple times.
+When a list is only used once, its values can be computed, used, and collected by the garbage collector.
+If we reuse the same list, once its values are computed by one consumer they must be retained in memory until the other consumer uses them.
+Despite the disadvantage of not being sure whether your program will execute in a streaming fashion, list combinators provide a convenient and expressive way to write our example queries.
+
+Suppose we want to compute the mean of prices over all time.
+We can write that as:
+
+\begin{lstlisting}
+priceMean :: [Record] -> Double
+priceMean file = mean $ map price file
+\end{lstlisting}
+
+However, the mean on its own is not terribly interesting.
+There might be variations on the price according to the day of the week: for example, on Mondays the market has been closed for two days, which may affect the price.
+This hypothesis about the data may or may not be true, but to find out we must at least compute the result.
+To validate (or more likely invalidate) this hypothesis, we can group the records by the day of the week, and perform the mean over the prices for each day of the week separately.
+
+\begin{lstlisting}
+weekdayMeans :: [Record] -> Map DayOfWeek Double
+weekdayMeans file = 
+  grouped (dayOfWeek . date)
+          (mean . map price)
+          file
+\end{lstlisting}
+
+Now, if we wish to compute these two queries, we can do that simply enough with lists.
+\begin{lstlisting}
+queries :: [Record] -> (Double, Map DayOfWeek Double)
+queries file = (priceMean file, weekdayMeans file)
+\end{lstlisting}
+
+However, this program requires two passes over the input data.
+Looping over the data multiple times is fine for list programs, but not for streaming programs.
+Worse still, the list will be held entirely in memory.
+We need to rewrite the program to run in a single pass.
+
+If we have several stocks, we might wish to know how they perform together: when one goes up, does the other one go up?
+This is called correlation.
+
+\begin{lstlisting}
+correlation :: [Double] -> [Double] -> Double
+correlation x y = covariance x y / (stddev x * stddev y)
+\end{lstlisting}
+
+\begin{lstlisting}
+queries :: [(Date,Price)] -> [(Date,Price)] -> Result
+queries asx bty =
+  let joined  :: [(Date,(Price,Price))]
+      joined  = innerJoin asx bty
+      prices  :: [(Price,Price)]
+      prices  = map snd joined
+      asxMean = mean $ map snd asx
+      btyMean = mean $ map snd bty
+      both    = correlation prices
+  in (asxMean, btyMean, both)
+\end{lstlisting}
+
+\begin{lstlisting}
+queries :: IO Result
+queries = $(network $ do
+  asx     <- records "ASX.csv"
+  bty     <- records "BTY.csv"
+  joined  <- innerJoin asx bty
+  prices  <- map [||snd||] joined
+  asxMean <- mean =<< map [||snd||] asx
+  btyMean <- mean =<< map [||snd||] bty
+  both    <- correlation prices
+  return $ \k -> [|| Result $(result'mean k), $(result'cor k) ||])
+\end{lstlisting}
+
+
+\begin{lstlisting}
+stats :: [Record] -> (Double, Double, Double)
+stats file =
+  let m = mean $ map price file
+      e = exponentialMovingAverage 0.75 $ map price file
+      g = correlation (map price file) (map (daysFromEpoch . date) file)
+  in (m, e, g)
+\end{lstlisting}
+
 \section{The stuff streams are made of}
 
 Highlight the fact that we are working with finite streams.
@@ -213,12 +313,6 @@ data DailyPrice = DailyPrice
 \end{lstlisting}
 
 We wish to query this data.
-For simplicity, let us assume that we have the data in a lazy list, \lstinline/[DailyPrice]/.
-We can treat lazy lists as a kind of stream where the next value is computed on demand, as long as we are careful not to reuse the same list multiple times.
-When a list is only used once, its values can be computed, used, and collected by the garbage collector.
-If we reuse the same list, once its values are computed by one consumer they must be retained in memory until the other consumer uses them.
-List combinators provide a convenient way to write our example queries.
-% Later we shall see the that reading data as lazy lists can introduce memory problems when the list is used multiple times, but list combinators provide a convenient way to write queries for now.
 
 If we assume that the list of days are distinct, we can count how many days we have data for by folding over the list and incrementing the count for every element.
 

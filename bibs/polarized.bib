@@ -1,4 +1,33 @@
-% Streaming
+% Push and pull, or source and sink.
+% But Source and Sink are defined corecursively.
+% Unfolding definitions:
+% > data Source a = Nil  | Cons a (N (Sink a))
+% > data Sink   a = Full | Cont (N (Source a))
+%   ==>
+% > data Source a = Nil  | Cons a (Maybe (Source a -> IO ()) -> IO ())
+% > data Sink   a = Full | Cont (Maybe (a, Sink a -> IO ()) -> IO ())
+% The 'Full' adds an extra level of Maybe in both unfoldings.
+%
+% These definitions can be used linearly and (IO (Maybe a)) can't, but (Pull = IO (a, Pull)) could be used linearly too.
+%
+% Has the advantage that forwarding is very simple:
+% > shiftSrc k kk = k (Cont kk)
+%
+% Surprisingly, they can "flip sink transformers to obtain source transformers, and vice versa", with
+% > flipSnk :: (Snk a -> Snk b) -> Src b -> Src a
+% This is neat. I think it works because it's restricted to the last argument and for straight lines.
+%
+% They use the name zip for both zip and unzip. This is a bit confusing, but it appears they can implement both.
+% They define append using a helper function 'forwardThen(Snk|Src)', which they then describe as the "difference of sources and sinks", but I don't understand what this means at all.
+%
+% > mux :: Src a -> Src b -> Src (Either (Maybe a -> IO ()) (Maybe b -> IO ()) -> IO ())
+% The consumer of mux wants to choose which one to pull from.
+% Src cannot implement mux because a Src returns two separate values: the element and the remainder of the stream.
+% The remainder of the stream cannot depend on what the environment does with the element, so the Src implementation must choose which one to pull from beforehand.
+% CoSrc can implement this, but has the opposite problem: consumption of an element cannot affect consumption of the remainder of the stream.
+% So CoSrc can't implement 'conversion to list' or fold...
+% Simple stateful pull streams (IO (Maybe a)) can implement both of these.
+% Of course, there is probably some conceptual beauty that simple stateful pull streams don't have...
 @inproceedings{bernardy2015duality,
   author    = {Jean-Philippe Bernardy and Josef Svenningsson},
   title     = {On the Duality of Streams.

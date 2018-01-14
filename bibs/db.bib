@@ -99,6 +99,22 @@
   year={2014},
 }
 
+% https://infoscience.epfl.ch/record/183766/files/main.pdf
+% Incremental view maintenance: have a commonly asked query and slowly evolving data, so update the query results as we get new data instead of recomputing from scratch.
+% For database D, update u, then we compute a "delta query" to compute the updated result:
+%   Q(D + u) = Q(D) + ∆Q(D,u)
+% "Incremental evaluation is provably easier than nonincremental evaluation."
+% TODO: Worth reading properly later. Very dense and abstract, but more formal/mathematically solid than average DB stuff.
+% 
+@inproceedings{koch2010incremental,
+  title={Incremental query evaluation in a ring of databases},
+  author={Koch, Christoph},
+  booktitle={Proceedings of the twenty-ninth ACM SIGMOD-SIGACT-SIGART symposium on Principles of database systems},
+  pages={87--98},
+  year={2010},
+  organization={ACM}
+}
+
 % http://15721.courses.cs.cmu.edu/spring2017/papers/20-compilation/krikellas-icde2010.pdf
 % Generating C code, but it's quite hard to decipher the conceptual essence.
 % Briefly mentions lots of things without really going into enough detail on any of them.

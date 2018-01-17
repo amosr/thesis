@@ -22,30 +22,106 @@ When we write a query, we need to be sure that it will not run out of memory.
 With datasets that grow every day, we also need to be sure that the query will not run out of memory when we execute it tomorrow or the day after.
 Unless we want to keep adding new memory to the computer as the dataset grows, the memory usage should be as close as possible to constant, regardless of the data size.
 
-Streaming lets us transform large datasets in constant memory.
+One way to transform large datasets in constant memory is to write the query as a \emph{streaming program}.
+Streaming programs can be written by composing stream transformers together.
 Stream transformers consume data element by element, processing the elements in sequential order.
 Stream transformers can only store a limited number of elements at a time.
 These restrictions mean that we cannot, for example, sort all the input data, or read elements in random access.
 The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory.
+
+\TODO{Need to be explicit about the difference between `streaming' as a concept and and particular streaming models.} Different stream representations can represent different programs; we can think of a streaming model as the set of supported stream transformers, as well as the rules about how we can connect transformers together.
 
 % If our input data is stored persistently on disk somewhere, we can perform multiple passes over the input if necessary.
 % For example, if we wish to read elements in random access, we may be able to emulate this 
 % This means that many streaming
 % We would like to keep the number of iterations over the input data to a minimum.
 
-\section{An interview of queries}
-Why would we want to run many queries?
-Suppose we have a file containing historical prices for a particular stock.
-The file contains many records.
-Each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
+\section{Gold-panning / unsound financial advice}
+Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
+Suppose we have a file containing the historical prices for a particular stock.
+The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
 
 Records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype:
 
 \begin{lstlisting}
 data Record = Record
- { date :: Date
- , cost :: Double }
+ { date  :: Date
+ , price :: Double }
 \end{lstlisting}
+
+We wish to evaluate this stock to see whether it is a worthy investment.
+One quality of a good investment is that its price increases over time.
+We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
+If we already have a function to compute the Pearson correlation coefficient, we write this like so:
+
+\begin{lstlisting}
+priceOverTime :: Stream Record -> IO Double
+priceOverTime stock = do
+  times  <- map (daysSince . date) stock
+  prices <- map  price             stock
+  correlation times prices
+\end{lstlisting}
+
+This is a simple query, and it might even tell us something interesting.
+However, stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
+Furthermore, even if this stock appears to be doing quite well, if we consider it in isolation, we do not know whether it is an exceptional stock, or an exceptional time in the market.
+We might be interested, then, in comparing against the rest of the market as well.
+
+To compare against the rest of the market, let us assume that we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
+This representative subset is called an \emph{index}.
+We want to compare each day's price for our stock against the average price for the corresponding day in the index.
+To do this, we join up the stock with the index based on the date.
+We can do this in a streaming manner because both files are sorted by date --- if the files were not sorted, we would need to keep all of one input in memory, for example performing a hash-join, or read the file multiple times.
+
+\begin{lstlisting}
+priceAgainstMarket :: Stream Record -> Stream Record -> IO Double
+priceAgainstMarket stock index = do
+  joined <- joinBy stock date index date
+  priceS <- map (price . fst) joined
+  priceI <- map (price . snd) joined
+  correlation priceS priceI
+\end{lstlisting}
+
+Now this is a bloody good query too.
+Why do we have to choose between running the query before, @priceOverTime@, and this query, @priceAgainstMarket@?
+With all of these good queries lying around, it would sure be nice if we could have all of them.
+
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock; index;
+
+    stock -> times;
+    stock -> prices;
+    stock -> joinBy;
+    index -> joinBy;
+
+  subgraph cluster_priceOverTime {
+    times;
+    prices;
+    cor1 [label="correlation"];
+    times -> cor1;
+    prices -> cor1;
+  }
+
+  subgraph cluster_priceAgainstMarket {
+    joinBy;
+    priceS;
+    priceI;
+    cor2 [label="correlation"];
+    joinBy -> priceS;
+    joinBy -> priceI;
+    priceS -> cor2;
+    priceI -> cor2;
+  }
+}
+\end{dot2tex}
+\caption[Process network for `append3']{process networks for @append3@ and @zip3@.}
+\label{figs/procs/append3-zip3}
+\end{figure}
+
 
 To demonstrate the kinds of queries we want to run on this data, we will assume for now that the data fits in memory and write the queries using list operations.
 In some circumstances we can use lazy evaluation to execute list operations in a streaming fashion, but when a list is used multiple times, the computed elements must be kept in memory until the .

@@ -36,7 +36,7 @@ The upside of these restrictions is that if we can write our queries as streamin
 % This means that many streaming
 % We would like to keep the number of iterations over the input data to a minimum.
 
-\section{Gold-panning / unsound financial advice}
+\section{Gold panning}
 Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Suppose we have a file containing the historical prices for a particular stock.
 The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
@@ -52,39 +52,61 @@ data Record = Record
 We wish to evaluate this stock to see whether it is a worthy investment.
 One quality of a good investment is that its price increases over time.
 We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
-If we already have a function to compute the Pearson correlation coefficient, we write this like so:
+If we already have a function to compute the correlation, we write the query as follows.
 
+% correlation :: (a $\to$ Double) (a $\to$ Double) $\to$ Stream a $\to$ Query Double
 \begin{lstlisting}
-priceOverTime :: Stream Record -> IO Double
-priceOverTime stock = do
-  times  <- map (daysSince . date) stock
-  prices <- map  price             stock
-  correlation times prices
+priceOverTime :: Stream Record -> Query Double
+priceOverTime stock =
+  correlation (daysSinceEpoch . date) price stock
 \end{lstlisting}
+
+The @correlation@ function takes the stream of records, as well as functions to extract the time and price axes from each record.
+To extract the time, we need to convert it from a @Date@ to a number using the @daysSinceEpoch@ function.
+This query executes by repeatedly pulling records from the input stream, and folding over the values to compute various sums and means.
 
 This is a simple query, and it might even tell us something interesting.
 However, stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
-Furthermore, even if this stock appears to be doing quite well, if we consider it in isolation, we do not know whether it is an exceptional stock, or an exceptional time in the market.
+Furthermore, even if this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional time in the market.
 We might be interested, then, in comparing against the rest of the market as well.
 
-To compare against the rest of the market, let us assume that we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
+To compare against the rest of the market, assume we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
 This representative subset is called an \emph{index}.
 We want to compare each day's price for our stock against the average price for the corresponding day in the index.
-To do this, we join up the stock with the index based on the date.
-We can do this in a streaming manner because both files are sorted by date --- if the files were not sorted, we would need to keep all of one input in memory, for example performing a hash-join, or read the file multiple times.
+To compare day against day, we join up the stock with the index based on the date --- we can join the two in a streaming manner because both files are sorted by date.
+If the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
+% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
+The join function takes the two input streams, as well as functions to extract the key from each input record.
 
+
+% join :: Ord k $\Rightarrow$ (a $\to$ k) (b $\to$ k) $\to$ Stream a $\to$ Stream b $\to$ Query (Stream (a,b))
 \begin{lstlisting}
-priceAgainstMarket :: Stream Record -> Stream Record -> IO Double
+priceAgainstMarket :: Stream Record -> Stream Record -> Query Double
 priceAgainstMarket stock index = do
-  joined <- joinBy stock date index date
-  priceS <- map (price . fst) joined
-  priceI <- map (price . snd) joined
-  correlation priceS priceI
+  joined <- join date date stock index
+  correlation (price . fst) (price . snd) joined
 \end{lstlisting}
 
-Now this is a bloody good query too.
-Why do we have to choose between running the query before, @priceOverTime@, and this query, @priceAgainstMarket@?
-With all of these good queries lying around, it would sure be nice if we could have all of them.
+The @join@ in this query executes by pulling values from both of its input streams, and comparing the keys.
+If the keys are equal, @join@ gives the pair of values to @correlation@, and pulls new values from both streams.
+Otherwise, @join@ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+
+Hopefully this query will tell us something interesting.
+Perhaps even both of these queries will tell us something interesting, so it would be nice to be able to compute both of them at the same time.
+Ideally, we could write the program to compute both like so:
+
+\begin{lstlisting}
+priceAnalysis :: Stream Record -> Stream Record -> Query (Double, Double)
+priceAnalysis stock index = do
+  time   <- priceOverTime stock
+  market <- priceAgainstMarket stock index
+  return (time, market)
+\end{lstlisting}
+
+However, to execute both queries together, we need to coordinate between the two uses of the @stock@ input stream.
+The @join@ inside @priceAgainstMarket@ pulls from its two inputs depending on which has the smaller key, while the @correlation@ inside @priceOverTime@ repeatedly pulls from the @stock@ stream.
+We must coordinate between the @join@ and the @correlation@, so that @correlation@ only receives a new value when @join@ agrees to read a new value.
+We must also be careful not to let one consumer get too far ahead of the other, because if one consumer gets ahead of the other we must store all the unconsumed elements in memory to allow the other consumer to catch up.
 
 \begin{figure}
 \center
@@ -93,34 +115,55 @@ digraph G {
   node [shape="none"];
   stock; index;
 
-    stock -> times;
-    stock -> prices;
-    stock -> joinBy;
-    index -> joinBy;
+  stock -> pot_cor;
+  stock -> pam_join;
+  index -> pam_join;
 
-  subgraph cluster_priceOverTime {
-    times;
-    prices;
-    cor1 [label="correlation"];
-    times -> cor1;
-    prices -> cor1;
-  }
+  subgraph cluster_priceOverTime  {
+    pot_cor [label="correlation"];
+  };
 
   subgraph cluster_priceAgainstMarket {
-    joinBy;
-    priceS;
-    priceI;
-    cor2 [label="correlation"];
-    joinBy -> priceS;
-    joinBy -> priceI;
-    priceS -> cor2;
-    priceI -> cor2;
-  }
+    pam_join [label="join"];
+    pam_cor [label="correlation"];
+    pam_join -> pam_cor;
+  };
 }
 \end{dot2tex}
-\caption[Process network for `append3']{process networks for @append3@ and @zip3@.}
-\label{figs/procs/append3-zip3}
+\caption[Two queries]{process network for the queries @priceOverTime@ and @priceAgainstMarket@.}
+\label{figs/procs/priceOverTime-priceAgainstMarket}
 \end{figure}
+
+We can implement this program as communicating processes in a concurrent process network.
+Each combinator inside each query, as well as each input stream, becomes a process in the network.
+The process network for both queries is shown in \autoref{figs/procs/priceOverTime-priceAgainstMarket}.
+Processes communicate through channels which they can pull values from, waiting until values are available, or push values to.
+By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
+When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
+The concurrent process network will naturally find the right coordination between the processes.
+
+Concurrent process networks give us the desired high-level semantics, but they do not provide an ideal execution strategy.
+All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
+If the sending process has performed any kind of computation on the integer, the sending process would most likely have the integer stored in a register, where it can be operated on directly by the processor.
+When the sending process wishes to send this value to the other process, it must lock the channel to prevent other writers or premature reads, copy the integer to memory where it can be read by the other process, and unlock the channel.
+Now, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
+In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
+
+Of course, concurrent process network implementations often amortise the cost of communication by chunking messages together, and sending messages consisting of arrays of thousands of integers rather than a single integer at a time.
+However, amortising cost .... is bad.
+You know what's better than amortising the cost? Copying directly from a register to a register.
+
+
+
+
+Unfortunately, if our streaming model is anything like the vast majority, this program will not compute the result we desire.
+try to run these two queries together as above in the , we might be surprised by the result.
+The majority of streaming libraries are \emph{pull-based}, which means that a stream consumer asks the producer for values.
+In pull-based
+% write this program with a popular streaming library such as Conduit\footnote{\url{https://hackage.haskell.org/package/conduit}},
+the majority of streaming libraries will not unlikely to compute the result we desire.
+However, in most streaming systems, this program will not compute the result we desire.
+The problem is that consuming a stream is an effectful operation: once we compute the price over time, we have already used the whole.
 
 
 To demonstrate the kinds of queries we want to run on this data, we will assume for now that the data fits in memory and write the queries using list operations.

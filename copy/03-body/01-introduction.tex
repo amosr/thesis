@@ -142,15 +142,43 @@ By making the channels fixed-size, we do not have to worry about one process get
 When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
 The concurrent process network will naturally find the right coordination between the processes.
 
-Concurrent process networks give us the desired high-level semantics, but they do not provide an ideal execution strategy.
+Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
 All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
 If the sending process has performed any kind of computation on the integer, the sending process would most likely have the integer stored in a register, where it can be operated on directly by the processor.
 When the sending process wishes to send this value to the other process, it must lock the channel to prevent other writers or premature reads, copy the integer to memory where it can be read by the other process, and unlock the channel.
-Now, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
+Next, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
 In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
 
-Of course, concurrent process network implementations often amortise the cost of communication by chunking messages together, and sending messages consisting of arrays of thousands of integers rather than a single integer at a time.
-However, amortising cost .... is bad.
+Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: sending one message containing an array of integers rather than many messages, each containing a single integer.
+This chunking reduces the cost of sending messages, but cannot eliminate it altogether --- the processes still need to communicate at least once.
+The size of the chunks determines how many communications are saved, so larger chunks mean less communication overhead.
+However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
+Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
+Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
+
+Since the whole point of executing multiple queries together was to improve speed by avoiding multiple reads, it seems rather unfortunate --- and counter-intuitive --- to introduce new overheads.
+
+\input{figs/runtime/process-network-overhead.tex}
+\autoref{fig:runtime:process-network-overhead} shows..
+
+Too much parallelism.
+Fine-grained processes is desirable because it allows us to write compose smaller processes together.
+This is the promise of functional programming.
+However, fine-grainded processes exposes too much parallelism.
+If we have tens of queries, and tens of processes in each query, we will end up with more processes than we have processors.
+This discrepancy means each processor must swap between several processes, which takes time.
+Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
+We must find a middle-ground between too fine-grained processes.
+
+In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
+
+Talk about parallelism --- too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
+In fact, the contrary is often true.
+\cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation, assuming absolute performance is the goal.
+
+
+
+What would be better than amortising the cost, 
 You know what's better than amortising the cost? Copying directly from a register to a register.
 
 

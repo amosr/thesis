@@ -41,11 +41,11 @@ Even with the bounded memory and sequential access restrictions of streaming, we
 Suppose we have a file containing the historical prices for a particular stock.
 The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
 
-Records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype:
+Records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
 
 \begin{lstlisting}
 data Record = Record
- { date  :: Date
+ { time  :: Double
  , price :: Double }
 \end{lstlisting}
 
@@ -58,11 +58,12 @@ If we already have a function to compute the correlation, we write the query as 
 \begin{lstlisting}
 priceOverTime :: Stream Record -> Query Double
 priceOverTime stock =
-  correlation (daysSinceEpoch . date) price stock
+  times  <- map  time  stock
+  prices <- map  price stock
+  correlation times prices
 \end{lstlisting}
 
-The @correlation@ function takes the stream of records, as well as functions to extract the time and price axes from each record.
-To extract the time, we need to convert it from a @Date@ to a number using the @daysSinceEpoch@ function.
+The @correlation@ function takes two streams of numbers and pairs them together to compute the correlation between each pair.
 This query executes by repeatedly pulling records from the input stream, and folding over the values to compute various sums and means.
 
 This is a simple query, and it might even tell us something interesting.
@@ -115,12 +116,17 @@ digraph G {
   node [shape="none"];
   stock; index;
 
-  stock -> pot_cor;
   stock -> pam_join;
   index -> pam_join;
+  stock -> pot_prices;
+  stock -> pot_times;
 
   subgraph cluster_priceOverTime  {
+    pot_prices [label="map price"];
+    pot_times [label="map time"];
     pot_cor [label="correlation"];
+    pot_prices -> pot_cor;
+    pot_times  -> pot_cor;
   };
 
   subgraph cluster_priceAgainstMarket {
@@ -174,7 +180,7 @@ In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
 
 Talk about parallelism --- too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
 In fact, the contrary is often true.
-\cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation, assuming absolute performance is the goal.
+\cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
 
 
 

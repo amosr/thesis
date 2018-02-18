@@ -1,20 +1,20 @@
 \chapter{Introduction}
 \label{chapter:introduction}
 
+
 All the data in the world won't tell you anything if you don't look at it.
-To learn from the data, we must ask it a question.
-We must query the data.
+To learn from the data, we must ask it a question by querying the data.
 Once we have learnt one thing, we will find ourselves wanting to know more; knowledge is addictive.
 To learn many things from the data, we must not just ask it one question; we must interview it.
 We must query the data many times.
 
-When our data is too large to fit in memory, we must read it from disk or network.
+When our data is too large to fit in memory, we must read it from disk or over the network.
 Reading data from disk takes longer than reading from memory, and reading over the network takes longer still.
-When we query data over disk or network, we can spend more time reading the data than performing the computation part of the query.
-We would like to limit the amount of time spent reading.
+When we query data over disk or network, we can spend more time waiting for data than performing computations with the data.
+For a computer, time spent waiting is time wasted, so we would like to limit the amount of time spent waiting for data.
 We cannot avoid reading the data altogether, but we may be able to limit the number of times we read the same data.
 If we perform multiple queries over the same input data separately, each query needs to read the same data, and we end up reading the same data multiple times.
-Ideally, we would like to perform multiple queries together, sharing the data among the queries, and reading the data only once.
+Ideally, we would perform multiple queries together, sharing the data among the queries, and reading the data only once.
 
 Our data can exceed the size of memory; the working set of our query program cannot.
 If our query program requires more memory than the computer has, it will not be able to compute the answer we desire.
@@ -23,13 +23,12 @@ With datasets that grow every day, we also need to be sure that the query will n
 Unless we want to keep adding new memory to the computer as the dataset grows, the memory usage should be as close as possible to constant, regardless of the data size.
 
 One way to transform large datasets in constant memory is to write the query as a \emph{streaming program}.
-Streaming programs can be written by composing stream transformers together.
-Stream transformers consume data element by element, processing the elements in sequential order.
-Stream transformers can only store a limited number of elements at a time.
-These restrictions mean that we cannot, for example, sort all the input data, or read elements in random access.
-The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory.
+We can write streaming programs by composing stream transformers together.
+Stream transformers consume data element by element, processing the elements in sequential order, and can only store a limited number of elements at a time.
+Because of these restrictions a stream transformer cannot, for example, sort all the input data, or read elements in random access.
+The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory when we execute them.
 
-\TODO{Need to be explicit about the difference between `streaming' as a concept and and particular streaming models.} Different stream representations can represent different programs; we can think of a streaming model as the set of supported stream transformers, as well as the rules about how we can connect transformers together.
+% \TODO{Need to be explicit about the difference between `streaming' as a concept and and particular streaming models.} Different stream representations can represent different programs; we can think of a streaming model as the set of supported stream transformers, as well as the rules about how we can connect transformers together.
 
 % If our input data is stored persistently on disk somewhere, we can perform multiple passes over the input if necessary.
 % For example, if we wish to read elements in random access, we may be able to emulate this 
@@ -40,57 +39,74 @@ The upside of these restrictions is that if we can write our queries as streamin
 Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Suppose we have a file containing the historical prices for a particular stock.
 The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted by the date.
-
-Records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
+[NOTE: one record per day is not ``big data''.]
+The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
 
 \begin{lstlisting}
 data Record = Record
- { time  :: Double
- , price :: Double }
+ { time :: Time
+ , cost :: Double }
 \end{lstlisting}
 
-We wish to evaluate this stock to see whether it is a worthy investment.
-One quality of a good investment is that its price increases over time.
-We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
-If we already have a function to compute the correlation, we write the query as follows.
+We wish to evaluate this stock to see whether it was, historically, a worthy investment.
+One quality of a good investment is that its price increases over time, and we can quantify this by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
+It is very convenient to be able to summarise growth with one number, but stock prices rarely act as lines.
+While a line might be a good approximation for a stable stock with few dips and bumps, it is a poor approximation for an unstable stock.
+Fortunately, we can use the correlation coefficient to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
+
+\input{figs/stock.tex}
+
+\autoref{fig:stock:it:stock-over-time} shows the linear regression and correlation of the stock price over a year.
+The stock price is far from a perfect line, but does show a clear upwards trend.
+% The correlation coefficient is a scalar ranging from negative one to positive one.
+In this graph the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are.
+
+% We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
+% The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
+% When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
+
+If we have a function to compute the correlation of a stream, we can write the following query.
+[NOTE: query should linear regression as well.]
 
 % correlation :: (a $\to$ Double) (a $\to$ Double) $\to$ Stream a $\to$ Query Double
 \begin{lstlisting}
 priceOverTime :: Stream Record -> Query Double
 priceOverTime stock =
-  times  <- map  time  stock
-  prices <- map  price stock
-  correlation times prices
+  tps <- map (\r -> (daysSinceEpoch (time r), cost r)) stock
+  correlation tps
 \end{lstlisting}
 
-The @correlation@ function takes two streams of numbers and pairs them together to compute the correlation between each pair.
-This query executes by repeatedly pulling records from the input stream, and folding over the values to compute various sums and means.
+The @correlation@ function takes a stream containing pairs of numbers, so we first convert the @Record@ values to pairs of numbers.
+This query executes by repeatedly reading records from the input file, and folding over the values to compute the various sums and means that constitute the correlation coefficient.
 
-This is a simple query, and it might even tell us something interesting.
-However, stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
-Furthermore, even if this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional time in the market.
+Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
+Furthermore, even if this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
 We might be interested, then, in comparing against the rest of the market as well.
 
-To compare against the rest of the market, assume we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
+To compare against the rest of the market, let us assume we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
 This representative subset is called an \emph{index}.
 We want to compare each day's price for our stock against the average price for the corresponding day in the index.
-To compare day against day, we join up the stock with the index based on the date --- we can join the two in a streaming manner because both files are sorted by date.
-If the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
+\autoref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \autoref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
+We can see in the comparison of stock price to index price that the stock has grown faster than the index.
+
+To match day against day and discard any days missing from either input, we join the stock with the index based on the date.
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
-The join function takes the two input streams, as well as functions to extract the key from each input record.
+% The join function takes the two input streams, as well as functions to extract the key from each input record.
 
 
 % join :: Ord k $\Rightarrow$ (a $\to$ k) (b $\to$ k) $\to$ Stream a $\to$ Stream b $\to$ Query (Stream (a,b))
 \begin{lstlisting}
 priceAgainstMarket :: Stream Record -> Stream Record -> Query Double
 priceAgainstMarket stock index = do
-  joined <- join date date stock index
-  correlation (price . fst) (price . snd) joined
+  joined <- join (\s i -> time s `compare` time i) stock index
+  costed <- map (\(s,i)-> (cost s, cost i)) joined
+  correlation costed
 \end{lstlisting}
 
-The @join@ in this query executes by pulling values from both of its input streams, and comparing the keys.
-If the keys are equal, @join@ gives the pair of values to @correlation@, and pulls new values from both streams.
+The @join@ in this query executes by reading a value from each input stream, and comparing the times.
+If the times are equal, @join@ gives the pair of values to @correlation@, before reading new values from both streams.
 Otherwise, @join@ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+We can perform this join in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
 
 Hopefully this query will tell us something interesting.
 Perhaps even both of these queries will tell us something interesting, so it would be nice to be able to compute both of them at the same time.
@@ -118,21 +134,20 @@ digraph G {
 
   stock -> pam_join;
   index -> pam_join;
-  stock -> pot_prices;
-  stock -> pot_times;
+  stock -> pot_tps;
 
   subgraph cluster_priceOverTime  {
-    pot_prices [label="map price"];
-    pot_times [label="map time"];
+    pot_tps [label="map"];
     pot_cor [label="correlation"];
-    pot_prices -> pot_cor;
-    pot_times  -> pot_cor;
+    pot_tps -> pot_cor;
   };
 
   subgraph cluster_priceAgainstMarket {
     pam_join [label="join"];
+    pam_cost [label="map"];
     pam_cor [label="correlation"];
-    pam_join -> pam_cor;
+    pam_join -> pam_cost;
+    pam_cost -> pam_cor;
   };
 }
 \end{dot2tex}
@@ -140,8 +155,8 @@ digraph G {
 \label{figs/procs/priceOverTime-priceAgainstMarket}
 \end{figure}
 
-We can implement this program as communicating processes in a concurrent process network.
-Each combinator inside each query, as well as each input stream, becomes a process in the network.
+We could implement a program which computes both queries as a concurrent process network.
+Each combinator inside each query, as well as each input stream, would become a communicating process in the network.
 The process network for both queries is shown in \autoref{figs/procs/priceOverTime-priceAgainstMarket}.
 Processes communicate through channels which they can pull values from, waiting until values are available, or push values to.
 By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
@@ -155,40 +170,40 @@ When the sending process wishes to send this value to the other process, it must
 Next, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
 In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
 
-Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: sending one message containing an array of integers rather than many messages, each containing a single integer.
+Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
 This chunking reduces the cost of sending messages, but cannot eliminate it altogether --- the processes still need to communicate at least once.
 The size of the chunks determines how many communications are saved, so larger chunks mean less communication overhead.
 However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
 Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
 
+Fine-grained processes are desirable, because they allow us to write smaller processes and compose them together.
+This compositional style is a large part of the appeal of functional programming.
+Fine-grained processes tend to perform little computational work and a lot of communication.
+With fine-grained processes we may expose too much parallelism, leading to synchronisation and scheduling overheads that dominate the runtime \cite{chen1990impact}.
+
+% This discrepancy means each processor must swap between several processes, which takes time.
+% Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
+% We must find a middle-ground between too fine-grained processes.
+
+% \cite{chen1990impact}
+% "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."
+% "The most important characteristic is that, without the near-optimal scheme, performance at the operation level and at the statement level is actually worse than at the loop-iteration level."
+% "unless we have a very sophisticated scheduling strategy, exploiting very fine grain parallelism with only a limited amount of resources can yield poorer results than we have anticipated"
+
+% In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
+
+% Too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
+% In fact, the contrary is often true.
+% \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
+
+
+\input{figs/runtime/gold-panning.tex}
+
 Since the whole point of executing multiple queries together was to improve speed by avoiding multiple reads, it seems rather unfortunate --- and counter-intuitive --- to introduce new overheads.
 
-\input{figs/runtime/process-network-overhead.tex}
-\autoref{fig:runtime:process-network-overhead} shows..
 
-Too much parallelism.
-Fine-grained processes is desirable because it allows us to write compose smaller processes together.
-This is the promise of functional programming.
-However, fine-grainded processes exposes too much parallelism.
-If we have tens of queries, and tens of processes in each query, we will end up with more processes than we have processors.
-This discrepancy means each processor must swap between several processes, which takes time.
-Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
-We must find a middle-ground between too fine-grained processes.
-
-In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
-
-Talk about parallelism --- too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
-In fact, the contrary is often true.
-\cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
-
-
-
-What would be better than amortising the cost, 
-You know what's better than amortising the cost? Copying directly from a register to a register.
-
-
-
+\iffalse
 
 Unfortunately, if our streaming model is anything like the vast majority, this program will not compute the result we desire.
 try to run these two queries together as above in the , we might be surprised by the result.
@@ -286,7 +301,8 @@ stats file =
   in (m, e, g)
 \end{lstlisting}
 
-\section{The stuff streams are made of}
+\section{Tell him he's streaming}
+
 
 Highlight the fact that we are working with finite streams.
 
@@ -701,4 +717,4 @@ We take the processes in a Kahn Process Network, and convert it into a single pr
 % What we would like is not always achievable, but it can be helpful to have something to strive for.
 
 
-
+\fi

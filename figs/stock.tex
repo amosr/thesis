@@ -1,0 +1,43 @@
+\newcommand\FigsStockAxisShared {width=5cm,height=5cm,}
+\newcommand\FigsStockAxisTime {xlabel=Time (days),ylabel=Unit price,} % ,x tick label style={color=white},}
+\newcommand\FigsStockAxisMarket {xlabel=Market percent,ylabel=Stock percent,}
+
+\newcommand\FigsStockComparison[2] {
+\begin{figure}
+  \centering
+  \begin{subfigure}[t]{0.3\textwidth}
+    \input{figs/stock/#1-time.tex}
+    \caption{Stock over time}
+    \label{fig:stock:#2:stock-over-time}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.3\textwidth}
+    \input{figs/stock/#1-market.tex}
+    \caption{Stock over market}
+    \label{fig:stock:#2:stock-over-market}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.3\textwidth}
+    \input{figs/stock/#1-tm.tex}
+    \caption{Market over time}
+    \label{fig:stock:#2:market-over-time}
+  \end{subfigure}
+  \caption{Analysis of a stock over a year}
+  \label{fig:stock:#2}
+\end{figure}
+}
+
+% \FigsStockComparison{asx}
+% \FigsStockComparison{bhp}
+% \FigsStockComparison{car}
+% \FigsStockComparison{cba}
+% \FigsStockComparison{coh}
+% \FigsStockComparison{dmp}
+% \FigsStockComparison{gold}
+% \FigsStockComparison{qbe}
+% \FigsStockComparison{sda}
+% \FigsStockComparison{tpm}
+% \FigsStockComparison{voc}
+% \FigsStockComparison{wes}
+
+\FigsStockComparison{cpu}{it}

@@ -1,0 +1,274 @@
+\chapter{A brief taxonomy of streaming models}
+\label{taxonomy}
+
+In this thesis we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
+Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and can only store a limited number of elements at a time.
+A streaming program cannot rewind an input stream to reread previous elements, or move directly to a particular index.
+Because of these restrictions a streaming program cannot, for example, sort all the input data, because that would require storing all the elements in memory or multiple traversals of the input.
+The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory --- regardless of how large the input stream is.
+In general input streams may be infinite, but in this thesis we focus on finite streams.
+
+% With just this definition one could go and write a streaming program in more or less any language with input-output facilities.
+% This is how a C programmer may implement a streaming program.
+% Take, for example, the standard unix tool @wc@.
+% Conceptually, this program does four things: it reads a file, counts the lines, counts the words, and counts the characters.
+% One might expect these four distinct concepts to be clearly distinct in the code, but because
+% Writing streaming programs in this manner can be error-prone and tedious however, as all aspects of the program must be interspersed.
+
+Streaming as described above is a rather general concept.
+This definition tells us what a streaming program is, but it does not offer any guidance how to write streaming programs.
+In fact, there are many ways to write streaming programs, but in this thesis we restrict our attention to streaming programs written in a \emph{functional style}.
+The functional style of writing streaming programs involves small stream transformers which are connected together to create larger programs.
+The benefit of this style is that each stream transformer can be reasoned about and tested in isolation with no hidden dependencies between stream transformers.
+
+There are numerous \emph{streaming models} to choose from, and we must commit to a particular model before we can start writing programs.
+Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the level of bookkeeping the programmer must perform to write their program.
+% The streaming model determines which stream operations are supported including how streams can be connected together, and the overhead incurred when connecting streams together.
+% [A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.]
+We must compare different streaming models to make an informed decision.
+We start our initial comparison with by focussing on two low-overhead streaming models to illustrate their lack of expressivity and motivate the use of Kahn process networks as a streaming model.
+Later in [ref related] we will compare against some more expressive but less efficient streaming models.
+
+\section{Gold panning}
+% Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
+Let us start by describing a situation in which we would like to execute many queries.
+To avoid mixing up the details of streaming with the details of the example, we will assume to begin with that the dataset fits in memory as a list and ignore details about efficiency.
+
+Suppose we have a file containing the historical prices for a particular stock.
+The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted chronologically.
+The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
+
+\begin{lstlisting}
+data Record = Record
+ { time :: Time
+ , cost :: Double }
+\end{lstlisting}
+
+We wish to evaluate this stock to see whether it was, historically, a worthy investment.
+One quality of a good investment is that its price increases over time, and we can quantify this by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
+It is very convenient to be able to summarise growth with one number, but stock prices rarely act as lines.
+While a line might be a good approximation for a stable stock with few dips and bumps, it is a poor approximation for an unstable stock.
+Fortunately, we can use the Pearson correlation coefficient to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
+
+\input{figs/stock.tex}
+
+\autoref{fig:stock:it:stock-over-time} shows the linear regression and correlation of the stock price over a year.
+The stock price is far from a perfect line, but does show a clear upwards trend.
+% The correlation coefficient is a scalar ranging from negative one to positive one.
+In this graph the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are and the straighter the relationship is.
+The angle here corresponds to a correlation of $0.94$, in a range from negative one to positive one.
+
+% We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
+% The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
+% When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
+
+Assuming that we already have functions to compute the linear regression and the correlation of a list of pairs of numbers, we can compute both with the following program.
+
+\begin{lstlisting}
+priceOverTime :: [Record] -> (Line, Double)
+priceOverTime stock =
+  let timecosts = map (\r -> (daysSinceEpoch (time r), cost r)) stock
+  in (regression timecosts, correlation timecosts)
+\end{lstlisting}
+
+Both @regression@ and @correlation@ functions take a list of pairs of numbers, so we first convert the @Record@ values to pairs of numbers using @map@.
+Although this is a single program, it computes two values.
+Whether we think of this program as one query or two is fairly inconsequential, but the important part is that this program as we have written it requires two traversals over the @timecosts@ list.
+List programs can traverse the same list many times, but later [ref taxonomy/pull] we shall see how this is a problem for streaming programs.
+
+Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
+Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
+We might be interested, then, in comparing against the rest of the market as well.
+
+To compare against the rest of the market, let us assume we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
+This representative subset is called an \emph{index}.
+We want to compare each day's price for our stock against the average price for the corresponding day in the index.
+\autoref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \autoref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
+We can see in the comparison of stock price to index price that the stock has grown faster than the index.
+
+We can compute the comparison of stock over market with the following program.
+
+\begin{lstlisting}
+priceOverMarket :: [Record] -> [Record] -> (Line, Double)
+priceOverMarket stock index =
+  let joins = join (\s i   -> time s `compare` time i) stock index
+      costs = map  (\(s,i) -> (cost s, cost i))        joins
+  in (regression costs, correlation costs)
+\end{lstlisting}
+
+To match day against day and discard any days missing from either input, we join the stock with the index based on the date.
+Then we extract both costs from the joined result and compute the regression and correlation.
+Again, this function requires two traversals of the @costs@ list.
+
+Since both analyses provide useful information, we wish to perform both.
+This is a simple matter of constructing a pair.
+
+\begin{lstlisting}
+priceAnalysis :: [Record] -> [Record] -> ((Line, Double), (Line, Double))
+priceAnalysis stock index =
+  let pot = priceOverTime   stock
+      pom = priceOverMarket stock index
+  in (pot, pom)
+\end{lstlisting}
+
+\autoref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
+The nodes in this graph are the two input lists @stock@ and @index@, each intermediate list, and the @correlation@ and @regression@ functions which summarise the list values.
+The edges are dependencies from one value to another; @joins@ is computed by joining together the @stock@ and @index@ lists, so there are arrows from both @stock@ and @index@ to @joins@.
+The large boxes bisecting most of the nodes denote which nodes are defined inside the @priceOverTime@ function and which are defined in @priceOverMarket@.
+This dependency graph is neither a tree nor an inverted tree: the nodes @stock@, @timecosts@, and @costs@ have multiple children; @joins@ has multiple parents.
+Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list.
+
+Although this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
+Which streaming model we choose dictates how difficult this rewrite will be.
+
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock; index;
+
+  stock -> pom_join;
+  index -> pom_join;
+  stock -> pot_tps;
+
+  subgraph cluster_priceOverTime  {
+    pot_tps [label="timecosts"];
+    pot_cor [label="correlation"];
+    pot_reg [label="regression"];
+    pot_tps -> pot_cor;
+    pot_tps -> pot_reg;
+  };
+
+  subgraph cluster_priceAgainstMarket {
+    pom_join [label="joins"];
+    pom_cost [label="costs"];
+    pom_cor [label="correlation"];
+    pom_reg [label="regression"];
+    pom_join -> pom_cost;
+    pom_cost -> pom_cor;
+    pom_cost -> pom_reg;
+  };
+}
+\end{dot2tex}
+\caption[Dependency graph for queries priceOverTime and priceOverMarket]{dependency graph for the queries @priceOverTime@ and @priceOverMarket@.}
+\label{figs/procs/priceOverTime-priceOverMarket}
+\end{figure}
+
+\section{Pull streams}
+
+The most common kind of stream is a \emph{pull stream}, which is also sometimes called an iterator or cursor.
+The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
+We can represent a pull stream as a function with no parameters which either returns a value, or returns @Nothing@ if the stream is finished.
+Since the stream might want to read from a file or update some local state, the function is wrapped in @IO@.
+
+\begin{lstlisting}
+data Pull a = Pull (IO (Maybe a))
+\end{lstlisting}
+
+Later [ref taxonomy/stream-fusion] we shall see more sophisticated representations of pull streams which remove some overhead, but these representations do not afford extra expressivity; the same set of combinators can be implemented.
+
+With this stream representation we can implement analogues of the list combinators used in the example queries.
+\autoref{figs/impl/pull/combinator} shows the type signatures; implementations are available in [ref appendix/pull].
+The @correlation@ and @regression@ functions are folds with relatively complex worker functions, but conceptually they are just folds with an extraction function applied afterwards.
+Because we intend on streaming from file, the result type for @foldl@ is now wrapped in @IO@.
+The @join_pull@ combinator must initialise some mutable state before returning its stream, so also returns its result wrapped in @IO@.
+
+\begin{figure}
+\begin{lstlisting}
+module Pull where
+
+map   :: (a -> b) -> Pull a -> Pull b
+join  :: (a -> b -> Ordering) -> Pull a -> Pull b -> IO (Pull (a,b))
+foldl :: (b -> a -> b) -> b -> Pull a -> IO b
+
+correlation :: Pull (Double,Double) -> IO Double
+correlation = do
+  c <- foldl correlation_k correlation_z
+  return (correlation_x c)
+
+regression :: Pull (Double,Double) -> IO Line
+regression = do
+  r <- foldl regression_k regression_z
+  return (regression_x c)
+\end{lstlisting}
+\caption{Pull stream combinators}
+\label{figs/impl/pull/combinator}
+\end{figure}
+
+We cannot naively translate the list version of @priceOverTime@ to use these streaming combinators, because the list version required multiple traversals.
+The following program will not compute the correct result because it uses the @timecosts@ stream twice.
+
+\begin{lstlisting}
+priceOverTime_pull_bad :: Pull Record -> IO (Line, Double)
+priceOverTime_pull_bad stock = do
+  let timecosts = Pull.map (\r -> (daysSinceEpoch (time r), cost r)) stock
+  r <- Pull.regression  timecosts
+  c <- Pull.correlation timecosts
+  return (r, c)
+\end{lstlisting}
+
+The problem is that consuming a stream is an effectful operation.
+Computing the regression pulls all the values from the @timecosts@ stream and folds over them until the stream is exhausted.
+By the time we go to compute the correlation and try to read the @timecosts@ stream again, it has already been read.
+For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
+In fact, streaming models often require that streams are used \emph{linearly} --- exactly once --- in order to ensure resources are properly cleaned up.
+
+Fortunately, because @regression@ and @correlation@ are both computed by folds, we can combine the two into a single fold.
+In this program, the fold worker function @both_k@ and seed @both_z@ compute both regression and correlation at the same time.
+
+\begin{lstlisting}
+regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
+regressionCorrelation_pull stream = do
+  (r,c) <- Pull.foldl both_k both_z stream
+  return (regression_x r, correlation_x c)
+ where
+  both_k (r,c) v = (regression_k r v, correlation_k c v)
+  both_z         = (regression_z,     correlation_z)
+
+priceOverTime_pull :: Pull Record -> IO (Line, Double)
+priceOverTime_pull stock = do
+  let timecosts = Pull.map (\r -> (daysSinceEpoch (time r), cost r)) stock
+  regressionCorrelation_pull timecosts
+\end{lstlisting}
+
+[todo show after inlining to make point about fusion as method of removing streaming overhead; contrast with filter implementation]
+
+This program computes the correct value.
+% The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
+In order to write this version we have had to manually look inside the definitions of @correlation@ and @regression@ and duplicate them.
+This was relatively easy because both use-sites were folds.
+
+% If the input data is stored in a file, we have the option or re-reading the input file again, but this also requires performing any parsing again --- duplicating work.
+% We could also store the values in a buffer and traversing the buffer multiple times, but this requires knowing how large the stream will be.
+% In general, if we want to re-use the same stream multiple times we have the choice between duplicating work or buffering the values somewhere.
+
+Let us turn our attention to the second query, @priceOverMarket@.
+We can use the same function @regressionCorrelation_pull@ that we used above.
+
+\begin{lstlisting}
+priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
+priceOverMarket_pull stock index =
+  joins    <- join (\s i   -> time s `compare` time i) stock index
+  let costs = map  (\(s,i) -> (cost s, cost i))        joins
+  regressionCorrelation_pull costs
+\end{lstlisting}
+
+
+The @join@ in this query executes by reading a value from each input stream, and comparing the times.
+If the times are equal, @join@ gives the pair of values to @correlation@, before reading new values from both streams.
+Otherwise, @join@ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+We can perform this join in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
+% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
+% The join function takes the two input streams, as well as functions to extract the key from each input record.
+
+We now have pull implementations of both @priceOverTime@ and @priceOverMarket@, but unfortunately we cannot simply pair them together as we did in @priceAnalyses@ --- again because of stream reuse.
+
+When we implemented the pull version of @priceOverTime@, we had to look at the two occurences where the @timecosts@ stream had been used.
+We had to inline both places where the stream was used and manually write a new function to do the work of both.
+Both were fairly simple folds.
+Doing the same for @priceAnalyses@ is quite a bit harder: we would need to implement a special version of the @join@ inside @priceOverMarket@, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+
+Pull streams are not helping us execute multiple queries at a time.
+If we wish to execute multiple queries, we need to be able to reuse streams.
+

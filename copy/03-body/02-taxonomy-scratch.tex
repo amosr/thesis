@@ -1,0 +1,471 @@
+\section{Kahn process network motivation}
+
+Hopefully this query will tell us something interesting.
+Perhaps even both of these queries will tell us something interesting, so it would be nice to be able to compute both of them at the same time.
+Ideally, we could write the program to compute both like so:
+
+The @join@ inside @priceOverMarket@ pulls from its two inputs depending on which has the smaller key, while the @correlation@ inside @priceOverTime@ repeatedly pulls from the @stock@ stream.
+We must coordinate between the @join@ and the @correlation@, so that @correlation@ only receives a new value when @join@ agrees to read a new value.
+We must also be careful not to let one consumer get too far ahead of the other, because if one consumer gets ahead of the other we must store all the unconsumed elements in memory to allow the other consumer to catch up.
+
+
+
+We could implement a program which computes both queries as a concurrent process network.
+Each combinator inside each query, as well as each input stream, would become a communicating process in the network.
+The process network for both queries is shown in \autoref{figs/procs/priceOverTime-priceOverMarket}.
+Processes communicate through channels which they can pull values from, waiting until values are available, or push values to.
+By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
+When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
+The concurrent process network will naturally find the right coordination between the processes.
+
+Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
+All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
+If the sending process has performed any kind of computation on the integer, the sending process would most likely have the integer stored in a register, where it can be operated on directly by the processor.
+When the sending process wishes to send this value to the other process, it must lock the channel to prevent other writers or premature reads, copy the integer to memory where it can be read by the other process, and unlock the channel.
+Next, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
+In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
+
+Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
+This chunking reduces the cost of sending messages, but cannot eliminate it altogether --- the processes still need to communicate at least once.
+The size of the chunks determines how many communications are saved, so larger chunks mean less communication overhead.
+However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
+Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
+Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
+
+Fine-grained processes are desirable, because they allow us to write smaller processes and compose them together.
+This compositional style is a large part of the appeal of functional programming.
+Fine-grained processes tend to perform little computational work and a lot of communication.
+With fine-grained processes we may expose too much parallelism, leading to synchronisation and scheduling overheads that dominate the runtime \cite{chen1990impact}.
+
+% This discrepancy means each processor must swap between several processes, which takes time.
+% Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
+% We must find a middle-ground between too fine-grained processes.
+
+% \cite{chen1990impact}
+% "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."
+% "The most important characteristic is that, without the near-optimal scheme, performance at the operation level and at the statement level is actually worse than at the loop-iteration level."
+% "unless we have a very sophisticated scheduling strategy, exploiting very fine grain parallelism with only a limited amount of resources can yield poorer results than we have anticipated"
+
+% In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
+
+% Too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
+% In fact, the contrary is often true.
+% \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
+
+
+\input{figs/runtime/gold-panning.tex}
+
+
+If we can represent each query as a fold over a single input, then combining multiple queries becomes quite easy.
+Sometimes the hard part is figuring out how to represent the query as a fold.
+
+The first question is how to represent streams.
+
+We want a moderately interesting query with: map on input stream; multiple folds at the end; probably a filter.
+
+\begin{lstlisting}
+query1 inputs =
+  let xs = map (+1) inputs
+      y  = maximum xs
+      z  = sum inputs
+  in (last inputs, y / z)
+\end{lstlisting}
+
+\subsection{Push streams}
+
+
+\begin{lstlisting}
+-- data Push a = Maybe a -> IO ()
+data Push a r = Push
+  { push :: a -> IO ()
+  , done :: IO r }
+\end{lstlisting}
+
+The map function for a push stream is a bit backwards: rather than taking the input stream as an argument and returning the output stream, it takes the output stream and returns the input stream.
+The returned input stream can then be passed to another stream transformer which expects a stream to push to.
+We suffix the names of push stream transformers with ``@o@'' for ``output''.
+
+\begin{lstlisting}
+map_o :: (a -> b) -> Push b r -> Push a r
+\end{lstlisting}
+
+In the definition of push streams above, the element type appears to the left of the function arrow, making push streams \emph{contravariant} in the element type.
+Most stream representations are \emph{functors}, while push streams are \emph{cofunctors}.
+With push streams we have to write the program in a backwards way, because our program is constructing a description of what to do with a value once it gets it.
+We have to start at the end of the computation, say what we want to do with the result, and work backwards to turn the result into a push stream which accepts the input.
+
+To implement a fold using push streams, the fold takes a mutable reference which is where to store the result once it is available, as well as the usual fold arguments, and returns the push stream.
+
+\begin{lstlisting}
+## fold_o :: IORef b -> (b -> a -> b) -> b -> Push a
+fold_o :: (r -> a -> r) -> r -> Push a r
+\end{lstlisting}
+
+\begin{lstlisting}
+dup_oo :: (b -> c -> d) -> Push a b -> Push a c -> Push a d
+\end{lstlisting}
+
+Here is the @query1@ query from earlier using push streams.
+
+\begin{lstlisting}
+query1'push inputs = do
+  yref    <- newIORef
+  zref    <- newIORef
+  lastref <- newIORef
+
+  ypush   <- fold_o (flip (max . Just)) Nothing
+  zpush   <- fold_o sum 0
+  lpush   <- fold_o (const . Just) Nothing
+
+  folds   <- dup3_ooo ypush zpush lpush
+  x       <- map_o (+1) folds
+
+  drain inputs x
+
+  y       <- readIORef yref
+  z       <- readIORef zref
+  l       <- readIORef lref
+
+  return (l, y / z)
+\end{lstlisting}
+
+The push version executes in a single loop over the input, but requires quite a bit of extra boilerplate, and the logic is backwards.
+If we annotate push streams with a return value we might be able to clean it up a bit.
+
+\begin{lstlisting}
+query1'push = do
+  y   <- fold_o (flip (max . Just)) Nothing
+  z   <- fold_o sum 0
+  l   <- fold_o (const . Just) Nothing
+
+  yz  <- dup_oo (/) y z
+  lyz <- dup_oo (,) l yz
+
+  map (+1) lyz
+\end{lstlisting}
+
+
+This is still not as nice as it could be.
+
+\subsection{Icicle}
+
+Push queries let us do many things at once with the same stream, but they are not as natural to program in as plain old lists.
+Icicle is a query language for performing folds with push streams, which aims to provide nice syntax to make it closer to dealing with lists.
+Icicle also has a type-system for ensuring that queries can be executed in a single pass.
+
+\begin{lstlisting}
+   let x = input + 1
+in let y = max x
+in let z = sum x
+in (last x, y / z)
+\end{lstlisting}
+
+As a fold...
+\begin{lstlisting}
+let (l,m,s) =
+  foldl (\(l,m,s) input ->
+          let x = input + 1
+          in (Just x, maybe (Just x) (max x) m, s + x))
+        (Nothing, Nothing, 0)
+(l, m / s)
+\end{lstlisting}
+
+Using the foldl applicative library
+\begin{lstlisting}
+let x = fmap (+1) inputs
+    yz = (/) <$> maximum <*> sum
+    lyz = (,) <$> last <*> yz
+in fold lyz x
+\end{lstlisting}
+
+More Icicle query examples.
+\begin{lstlisting}
+table stocks { open : Int; close : Int }
+query
+  more = filter open > close of count;
+  less = filter open < close of count;
+  mean = filter open > close of sum open / count;
+\end{lstlisting}
+
+Query example where we can't compute, but could rewrite as a group:
+\begin{lstlisting}
+table kvs { key : Date; value : Real }
+query avg = let k = last key
+            in filter (key == k) of mean value;
+\end{lstlisting}
+
+
+\subsection{Pull streams}
+
+\begin{lstlisting}
+data Pull a = IO (Maybe a)
+\end{lstlisting}
+
+\subsection{Polarized}
+Mixture of push and pull, but requires manually classifying streams in the process network as push or pull.
+As with push streams on their own, if we embed push stream transformations inside polarized dataflow, we still need to write the push streams in an awkard, backwards way.
+Cannot fuse \lstinline/unzip . zip/, which might not seem useful because it is superfluous, but it is possible that a larger program would have this somewhere inside it.
+
+\subsection{Kahn process networks}
+
+Push streams require a computation to have one producer which pushes to arbitrarily many consumers, which in turn may push to many consumers.
+This structure is a tree, rooted at the top-most producer.
+Pull streams, likewise, can only have one consumer and many producers: again a tree, this time rooted at the bottom-most consumer.
+Programs, however, are not trees; they are \emph{networks}, and they can mention the same variables as many times as they want.
+We use abstract syntax trees to represent programs, but in order to fit a network into a tree we must prune the `bad' branches; in an AST we refer to variables by name rather than occurrence.
+It feels as though we are constantly butting our heads against the disconnect between a program's true meaning and the tree representation we are so used to.
+
+
+\section{Many queries}
+
+Assume we have many queries, and we have written each one as a separate streaming program.
+We wish to execute all the queries together, so we only pay the overhead of reading from disk once.
+
+Suppose we have some historical share prices for a particular company.
+For each day, we have the share's open price at the start of the day, and the close price at the end of the day.
+
+\begin{lstlisting}
+data DailyPrice = DailyPrice
+  { date  :: Date
+  , open  :: Double
+  , close :: Double }
+\end{lstlisting}
+
+We wish to query this data.
+
+If we assume that the list of days are distinct, we can count how many days we have data for by folding over the list and incrementing the count for every element.
+
+\begin{lstlisting}
+countDays :: [DailyPrice] -> Int
+countDays prices = foldl (\count _ -> count + 1) 0 prices
+\end{lstlisting}
+
+We can write a slightly more interesting query if we only count the `profit' days where the close price was above the open price.
+
+\begin{lstlisting}
+countProfitDays :: [DailyPrice] -> Int
+countProfitDays prices =
+ let profits = filter (\p -> open p < close p) prices
+ in  foldl (\count _ -> count + 1) 0 profits
+\end{lstlisting}
+
+These queries are not very useful on their own, but if we put them both together they will tell us a bit more about the company.
+If we wanted to compute both of these with regular lists, we could just construct a tuple and call both functions.
+This approach will loop over the list twice as well as retaining the whole list in memory, which is unsuitable for streaming.
+
+Instead, we must \emph{fuse} the queries together, combining the two into a single function that computes both.
+We put the work of both queries inside a single loop over the list, which stores as loop state the count of all days, and the count of `profit' days.
+To count all days we increment the count for each element, essentially applying the original fold for each element.
+To count the `profit' days we must perform both the filter and the fold inside the loop, so we only apply the fold if the filter predicate is true.
+
+\begin{lstlisting}
+countBoth :: [DailyPrice] -> (Int, Int)
+countBoth prices = loop 0 0 prices
+ where
+  loop sCountDays sCountProfitDays (p:prices')
+   = let sCountDays' = sCountDays + 1
+         sCountProfitDays'
+          | open p < close p
+          = sCountProfitDays + 1
+          | otherwise
+          = sCountProfitDays
+     in loop sCountDays' sCountProfitDays' prices
+  loop sCountDays sCountProfitDays []
+   = (sCountDays, sCountProfitDays)
+\end{lstlisting}
+
+This fused query is more efficient than running both queries separately as it only requires a single traversal, but we have lost the composability benefits of using high-level combinators.
+We have had to intertwine all the logic of the folds and the filter into a single place.
+This program is not too hard to write by hand, but it is more complex than each original query individually.
+
+A more interesting query is to compute the sum of the \emph{gap}.
+The gap is the difference between one day's close price and the next day's open price, which tells us how perception of the stock changed overnight while the market was closed.
+We can compute this by pairing each day with the day after, finding the difference between each pair, then summing the differences.
+
+\begin{lstlisting}
+sumGap :: [DailyPrice] -> Double
+sumGap prices =
+ let pairs       = zip prices (tail prices)
+     differences = map (\(p,pTail) -> close p - open pTail) pairs
+ in  sum differences
+\end{lstlisting}
+
+We wish to perform all three queries together, but because this query is a bit more complex than the previous ones, let us start by looking at how we can write this query on its own as a single loop.
+
+\begin{lstlisting}
+sumGap' :: [DailyPrice] -> Double
+sumGap' prices = loop 0 prices
+ where
+  loop sSum []
+   = sSum
+  loop sSum (p:prices')
+   = let sSum'
+          | (pTail:_) <- prices'
+          = sSum + (close p - open pTail)
+          | otherwise
+          = sSum
+     in loop sSum' prices'
+\end{lstlisting}
+
+% \begin{lstlisting}
+% sumGap' :: [DailyPrice] -> Double
+% sumGap' prices = loop 0 prices
+%  where
+%   loop sSum (p:pTail:prices')
+%    = let diff  = close p - open pTail
+%          sSum' = sSum + diff
+%      in loop sSum' (pTail:prices')
+%   loop sSum [p]
+%    = sSum
+%   loop sSum []
+%    = sSum
+% \end{lstlisting}
+
+The main difference between this loop and the one for @countBoth@ is that this loop looks at the two elements at the start of the list in order to compare two adjacent days.
+
+To perform all three queries, @sumGap@, @countDays@, and @countProfitDays@.
+
+\begin{lstlisting}
+sumGapCount :: [DailyPrice] -> (Int, Int, Double)
+sumGapCount prices = loop 0 0 0 prices
+ where
+  loop sCountDays sCountProfitDays sSum []
+   = (sCountDays, sCountProfitDays, sSum)
+  loop sCountDays sCountProfitDays sSum (p:prices')
+   = let sCountDays' = sCountDays + 1
+         sCountProfitDays'
+          | open p < close p
+          = sCountProfitDays + 1
+          | otherwise
+          = sCountProfitDays
+         sSum'
+          | (pTail:_) <- prices'
+          = sSum + (close p - open pTail)
+          | otherwise
+          = sSum
+     in loop sCountDays' sCountProfitDays' sSum' prices
+\end{lstlisting}
+
+
+
+% \begin{lstlisting}
+% sumGap' :: [DailyPrice] -> Double
+% sumGap' prices = init
+%  where
+%   init []          = 0
+%   init (p:prices') = loop 0 p prices'
+% 
+%   loop sSum pTail []
+%    = sSum
+%   loop sSum pTail (p:prices')  
+%    = let diff   = p - pTail
+%          pTail' = p
+%          sSum'  = sSum + diff
+%      in  loop sSum' pTail' prices'
+% \end{lstlisting}
+
+
+Combining two queries is hard enough; when we want to combine three or more queries, we soon reach the limit of what can be achieved with intuition alone.
+As our queries become more complex and more numerous, the compound becomes more complex.
+We need a system to help us: a rigorous approach to transforming multiple queries into a single compound query.
+This transform is called fusion.
+
+\section{Push streams}
+
+The first part of this thesis looks at fusing queries that use push streams.
+Push streams are those where the producer controls the flow of computation, and the flow of values.
+The producer pushes values into the consumer, and the consumer must accept with these values.
+Producers determine the order in which values are given to consumers.
+
+In push streams, one producer can push to many consumers.
+Each query is a consumer, and the input file is the producer.
+By pushing the data to all the queries, we are able to perform any number of queries at the same time.
+Push streams allow us to take any queries operating over the same input and fuse them together.
+We can rely on fusion.
+
+Push streams have limited expressivity, however.
+Push streams cannot support most use-cases with multiple input streams, such as appending streams, pairing them together, or merging sorted streams so that the result remains sorted.
+When we have multiple input files, the query has a particular order in which it needs to read elements from each file.
+In push streams, the producer imposes its order upon the consumer.
+The query has no choice in the matter.
+This limited expressivity is the price we pay for guaranteed fusion.
+
+Trying to read from multiple input files as push streams is a bit like putting the files together and randomly interspersing the lines.
+You can read a line, but you don't know which file it came from until after you read it.
+
+For datasets with a single input file, push streams are a perfect solution.
+Push streams can express any streaming computation with a single input file, while guaranteeing that all queries over the same input can be fused together.
+
+\section{Pushing and pulling with Kahn process networks}
+
+When we have multiple input files, we can no longer use push queries.
+The consumer must choose which order to read from its input files.
+The consumer must pull from its inputs, rather than the inputs pushing.
+
+Pull streams, however, introduce their own problems.
+Just as push streams only support one producer, pull streams only support one consumer.
+In pull streams, the consumer is in control of the computation.
+There can only be one controller and there can only be one consumer.
+Having one consumer limits us to one query.
+Pull streams are unsuitable for performing multiple queries at the same time.
+
+
+Pull streams and push streams have one thing in common: there is a single point of control for the computation.
+Where the control lies differs: in push it is in the producer; in pull it is in the consumer.
+Our problem is that we are limited to a single point of control, while we have several queries.
+
+Having a single point of control is very useful for a machine; after all this is how single-threaded processors execute programs.
+But we wish to write better programs.
+We wish to help programmers write better programs.
+One of the ways to do that is by abstracting over the machine itself, and abstracting over the accident of sequential shared state imperative programs.
+
+A single point of control is not necessary or ideal for streaming programs.
+We can write programs with multiple points of control: concurrent programs.
+Concurrent programs with shared state are absurdly difficult to write, and even harder to get right.
+A program's state space is quadratic in the number of points of control.
+This state space means for a programmer to reason about correctness, a programmer must reason about a quadratic number of cases.
+If we wish to reduce the burden of streaming and writing compound queries by hand, we cannot increase the burden of reasoning.
+
+Determinism is the key ingredient to make concurrent programming tractable.
+Requiring concurrent programs to be deterministic tames the state space explosion.
+We no longer have to reason about a quadratic number of states, because we know that whichever order the programs execute in, we will get the right result.
+
+We want a concurrent, deterministic streaming model.
+Such a model is called a Kahn Process Network.
+Kahn Process Networks are networks of concurrent processes, communicating via channels, with streams of elements flowing along channels.
+Determinism is achieved by a few restrictions: all communication between processes is through channels; all reading from channels is blocking; and all channels are owned by a single process.
+Kahn Process Networks turn non-deterministic concurrency into a deterministic computation.
+
+% There is no state shared between processes, which means the only way processes can communicate is through channels.
+% 
+% A process cannot peek to see if a channel has a value before deciding whether to read it.
+% Once a process is reading from a channel, it must wait until a value is available.
+% Peeking would allow a process to observe the non-determinism in scheduling.
+% 
+% There is no race between two processes to see which can read from a channel first.
+% Kahn Process Networks are just swell.
+
+Kahn Process Networks are a good computational method, but not the best execution strategy.
+Sending values across channels is expensive: we must lock the channel, copy the value onto the queue, and unlock it.
+By the time the consumer receives the value, it is unlikely to be in cache, and definitely no longer in a register.
+To ameliorate the concurrency overhead, implementations tend to chunk together values into arrays before sending them.
+This can only reduce the overhead; it can never remove it entirely.
+Instead, we wish to compile away the overhead.
+We take the processes in a Kahn Process Network, and convert it into a single process that does the job of all the processes together, without any communication.
+
+% In general, not all queries can be compounded together.
+% 
+% This compounding operation is called horizontal fusion.
+% Horizontal in this case refers to how data flow graphs are arranged; nodes operating on the same input data, which can be performed in parallel or sequentially, are typically horizontally adjacent.
+% Vertical fusion refers to nodes operating in a pipeline, where each node feeds values to the node below.
+% 
+% Stream fusion is a rich area of research which has for the most part focussed on vertical fusion.
+% 
+% The reason for compounding queries is to reduce execution time.
+% It is quite important, then, that our compound query does not take longer to execute than the original queries, combined.
+% In fact, we would like our compound query to execute in almost as little time as the slowest query on its own.
+% What we would like is not always achievable, but it can be helpful to have something to strive for.
+
+
+
+

@@ -1,0 +1,110 @@
+\section{Introduction}
+
+To learn interesting things from large datasets, we generally want to perform lots of queries.
+When our query is small and our data is big, we might spend more time reading the data than we spend computing the answer.
+In this case, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
+
+When querying datasets that do not fit in memory or disk, it can be hard to ensure that our query program's working set will fit in memory.
+One way to transform large datasets in constant memory is to write the query as a \emph{streaming program}, which we can write by composing stream transformers together.
+Composing stream transformers together adds some performance overhead, which is usually removed by \emph{fusing} together multiple transformers into a single transformer.
+
+% The most common stream representation is a pull stream [ref]. Pull streams do not support multiple queries.
+
+This thesis concerns low-overhead streaming models for executing multiple queries at a time.
+We focus on two streaming models: push streams [ref taxonomy/push], and Kahn process networks [ref taxonomy/kpn].
+
+Push streams support multiple queries, but these queries can be quite unwieldy to write as they must be constructed ``back-to-front'' [ref taxonomy/push/backwards].
+In [ref icicle] we introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar list-based semantics, while retaining the execution strategy of push streams.
+The typesystem of Icicle aims to ensure that well-typed query programs have the same semantics whether they are executed as list programs or as stream programs.
+% Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
+% The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
+
+However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams, and in some circumstances appending streams [ref taxonomy/push/many-inputs].
+Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, which can introduce significant overhead.
+In [ref kpn/fusion] we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
+This fusion method generalises previous work on stream fusion [ref kpn/generalises] and demonstrates the connection between fusion and synchronised product of processes [ref kpn/synchronised-product], which is generally used as a proof technique rather than an optimisation.
+
+[todo: clustering]
+% \subsection{Outline}
+% \subsection{Contributions}
+
+\section{A brief taxonomy of streaming models}
+There are many different streaming models, each with unique advantages and disadvantages.
+This chapter classifies the most common and fundamental streaming models.
+More
+
+\subsection{Gold-panning}
+A diverse and plausible collection of queries which a query programmer may desire to execute together.
+To compare streaming models, we introduce a concrete example of queries we wish to run.
+
+\subsection{Pull streams}
+Pull streams support multiple inputs, but only a single query.
+
+\subsection{Push streams}
+Push streams support multiple queries but only one input, and must be written backwards.
+
+@data Push a b = (a -> IO (), IO b)@
+
+\subsection{Polarised streams}
+Polarised streams support multiple inputs and queries, but must be manually separated into "pull" and "push" parts.
+
+@unzip_ioi : Pull (a,b) r1 -> Push b r2 -> Pull a (r1,r2)@
+
+\subsection{Kahn Process Networks}
+Kahn Process Networks support multiple inputs and multiple queries, but have significant scheduling and communication overhead.
+
+@data KPN = MVar …@
+
+\section{Write many, run once}
+Multiple queries with push streams
+* the problem with pushing
+* a rush, a push
+
+
+\section{Related work}
+Other models are interesting, but not necessarily applicable:
+
+\subsection{The fusion system for streams named Stream Fusion}
+
+\subsection{Push-pull streams}
+Push-pull streams are sometimes called push streams, but support neither multiple inputs nor multiple queries.
+
+@PushPull a r = Push (Pull a r') (r,r')@
+
+\subsection{Iteratee, conduit and pipes}
+Iteratee is a monadic representation of a push stream.
+\begin{lstlisting}
+enumPair :: Monad m => Iteratee el m a -> Iteratee el m b -> Iteratee el m (a,b)
+enumPair i1 i2 = enum2 i1 i2 >>= runI2
+\end{lstlisting}
+
+\begin{lstlisting}
+i1 :: Monad m => Iteratee el1 (Iteratee el2 m) (el1, el2)
+i1 = do
+     e1 <- head 
+     e2 <- lift head
+     return (e1,e2)
+\end{lstlisting}
+
+
+, Conduit and Pipes are monadic representations of pull streams.
+They get around the linearity problem of reusing stream names, to some extent, by not allowing streams to be named.
+This monadic representation allows a small set of primitives for reading from straight lines, emitting values etc, which can be composed together.
+Implementing ``map'' for pull streams requires delving into the details of the stream representation, while implementing map for iteratee-style streams can be done with no knowledge of the underlying implementation.
+
+This monadic interface allows the structure of the computation graph to depend on the values.
+This expressiveness has a price: if the computation graph can change dynamically, we cannot statically fuse it.
+Cite Arrows paper about how monads mix up the static and dynamic parts of a system, reducing the ability to optimise based on static information.
+To work around these performance penalties, Conduit supports short-cut fusion for some operations.
+Cerain operations are implemented using non-monadic pull streams, which can be converted to Conduit streams.
+Rewrite rules then remove superfluous conversions between Conduit streams and pull streams.
+
+A pedantic note on terminology: Conduit uses the term \emph{fusion} for connecting two stream transformers together, while in this thesis we use fusion to mean removing the overhead of connecting two streams together.
+(So what --- is this even worth mentioning?)
+
+
+\subsection{Synchronous streams}
+Synchronous streams support multiple inputs and multiple queries but require all streams to be defined at the same time, precluding "append" and "merge".
+
+@data Sync a = Time -> a@
+

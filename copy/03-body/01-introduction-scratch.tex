@@ -218,32 +218,3 @@ Consider the aboveMean example above: if this program were executed in a streami
 
 In \autoref{part:icicle}, I present a modal typesystem that ensures that the streaming semantics and the array semantics of a program agree, by inferring whether expressions are operating over streams or aggregates.
 
-\section{Contributions}
-
-In short, the contributions of this thesis are:
-
-\begin{itemize}
-\item
-\autoref{part:process-fusion}:
-A method for fusing combinators: the first that allows splits, joins, and arbitrary combinators.
-This is achieved by treating each combinator as a sequential process, and the combinators together as a concurrent process network.
-Processes are then fused together using an extension of synchronised product.
-
-% \item
-% A proof of correctness for Process Fusion, mechanised in the proof assistant Coq.
-% This ensures that if two processes are fused together, the fused process computes the same result as the original processes.
-% % (\refChapter{C:process-correct})
-
-\item
-\autoref{part:clustering}:
-When not all combinators can be fused into a single loop, the decision of how to group the combinators together becomes important.
-This is called clustering.
-
-\item
-\autoref{part:icicle}:
-When fusion is a requirement rather than an added bonus for optimisation, type systems can be used to enure that only fusible programs can be expressed.
-The streaming query language Icicle uses modal types to ensure only fusible programs are valid, and that the stream program has the same semantics as if it were operating over lists.
-\end{itemize}
-
-
-

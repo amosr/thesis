@@ -155,7 +155,9 @@ digraph G {
 \label{figs/procs/priceOverTime-priceOverMarket}
 \end{figure}
 
-\section{Pull streams}
+\section{The basics}
+
+\subsection{Pull streams}
 
 The most common kind of stream is a \emph{pull stream}, which is also sometimes called an iterator or cursor.
 The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
@@ -166,10 +168,11 @@ Since the stream might want to read from a file or update some local state, the 
 data Pull a = Pull (IO (Maybe a))
 \end{lstlisting}
 
-Later [ref taxonomy/stream-fusion] we shall see more sophisticated representations of pull streams which remove some overhead, but these representations do not afford extra expressivity; the same set of combinators can be implemented.
+This representation involves some streaming overhead, and later in [ref taxonomy/stream-fusion] we shall see how more sophisticated representations such as Stream Fusion can remove this overhead.
+These more sophisticated representations do not afford extra expressivity; the same set of combinators can be implemented.
 
 With this stream representation we can implement analogues of the list combinators used in the example queries.
-\autoref{figs/impl/pull/combinator} shows the type signatures; implementations are available in [ref appendix/pull].
+\autoref{figs/impl/pull/combinator} shows the type signatures; implementations are available in [ref appendix/taxonomy].
 The @correlation@ and @regression@ functions are folds with relatively complex worker functions, but conceptually they are just folds with an extraction function applied afterwards.
 Because we intend on streaming from file, the result type for @foldl@ is now wrapped in @IO@.
 The @join_pull@ combinator must initialise some mutable state before returning its stream, so also returns its result wrapped in @IO@.
@@ -232,7 +235,6 @@ priceOverTime_pull stock = do
   regressionCorrelation_pull timecosts
 \end{lstlisting}
 
-[todo show after inlining to make point about fusion as method of removing streaming overhead; contrast with filter implementation]
 
 This program computes the correct value.
 % The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
@@ -262,13 +264,148 @@ We can perform this join in a streaming manner because both input files are alre
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
 % The join function takes the two input streams, as well as functions to extract the key from each input record.
 
-We now have pull implementations of both @priceOverTime@ and @priceOverMarket@, but unfortunately we cannot simply pair them together as we did in @priceAnalyses@ --- again because of stream reuse.
+We now have pull implementations of both @priceOverTime@ and @priceOverMarket@, but when we wish to compute both at the same time, we cannot simply pair them together as we did in @priceAnalyses@ --- again because of stream reuse.
 
 When we implemented the pull version of @priceOverTime@, we had to look at the two occurences where the @timecosts@ stream had been used.
 We had to inline both places where the stream was used and manually write a new function to do the work of both.
 Both were fairly simple folds.
-Doing the same for @priceAnalyses@ is quite a bit harder: we would need to implement a special version of the @join@ inside @priceOverMarket@, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+Doing the same for @priceAnalyses@ is quite a more complicated: we would need to implement a special version of the @join@ inside @priceOverMarket@, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
 
 Pull streams are not helping us execute multiple queries at a time.
 If we wish to execute multiple queries, we need to be able to reuse streams.
+
+\subsection{Push streams}
+
+\emph{Push streams} are the conceptual dual of pull streams: rather than the consumer trying to pull from the producer, in push streams the producer pushes to the consumer.
+As we shall see, the advantage of push streams is that they enable stream reuse among multiple consumers: a producer can push the same value to multiple consumers.
+
+At the most fundamental level, we can represent push streams as a function which accepts a (@Maybe a@) and performs some @IO@ effect, for example writing to a file, or writing to some mutable state.
+This could be represented by the type (\lstinline/Maybe a -> IO ()/) [todo search for lstinline spacing issue], which is the dual of the pull stream (\lstinline/IO (Maybe a)/).
+However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
+This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual, but later [ref taxonomy/polar] we shall reunite the two.
+
+\begin{lstlisting}
+data Push a r = Push
+  { push :: a -> IO ()
+  , done :: IO r }
+\end{lstlisting}
+
+We augment the definition with an extra type parameter, @r@, for the result type.
+Since the result only becomes available at the end of the stream, we separate the two cases of the (@Maybe a@) argument into two functions, @push@ and @done@.
+When we have a value we can call @push@.
+When the stream is finished we can call @done@ to retrieve the result.
+
+
+In this representation, it is the consumers that are values of type (@Push a r@): they are sinks which we can push values of type @a@ into, and eventually get an @r@ back.
+This inversion results in a fundamental difference in how we program with push streams, and what we can express with push streams.
+
+One notable difference is that we cannot map a function over the elements in push streams in the usual way, because the definition of (@Push a r@) uses the type parameter @a@ as a function parameter, making it contravariant.
+Instead, we must implement contravariant-map, or @contramap@, like so.
+
+\begin{lstlisting}
+contramap :: (a -> b) -> Push b r -> Push a r
+contramap a_to_b bs = Push push_a done_a
+ where
+  push_a a = push bs (a_to_b a)
+  done_a   = done bs
+\end{lstlisting}
+
+The @contramap@ function takes a function to convert values of type @a@ to values of type @b@ and a sink to push values of type @b@ to, returning a sink which can receive values of type @a@.
+
+We \emph{do} in fact have a @map@ function for push streams, but this transforms the result type rather than the elements.
+
+\begin{lstlisting}
+map :: (r -> r') -> Push a r -> Push a r'
+map r_to_r' as = Push (push as) done_a'
+ where
+  done_a' = do
+    r <- done as
+    return (r_to_r' r)
+\end{lstlisting}
+
+
+The type of @foldl@ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
+The return value is in @IO@ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
+As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold.
+
+\begin{lstlisting}
+foldl :: (b -> a -> b) -> b -> IO (Push a b)
+foldl k z = do
+  ref <- newIORef z
+  let push_a a = do
+       state <- readIORef ref
+       writeIORef ref (k state a)
+  let done_a = readIORef ref
+  return (Push push_a done_a)
+\end{lstlisting}
+
+In order to use a stream multiple times, we need some way to broadcast messages and push each element to many consumers.
+We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
+The following function, @dup2@, duplicates a stream among two consumers, and returns a pair containing both results.
+
+\begin{lstlisting}
+dup2 :: Push a r -> Push a r' -> Push a (r,r')
+dup2 a1 a2 = Push push_a done_a
+ where
+  push_a a = do
+    push a1 a
+    push a2 a
+
+  done_a = do
+    r  <- done a1
+    r' <- done a2
+    return (r, r')
+\end{lstlisting}
+
+We could also use the applicative functor instance for push streams [ref appendix] to combine consumers together, specifying how to transform and combine the results.
+The applicative functor definition is quite similar to the @dup2@ function specified above.
+This @dup2@ function could then be written equivalently as (\lstinline/dup2 a1 a2 = (,) <$> a1 <*> a2/).
+
+With these combinators, we can write the @priceOverTime@ query using push streams.
+
+\begin{lstlisting}
+regression :: IO (Push (Double,Double) Line)
+regression = regression_x <$> Pull.foldl regression_k  regression_z
+
+correlation :: IO (Push (Double,Double) Double)
+correlation = correlation_x <$> Pull.foldl correlation_k  correlation_z
+
+priceOverTime_push :: IO (Push Record (Line,Double))
+priceOverTime_push = do
+  reg   <- Pull.regression
+  cor   <- Pull.correlation
+  let cm = Pull.contramap
+    (\r -> (daysSinceEpoch (time r), cost r))
+    (Pull.dup2 reg cor)
+  return cm
+\end{lstlisting}
+
+This program computes both correlation and regression in a streaming fashion.
+In comparison to the list version of @priceOverTime@, we have explicitly connected both consumers and reversed the control flow.
+Although the presentation is unfamiliar, this program is conceptually not too different from the list version.
+
+We cannot implement @priceOverMarket@ with push streams alone, because it requires joining two input streams by date.
+Recall the @join@ combinator, which takes two input streams and retrieves a value from each.
+At every step the combinator must choose which stream to pull from, pulling on the stream with the smaller value.
+With push streams, a consumer cannot choose which input stream to pull from: there is only one input, and the consumer must always be ready to accept values from it as they come.
+
+Pull and push streams are the two most fundamental stream types.
+Stream reuse allows push streams to support multiple queries, but they do not support multiple inputs.
+Pull streams support multiple inputs, but they do not support multiple queries.
+Soon [ref taxonomy/polarised] we shall combine the two as \emph{polarised streams}, to support multiple inputs and multiple queries.
+Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and how we can remove it.
+
+\section{Streaming overhead}
+
+
+
+\subsection{Polarised streams}
+
+\section{Other streams}
+\subsection{Stream fusion}
+\subsection{Copull: push as pull}
+\subsection{Push-pull, or enumerator}
+\subsection{Monadic streams}
+
+\section{Kahn process networks}
 

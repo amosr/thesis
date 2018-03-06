@@ -2,15 +2,15 @@
 \label{taxonomy}
 
 In this thesis we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
-Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and can only store a limited number of elements at a time.
-A streaming program cannot rewind an input stream to reread previous elements, or move directly to a particular index.
-Because of these restrictions a streaming program cannot, for example, sort all the input data, because that would require storing all the elements in memory or multiple traversals of the input.
-The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will not run out of memory --- regardless of how large the input stream is.
+Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and only need to store a limited number of elements at a time as local state.
+A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read a particular index.
+Because of these restrictions a streaming program cannot, for example, sort all the input data in a single pass, because that would require storing all the elements in memory.
+The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- regardless of how large the input stream is.
 In general input streams may be infinite, but in this thesis we focus on finite streams.
 
 % With just this definition one could go and write a streaming program in more or less any language with input-output facilities.
 % This is how a C programmer may implement a streaming program.
-% Take, for example, the standard unix tool @wc@.
+% Take, for example, the standard unix tool \Hs/wc/.
 % Conceptually, this program does four things: it reads a file, counts the lines, counts the words, and counts the characters.
 % One might expect these four distinct concepts to be clearly distinct in the code, but because
 % Writing streaming programs in this manner can be error-prone and tedious however, as all aspects of the program must be interspersed.
@@ -18,30 +18,31 @@ In general input streams may be infinite, but in this thesis we focus on finite 
 Streaming as described above is a rather general concept.
 This definition tells us what a streaming program is, but it does not offer any guidance how to write streaming programs.
 In fact, there are many ways to write streaming programs, but in this thesis we restrict our attention to streaming programs written in a \emph{functional style}.
-The functional style of writing streaming programs involves small stream transformers which are connected together to create larger programs.
+The functional style of writing streaming programs involves using small stream transformers that are connected together to create larger programs.
 The benefit of this style is that each stream transformer can be reasoned about and tested in isolation with no hidden dependencies between stream transformers.
 
 There are numerous \emph{streaming models} to choose from, and we must commit to a particular model before we can start writing programs.
-Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the level of bookkeeping the programmer must perform to write their program.
+Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the amount of bookkeeping the programmer must perform to write their program.
+[todo bookkeeping be more precise. really I just want to say they don't look like list programs]
 % The streaming model determines which stream operations are supported including how streams can be connected together, and the overhead incurred when connecting streams together.
 % [A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.]
 We must compare different streaming models to make an informed decision.
-We start our initial comparison with by focussing on two low-overhead streaming models to illustrate their lack of expressivity and motivate the use of Kahn process networks as a streaming model.
+We start our initial comparison by focussing on two low-overhead streaming models to illustrate their lack of expressivity and motivate the use of Kahn process networks as a streaming model.
 Later in [ref related] we will compare against some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Let us start by describing a situation in which we would like to execute many queries.
-To avoid mixing up the details of streaming with the details of the example, we will assume to begin with that the dataset fits in memory as a list and ignore details about efficiency.
+To avoid mixing up the details of streaming with the details of the example, we initially assume that the dataset fits in memory as a list and ignore details about efficiency.
 
-Suppose we have a file containing the historical prices for a particular stock.
-The file contains many records; each record contains a date and the average cost for that day, and all the records in the file are sorted chronologically.
+Suppose we have a file containing the historical prices for a particular corporate stock.
+The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.
 The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
 
 \begin{lstlisting}
 data Record = Record
- { time :: Time
- , cost :: Double }
+ { time  :: Time
+ , price :: Double }
 \end{lstlisting}
 
 We wish to evaluate this stock to see whether it was, historically, a worthy investment.
@@ -62,26 +63,82 @@ The angle here corresponds to a correlation of $0.94$, in a range from negative 
 % The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
 % When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
 
-Assuming that we already have functions to compute the linear regression and the correlation of a list of pairs of numbers, we can compute both with the following program.
+We can implement a one-pass correlation algorithm, and although the details are quite complicated, we can express it as a fold over a list.
+The fold uses an initial state, \Hs/correlation_z/, and for each element updates the state with a worker function \Hs/correlation_k/.
+The one-pass correlation algorithm keeps track of the running means, among other things, in order to compute the correlation.
+As such, the fold state contains more than just the correlation.
+After the fold has completed we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
+
+\begin{lstlisting}
+correlation :: [(Double,Double)] -> Double
+correlation = correlation_x (foldl correlation_k correlation_z)
+
+type State = (Double, Double, Double, Double, Double, Double)
+correlation_z :: State
+correlation_k :: State -> (Double,Double) -> State
+correlation_x :: State -> Double
+\end{lstlisting}
+
+\begin{figure}
+\begin{lstlisting}
+type State = (Double, Double, Double, Double, Double, Double)
+
+correlation_z :: State
+correlation_z = (0,0,0,0,0,0)
+
+correlation_k :: State -> (Double,Double) -> State
+correlation_k (mx, my, sd, sdX, sdY, n) (x,y) =
+ let n'   = n   + 1
+     dx   = x   - mx
+     dy   = y   - my
+     mx'  = mx  + (dx / n')
+     my'  = my  + (dy / n')
+     dy'  = y   - my'
+     sd'  = sd  + dx + dy'
+     sdX' = sdX + dx + dx
+     sdY' = sdY + dy + dy
+ in (mx',my',sd',sdX',sdY',n')
+
+correlation_x :: State -> Double
+correlation_x (mx, my, sd, sdX, sdY, n) =
+  let varianceX  = sdX / n
+      varianceY  = sdY / n
+      covariance = sd  / n
+      stddevX = sqrt varianceX
+      stddevY = sqrt varianceY
+  in covariance / (stddevX * stddevY)
+\end{lstlisting}
+\caption[One-pass correlation]{one-pass correlation [todo move to appendix, or maybe this can be an example in the Icicle chapter]}
+\label{figs/impl/correlation}
+\end{figure}
+
+\autoref{figs/impl/correlation} shows the implementations of \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/ [sweep this under the rug or refer to appendix]; we can implement a function to compute the regression similarly.
+
+\begin{lstlisting}
+regression :: [(Double,Double)] -> Line
+regression = regression_x (foldl regression_k regression_z)
+\end{lstlisting}
+
+Now that we have functions to compute the linear regression and the correlation, we can combine them together with the following program.
 
 \begin{lstlisting}
 priceOverTime :: [Record] -> (Line, Double)
 priceOverTime stock =
-  let timecosts = map (\r -> (daysSinceEpoch (time r), cost r)) stock
-  in (regression timecosts, correlation timecosts)
+  let timeprices = map (\r -> (daysSinceEpoch (time r), price r)) stock
+  in (regression timeprices, correlation timeprices)
 \end{lstlisting}
 
-Both @regression@ and @correlation@ functions take a list of pairs of numbers, so we first convert the @Record@ values to pairs of numbers using @map@.
+Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
-Whether we think of this program as one query or two is fairly inconsequential, but the important part is that this program as we have written it requires two traversals over the @timecosts@ list.
+Whether we think of this program as one query or two is inconsequential; the important part is that the program as we have written it requires two traversals over the \Hs/timeprices/ list.
 List programs can traverse the same list many times, but later [ref taxonomy/pull] we shall see how this is a problem for streaming programs.
 
 Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
 Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
-We might be interested, then, in comparing against the rest of the market as well.
+We are interested in comparing against the rest of the market as well.
 
-To compare against the rest of the market, let us assume we have another file of records, this one containing the average price of a somewhat representative subset of stocks.
-This representative subset is called an \emph{index}.
+To compare against the rest of the market, we have another file of records containing the average price of a representative subset of stocks.
+This representative subset is called a \emph{market index}.
 We want to compare each day's price for our stock against the average price for the corresponding day in the index.
 \autoref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \autoref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
 We can see in the comparison of stock price to index price that the stock has grown faster than the index.
@@ -91,14 +148,14 @@ We can compute the comparison of stock over market with the following program.
 \begin{lstlisting}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
 priceOverMarket stock index =
-  let joins = join (\s i   -> time s `compare` time i) stock index
-      costs = map  (\(s,i) -> (cost s, cost i))        joins
-  in (regression costs, correlation costs)
+  let joined = join (\s i   -> time s `compare` time i) stock index
+      prices = map  (\(s,i) -> (price s, price i))      joined
+  in (regression prices, correlation prices)
 \end{lstlisting}
 
 To match day against day and discard any days missing from either input, we join the stock with the index based on the date.
-Then we extract both costs from the joined result and compute the regression and correlation.
-Again, this function requires two traversals of the @costs@ list.
+We then extract both prices from the joined result and compute the regression and correlation.
+Again, this function requires two traversals of the \Hs/prices/ list.
 
 Since both analyses provide useful information, we wish to perform both.
 This is a simple matter of constructing a pair.
@@ -112,11 +169,11 @@ priceAnalysis stock index =
 \end{lstlisting}
 
 \autoref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
-The nodes in this graph are the two input lists @stock@ and @index@, each intermediate list, and the @correlation@ and @regression@ functions which summarise the list values.
-The edges are dependencies from one value to another; @joins@ is computed by joining together the @stock@ and @index@ lists, so there are arrows from both @stock@ and @index@ to @joins@.
-The large boxes bisecting most of the nodes denote which nodes are defined inside the @priceOverTime@ function and which are defined in @priceOverMarket@.
-This dependency graph is neither a tree nor an inverted tree: the nodes @stock@, @timecosts@, and @costs@ have multiple children; @joins@ has multiple parents.
-Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list.
+The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
+The edges are dependencies from one value to another; \Hs/joined/ is computed by joining together the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to \Hs/joined/.
+The large boxes bisecting most of the nodes denote which nodes are defined inside the \Hs/priceOverTime/ function and which are defined in \Hs/priceOverMarket/.
+This dependency graph is neither a tree nor an inverted tree: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
+Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.
 
 Although this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
 Which streaming model we choose dictates how difficult this rewrite will be.
@@ -133,7 +190,7 @@ digraph G {
   stock -> pot_tps;
 
   subgraph cluster_priceOverTime  {
-    pot_tps [label="timecosts"];
+    pot_tps [label="timeprices"];
     pot_cor [label="correlation"];
     pot_reg [label="regression"];
     pot_tps -> pot_cor;
@@ -141,17 +198,17 @@ digraph G {
   };
 
   subgraph cluster_priceAgainstMarket {
-    pom_join [label="joins"];
-    pom_cost [label="costs"];
+    pom_join [label="joined"];
+    pom_price [label="prices"];
     pom_cor [label="correlation"];
     pom_reg [label="regression"];
-    pom_join -> pom_cost;
-    pom_cost -> pom_cor;
-    pom_cost -> pom_reg;
+    pom_join -> pom_price;
+    pom_price -> pom_cor;
+    pom_price -> pom_reg;
   };
 }
 \end{dot2tex}
-\caption[Dependency graph for queries priceOverTime and priceOverMarket]{dependency graph for the queries @priceOverTime@ and @priceOverMarket@.}
+\caption[Dependency graph for queries priceOverTime and priceOverMarket]{dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
 \label{figs/procs/priceOverTime-priceOverMarket}
 \end{figure}
 
@@ -159,66 +216,100 @@ digraph G {
 
 \subsection{Pull streams}
 
-The most common kind of stream is a \emph{pull stream}, which is also sometimes called an iterator or cursor.
+The first streaming model we will look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
 The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
-We can represent a pull stream as a function with no parameters which either returns a value, or returns @Nothing@ if the stream is finished.
-Since the stream might want to read from a file or update some local state, the function is wrapped in @IO@.
+We represent a pull stream as a function with no parameters which either returns a value, or returns \Hs/Nothing/ when the stream is finished.
+Since the stream might want to read from a file or update some local state, the function is wrapped in \Hs/IO/.
 
 \begin{lstlisting}
 data Pull a = Pull (IO (Maybe a))
 \end{lstlisting}
 
-This representation involves some streaming overhead, and later in [ref taxonomy/stream-fusion] we shall see how more sophisticated representations such as Stream Fusion can remove this overhead.
-These more sophisticated representations do not afford extra expressivity; the same set of combinators can be implemented.
+This representation involves some streaming overhead, and later in [ref taxonomy/stream-fusion] we shall see more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
+These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described here; the same set of combinators can be implemented.
 
 With this stream representation we can implement analogues of the list combinators used in the example queries.
-\autoref{figs/impl/pull/combinator} shows the type signatures; implementations are available in [ref appendix/taxonomy].
-The @correlation@ and @regression@ functions are folds with relatively complex worker functions, but conceptually they are just folds with an extraction function applied afterwards.
-Because we intend on streaming from file, the result type for @foldl@ is now wrapped in @IO@.
-The @join_pull@ combinator must initialise some mutable state before returning its stream, so also returns its result wrapped in @IO@.
+We can map a function over a pull stream like so.
+
+\begin{lstlisting}
+map :: (a -> b) -> Pull a -> Pull b
+map a_to_b (Pull pull_a) = Pull pull_b
+ where
+  pull_b = do
+    maybe_a <- pull_a
+    case maybe_a of
+      Just a -> return (a_to_b a)
+      Nothing -> return Nothing
+\end{lstlisting}
+
+Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
+Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ and asks for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
+When the stream is not finished, we apply the transform function \Hs/a_to_b/ to the pulled element and return the transformed element.
+When a consumer asks a producer for the next value, control flow bubbles up from consumer to producer.
+
+We can implement \Hs/foldl/ also.
+Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/.
+
+\begin{lstlisting}
+foldl :: (b -> a -> b) -> b -> Pull a -> IO b
+foldl k z (Pull pull_a) = loop z
+ where
+  loop state = do
+    maybe_a <- pull_a
+    case maybe_a of
+      Just a -> loop (k state a)
+      Nothing -> return state
+\end{lstlisting}
+
+This implementation of \Hs/foldl/ calls the local function \Hs/loop/ with the initial state of \Hs/z/.
+The \Hs/loop/ function repeatedly pulls from the pull function, \Hs/pull_a/, updating the state for every element.
+
+Consuming a stream is an effectful operation.
+Because every time we call the pull function we get the next element, the pull function must somehow keep track of which value it is up to.
+For example, a pull function which reads from a file holds a file-handle, which in turn references some mutable state about the file offset.
+Every time we read from the file, the file offset is incremented.
+If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
+
+
+\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples; implementations are available in [ref appendix/taxonomy].
+The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list implementations.
+The \Hs/join/ combinator must initialise some mutable state before returning its stream, so its result is also wrapped in \Hs/IO/.
 
 \begin{figure}
 \begin{lstlisting}
-module Pull where
-
-map   :: (a -> b) -> Pull a -> Pull b
-join  :: (a -> b -> Ordering) -> Pull a -> Pull b -> IO (Pull (a,b))
-foldl :: (b -> a -> b) -> b -> Pull a -> IO b
-
 correlation :: Pull (Double,Double) -> IO Double
-correlation = do
-  c <- foldl correlation_k correlation_z
-  return (correlation_x c)
-
-regression :: Pull (Double,Double) -> IO Line
-regression = do
-  r <- foldl regression_k regression_z
-  return (regression_x c)
+regression  :: Pull (Double,Double) -> IO Line
+join        :: (a -> b -> Ordering) -> Pull a -> Pull b -> IO (Pull (a,b))
 \end{lstlisting}
 \caption{Pull stream combinators}
 \label{figs/impl/pull/combinator}
 \end{figure}
 
-We cannot naively translate the list version of @priceOverTime@ to use these streaming combinators, because the list version required multiple traversals.
-The following program will not compute the correct result because it uses the @timecosts@ stream twice.
+We cannot naively translate the list version of \Hs/priceOverTime/ to use these streaming combinators, because the list version required multiple traversals.
+The following program will not compute the correct result because it uses the \Hs/timeprices/ stream twice.
 
 \begin{lstlisting}
 priceOverTime_pull_bad :: Pull Record -> IO (Line, Double)
 priceOverTime_pull_bad stock = do
-  let timecosts = Pull.map (\r -> (daysSinceEpoch (time r), cost r)) stock
-  r <- Pull.regression  timecosts
-  c <- Pull.correlation timecosts
+  let timeprices = Pull.map (\r -> (daysSinceEpoch (time r), price r)) stock
+  r <- Pull.regression  timeprices
+  c <- Pull.correlation timeprices
   return (r, c)
 \end{lstlisting}
 
-The problem is that consuming a stream is an effectful operation.
-Computing the regression pulls all the values from the @timecosts@ stream and folds over them until the stream is exhausted.
-By the time we go to compute the correlation and try to read the @timecosts@ stream again, it has already been read.
+Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
+By the time we go to compute the correlation and try to read the \Hs/timeprices/ stream again, it has already been read.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
-In fact, streaming models often require that streams are used \emph{linearly} --- exactly once --- in order to ensure resources are properly cleaned up.
+In fact, later [ref polarised] we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
 
-Fortunately, because @regression@ and @correlation@ are both computed by folds, we can combine the two into a single fold.
-In this program, the fold worker function @both_k@ and seed @both_z@ compute both regression and correlation at the same time.
+Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
+When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
+Rewinding would allow this program to compute the correct result, but the file would have to be read from disk again.
+
+Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
+In this program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
+This is a simple instance of a transform known as \emph{tupling}, and automated tupling transforms such as \cite{hu1997tupling} exist, but are quite limited.
+We discuss tupling further in [ref related/tupling].
 
 \begin{lstlisting}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
@@ -231,56 +322,60 @@ regressionCorrelation_pull stream = do
 
 priceOverTime_pull :: Pull Record -> IO (Line, Double)
 priceOverTime_pull stock = do
-  let timecosts = Pull.map (\r -> (daysSinceEpoch (time r), cost r)) stock
-  regressionCorrelation_pull timecosts
+  let timeprices = Pull.map (\r -> (daysSinceEpoch (time r), price r)) stock
+  regressionCorrelation_pull timeprices
 \end{lstlisting}
 
 
 This program computes the correct value.
 % The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
-In order to write this version we have had to manually look inside the definitions of @correlation@ and @regression@ and duplicate them.
+In order to write this version we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
 This was relatively easy because both use-sites were folds.
 
 % If the input data is stored in a file, we have the option or re-reading the input file again, but this also requires performing any parsing again --- duplicating work.
 % We could also store the values in a buffer and traversing the buffer multiple times, but this requires knowing how large the stream will be.
 % In general, if we want to re-use the same stream multiple times we have the choice between duplicating work or buffering the values somewhere.
 
-Let us turn our attention to the second query, @priceOverMarket@.
-We can use the same function @regressionCorrelation_pull@ that we used above.
+Let us turn our attention to the second query, \Hs/priceOverMarket/.
+We can use the same function \Hs/regressionCorrelation_pull/ that we used above.
 
 \begin{lstlisting}
 priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
 priceOverMarket_pull stock index =
-  joins    <- join (\s i   -> time s `compare` time i) stock index
-  let costs = map  (\(s,i) -> (cost s, cost i))        joins
-  regressionCorrelation_pull costs
+  joined    <- Pull.join (\s i   -> time s `compare` time i) stock index
+  let prices = Pull.map  (\(s,i) -> (price s, price i))        joined
+  regressionCorrelation_pull prices
 \end{lstlisting}
 
 
-The @join@ in this query executes by reading a value from each input stream, and comparing the times.
-If the times are equal, @join@ gives the pair of values to @correlation@, before reading new values from both streams.
-Otherwise, @join@ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+The \Hs/join/ in this query executes by reading a value from each input stream, and comparing the times.
+If the times are equal, \Hs/join/ gives the pair of values to \Hs/correlation/, before reading new values from both streams.
+Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
 We can perform this join in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
 % The join function takes the two input streams, as well as functions to extract the key from each input record.
 
-We now have pull implementations of both @priceOverTime@ and @priceOverMarket@, but when we wish to compute both at the same time, we cannot simply pair them together as we did in @priceAnalyses@ --- again because of stream reuse.
+We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
 
-When we implemented the pull version of @priceOverTime@, we had to look at the two occurences where the @timecosts@ stream had been used.
+When we implemented the pull version of \Hs/priceOverTime/, we had to look at the two occurences where the \Hs/timeprices/ stream had been used.
 We had to inline both places where the stream was used and manually write a new function to do the work of both.
 Both were fairly simple folds.
-Doing the same for @priceAnalyses@ is quite a more complicated: we would need to implement a special version of the @join@ inside @priceOverMarket@, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+Doing the same for \Hs/priceAnalyses/ is quite a more complicated: we would need to implement a special version of the \Hs/join/ inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+
+It might appear that, since the \Hs/joined/ stream contains pairs from both \Hs/stock/ and \Hs/index/, we could use this to compute the correlation and regression of the the \Hs/stock/ component alone.
+Such a query would likely be easier to combine with \Hs/priceOverMarket/, but this query would compute a different result, since the \Hs/joined/ stream only contains elements from \Hs/stock/ for which corresponding days exist in the \Hs/index/ stream.
 
 Pull streams are not helping us execute multiple queries at a time.
-If we wish to execute multiple queries, we need to be able to reuse streams.
+If we wish to execute multiple queries in a single-pass, we need to be able to mention streams multiple times.
+To execute these shared streams, each time we read from a shared stream, we need some way to distribute this element among all of the shared stream's consumers.
 
 \subsection{Push streams}
 
 \emph{Push streams} are the conceptual dual of pull streams: rather than the consumer trying to pull from the producer, in push streams the producer pushes to the consumer.
-As we shall see, the advantage of push streams is that they enable stream reuse among multiple consumers: a producer can push the same value to multiple consumers.
+As we shall see, the advantage of push streams is that they enable stream elements to be shared among multiple consumers: a producer can push the same value to multiple consumers.
 
-At the most fundamental level, we can represent push streams as a function which accepts a (@Maybe a@) and performs some @IO@ effect, for example writing to a file, or writing to some mutable state.
-This could be represented by the type (\lstinline/Maybe a -> IO ()/) [todo search for lstinline spacing issue], which is the dual of the pull stream (\lstinline/IO (Maybe a)/).
+A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs/IO/ effect, for example writing to a file, or writing to some mutable state.
+This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
 This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual, but later [ref taxonomy/polar] we shall reunite the two.
 
@@ -290,17 +385,17 @@ data Push a r = Push
   , done :: IO r }
 \end{lstlisting}
 
-We augment the definition with an extra type parameter, @r@, for the result type.
-Since the result only becomes available at the end of the stream, we separate the two cases of the (@Maybe a@) argument into two functions, @push@ and @done@.
-When we have a value we can call @push@.
-When the stream is finished we can call @done@ to retrieve the result.
+We augment the definition with an extra type parameter, \Hs/r/, for the result type.
+Since the result only becomes available at the end of the stream, we separate the two cases of the (\Hs/Maybe a/) argument into two functions, \Hs/push/ and \Hs/done/.
+When we have a value we call \Hs/push/.
+When the stream is finished we call \Hs/done/ to retrieve the result.
 
 
-In this representation, it is the consumers that are values of type (@Push a r@): they are sinks which we can push values of type @a@ into, and eventually get an @r@ back.
-This inversion results in a fundamental difference in how we program with push streams, and what we can express with push streams.
+In this representation, it is the consumers that are values of type (\Hs/Push a r/): they are sinks into which we can push values of type \Hs/a/, and eventually get an \Hs/r/ back.
+This inversion of pull streams results in a fundamental difference in how we program with push streams, and what we can express with push streams.
 
-One notable difference is that we cannot map a function over the elements in push streams in the usual way, because the definition of (@Push a r@) uses the type parameter @a@ as a function parameter, making it contravariant.
-Instead, we must implement contravariant-map, or @contramap@, like so.
+We cannot map a function over the elements in push streams in the way we would lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
+Instead, we must implement contravariant-map, or \Hs/contramap/, like so.
 
 \begin{lstlisting}
 contramap :: (a -> b) -> Push b r -> Push a r
@@ -310,9 +405,12 @@ contramap a_to_b bs = Push push_a done_a
   done_a   = done bs
 \end{lstlisting}
 
-The @contramap@ function takes a function to convert values of type @a@ to values of type @b@ and a sink to push values of type @b@ to, returning a sink which can receive values of type @a@.
+The \Hs/contramap/ function takes a function to convert values of type \Hs/a/ to values of type \Hs/b/ and a sink to push values of type \Hs/b/ to, returning a sink which can receive values of type \Hs/a/.
+When a producer tries to push an input value into the returned stream, the @push_a@ function converts this to a value of type @b@ and pushes it further on to the consumer of @b@.
+Unlike with pull streams, a push consumer has no way of choosing among multiple inputs.
+The producer is in control while the consumer passively waits for its next input value.
 
-We \emph{do} in fact have a @map@ function for push streams, but this transforms the result type rather than the elements.
+We \emph{do} in fact have a \Hs/map/ function for push streams, but this transforms the stream result rather than the input elements.
 
 \begin{lstlisting}
 map :: (r -> r') -> Push a r -> Push a r'
@@ -323,9 +421,8 @@ map r_to_r' as = Push (push as) done_a'
     return (r_to_r' r)
 \end{lstlisting}
 
-
-The type of @foldl@ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
-The return value is in @IO@ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
+The type of \Hs/foldl/ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
+The return value is in \Hs/IO/ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
 As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold.
 
 \begin{lstlisting}
@@ -339,9 +436,11 @@ foldl k z = do
   return (Push push_a done_a)
 \end{lstlisting}
 
-In order to use a stream multiple times, we need some way to broadcast messages and push each element to many consumers.
+As before, we can use this @foldl@ function to implement @correlation@ and @regression@.
+
+In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
-The following function, @dup2@, duplicates a stream among two consumers, and returns a pair containing both results.
+The following function, \Hs/dup2/, duplicates a stream among two consumers, and returns a pair containing both results.
 
 \begin{lstlisting}
 dup2 :: Push a r -> Push a r' -> Push a (r,r')
@@ -358,54 +457,55 @@ dup2 a1 a2 = Push push_a done_a
 \end{lstlisting}
 
 We could also use the applicative functor instance for push streams [ref appendix] to combine consumers together, specifying how to transform and combine the results.
-The applicative functor definition is quite similar to the @dup2@ function specified above.
-This @dup2@ function could then be written equivalently as (\lstinline/dup2 a1 a2 = (,) <$> a1 <*> a2/).
+The applicative functor definition is quite similar to the \Hs/dup2/ function specified above.
+This \Hs/dup2/ function could then be written equivalently as (\Hs/dup2 a1 a2 = (,) <$> a1 <*> a2/).
 
-With these combinators, we can write the @priceOverTime@ query using push streams.
+With these combinators, we can write the \Hs/priceOverTime/ query using push streams.
 
 \begin{lstlisting}
-regression :: IO (Push (Double,Double) Line)
-regression = regression_x <$> Pull.foldl regression_k  regression_z
-
-correlation :: IO (Push (Double,Double) Double)
-correlation = correlation_x <$> Pull.foldl correlation_k  correlation_z
-
 priceOverTime_push :: IO (Push Record (Line,Double))
 priceOverTime_push = do
   reg   <- Pull.regression
   cor   <- Pull.correlation
   let cm = Pull.contramap
-    (\r -> (daysSinceEpoch (time r), cost r))
+    (\r -> (daysSinceEpoch (time r), price r))
     (Pull.dup2 reg cor)
   return cm
 \end{lstlisting}
 
 This program computes both correlation and regression in a streaming fashion.
-In comparison to the list version of @priceOverTime@, we have explicitly connected both consumers and reversed the control flow.
-Although the presentation is unfamiliar, this program is conceptually not too different from the list version.
+In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
+We shall see more examples of push programs in [ref icicle].
 
-We cannot implement @priceOverMarket@ with push streams alone, because it requires joining two input streams by date.
-Recall the @join@ combinator, which takes two input streams and retrieves a value from each.
+We cannot implement \Hs/priceOverMarket/ with push streams alone, because it requires joining two input streams by date.
+Recall the \Hs/join/ combinator, which takes two input streams and retrieves a value from each.
 At every step the combinator must choose which stream to pull from, pulling on the stream with the smaller value.
-With push streams, a consumer cannot choose which input stream to pull from: there is only one input, and the consumer must always be ready to accept values from it as they come.
+With push streams, a consumer cannot choose which input stream to pull from, or when: the consumer is a function waiting to be called with its input, and must always be ready to accept values from it as they come.
 
-Pull and push streams are the two most fundamental stream types.
-Stream reuse allows push streams to support multiple queries, but they do not support multiple inputs.
+This failure to join two streams by date is a symptom of a more general limitation of push streams.
+Push streams cannot implement @zip@, which pairs two inputs together, because the consumer must control the computation to alternate between each input.
+Except for one special case, push streams do not support multiple inputs.
+The special case is that a push stream can react to multiple inputs in the order they are received.
+As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
+In certain circumstances, however, we can control the order externally and use this merge to append two streams; see [ref related/push-append].
+
+% Pull and push streams are the two most fundamental stream types.
+Stream sharing allows push streams to support multiple queries, but they do not support multiple inputs.
 Pull streams support multiple inputs, but they do not support multiple queries.
-Soon [ref taxonomy/polarised] we shall combine the two as \emph{polarised streams}, to support multiple inputs and multiple queries.
+Soon [ref taxonomy/polarised] we shall combine the two together in the form of \emph{polarised streams}, to support multiple inputs and multiple queries.
 Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and how we can remove it.
 
-\section{Streaming overhead}
-
-
-
-\subsection{Polarised streams}
-
-\section{Other streams}
-\subsection{Stream fusion}
-\subsection{Copull: push as pull}
-\subsection{Push-pull, or enumerator}
-\subsection{Monadic streams}
-
-\section{Kahn process networks}
-
+% \section{Streaming overhead}
+% 
+% 
+% 
+% \subsection{Polarised streams}
+% 
+% \section{Other streams}
+% \subsection{Stream fusion}
+% \subsection{Copull: push as pull}
+% \subsection{Push-pull, or enumerator}
+% \subsection{Monadic streams}
+% 
+% \section{Kahn process networks}
+% 

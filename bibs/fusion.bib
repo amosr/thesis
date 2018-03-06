@@ -9,6 +9,18 @@
 
 % -- B --
 
+% DSL for Attribute Grammars
+% Nice thing about attribute grammars is get tupling for free
+% Might be some connection between attribute grammars and push streams
+@misc{bransen2014exploiting,
+  title={Exploiting Attribute Grammars to Achieve Automatic Tupling},
+  author={Bransen, Jeroen and Dijkstra, Atze and Swierstra, Doaitse},
+  journal={Technical Report Series},
+  number={UU-CS-2014-013},
+  year={2014},
+  publisher={UU BETA ICS Departement Informatica}
+}
+
 % -- C --
 @article{chakravarty2003approach,
   title={An approach to fast arrays in {H}askell},
@@ -16,6 +28,19 @@
   journal={Advanced Functional Programming},
   year={2003},
   publisher={Springer}
+}
+
+% Only skimmed:
+% Fold/unfold tupling, as in by rewrite rules: as in rewriting (X => D) and (D => X) repeatedly with other rules in between
+@article{chiba2010program,
+  title={Program transformation templates for tupling based on term rewriting},
+  author={Chiba, Yuki and Aoto, Takahito and Toyama, Yoshihito},
+  journal={IEICE TRANSACTIONS on Information and Systems},
+  volume={93},
+  number={5},
+  pages={963--973},
+  year={2010},
+  publisher={The Institute of Electronics, Information and Communication Engineers}
 }
 
 % Stream fusion paper, uses pull streams, relies on inlining, cannot do splits
@@ -73,6 +98,94 @@
 
 % -- H --
 
+% Tupling together two traversals of the same input data.
+% Wouldn't work for "join" case of priceOverTime/Market: we don't have a hylomorphism for joining two inputs, and priceOverTime needs to operate over the unfiltered pre-joined data anyway.
+% They claim that tupling could be implemented automatically, but doesn't say how well that works in practice. hu1996deriving might show that.
+@article{hu1996cheap,
+  title={Cheap Tupling Transformation},
+  author={Hu, Zhenjiang and Iwasaki, Hideya and Takeichi, Masato},
+  journal={METR 96},
+  volume={8},
+  year={1996},
+  publisher={Citeseer}
+}
+
+% These statements seem to contradict each other:
+% "We propose an algorithm which can automatically turn almost \emph{all} recursive definitions of interest to structural hylomorphisms"
+% "Our algorithm is guaranteed to be correct, and to terminate with a succesful hylomorphism. To the contrary, [launchbury1995warm] ... may fail to give build-catas."
+% But it's true because the language is restricted to only top-level cases and no mutual recursion.
+% Can't express "join" in this language because it requires nested case statements.
+% Join cannot be expressed because it requires two case statements: first, to destruct both inputs, second, to check which input is smaller.
+% 
+@book{hu1996deriving,
+  title={Deriving structural hylomorphisms from recursive definitions},
+  author={Hu, Zhenjiang and Iwasaki, Hideya and Takeichi, Masato},
+  volume={31},
+  number={6},
+  year={1996},
+  publisher={ACM}
+}
+
+% Looks like this is the result of putting hu1996cheap and hu1996deriving together:
+% deriving hylomorphisms and then tupling them together.
+% Language is more expressive than hu1996deriving, but the derivation is less expressive as it doesn't support multiple inputs.
+%
+% Language could express 'join' as two mutually recursive functions:
+%
+%> join (Cons x xs, Cons y ys) = join2 (compare x y, x, xs, y, ys)
+%> join ...Nil... = Nil
+%>
+%> join2 (EQ, x, xs, y, ys) = Cons (x,y) (join xs ys)
+%> join2 (LT, x, xs, y, ys) = join (xs, Cons y ys)
+%> join2 (GT, x, xs, y, ys) = join (Cons x xs, ys)
+%
+% However, this does not satisty Tuplable Function restriction (Definition 2) which requires that recursive calls are sub-patterns:
+% (compare x y, x, xs, y, ys) is not a sub-pattern of (Cons x xs, Cons y ys)
+% (xs, Cons y ys) is not a sub-pattern of (compare x y, x, xs, y, ys)
+%
+% They do not define exactly what they mean by sub-pattern.
+% Is this (Cons x xs, ys) a sub-pattern of (Cons x xs, Cons y ys)?
+% I wouldn't have thought so, unless they're using a very
+%
+@article{hu1997tupling,
+  title={Tupling calculation eliminates multiple data traversals},
+  author={Hu, Zhenjiang and Iwasaki, Hideya and Takeichi, Masato and Takano, Akihiko},
+  journal={ACM Sigplan Notices},
+  volume={32},
+  number={8},
+  pages={164--175},
+  year={1997},
+  publisher={ACM}
+}
+
+% Acid Rain (takano1995shortcut) generalised foldr/build to arbitrary types.
+% The authors claim that this paper generalises Acid Rain to multiple inputs. For example
+%> zip (map double x) (map square y)
+% In order to describe zip as a foldr/build hylomorphism we need to choose one of the inputs to destruct; the other must be manifest as a list.
+% The Acid Rain authors takano1995shortcut claim this is solved by the generalisation in Acid Rain.
+% It looks like Acid Rain solve this by raising zip to the meta-level as product on hylomorphisms.
+% "This limitation of the Acid Rain Theorem has already been recognized elsewhere. In (gill1993short, launchbury1995warm) ...".
+% These two papers were written before Acid Rain Theorem and talk about foldr/build, not Acid Rain.
+% I think this paper actually agrees with and expands upon the very brief Section 4.5 of takano1995shortcut, which is useful.
+@article{hu1996extension,
+  title={An extension of the {A}cid {R}ain {T}heorem},
+  author={Hu, Zhenjiang and Iwasaki, Hideya and Takeichi, Masato},
+  journal={Functional and Logic Programming},
+  pages={91--105},
+  year={1996},
+  publisher={World Scientific}
+}
+
+% Template Haskell implementation of tupling
+@inproceedings{hu2005program,
+  title={Program optimizations and transformations in calculation form},
+  author={Hu, Zhenjiang and Yokoyama, Tetsuo and Takeichi, Masato},
+  booktitle={International Summer School on Generative and Transformational Techniques in Software Engineering},
+  pages={144--168},
+  year={2005},
+  organization={Springer}
+}
+
 % -- I --
 
 % -- J --
@@ -106,6 +219,26 @@
 
 
 % -- L --
+
+% Converting pattern-matching to folds so they can be fused with foldr/build.
+%
+%> map f xs = case xs of [] -> []; (x:xs) -> f x : map f xs
+%  ==>
+%> map f xs = fold [] (\x xs. f x : xs)
+%
+% This language can express join, but it's not a complete algorithm. The language is more expressive.
+% In contrast to hu1996deriving, their algorithm cannot convert both arguments of zip.
+% As such it's unlikely that it would convert both arguments of join.
+%
+@inproceedings{launchbury1995warm,
+  title={Warm fusion: Deriving build-catas from recursive definitions},
+  author={Launchbury, John and Sheard, Tim},
+  booktitle={Proceedings of the seventh international conference on Functional programming languages and computer architecture},
+  pages={314--323},
+  year={1995},
+  organization={ACM}
+}
+
 @inproceedings{lippmeier2013data,
     author = {Ben Lippmeier and Manuel M. T. Chakravarty and Gabrielle Keller and Amos Robinson},
     title = {Data Flow Fusion with Series Expressions in {H}askell},
@@ -173,6 +306,18 @@
 
 
 % -- T --
+
+% Acid Rain Theorem:
+%  generalising foldr/build to hylomorphisms over arbitrary types
+% By generalising they can support zip but they go over this very quickly.
+@inproceedings{takano1995shortcut,
+  title={Shortcut deforestation in calculational form},
+  author={Takano, Akihiko and Meijer, Erik},
+  booktitle={Proceedings of the seventh international conference on Functional programming languages and computer architecture},
+  pages={306--313},
+  year={1995},
+  organization={ACM}
+}
 
 % -- U --
 

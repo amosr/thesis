@@ -5,6 +5,8 @@
                 ,openright
                 ,12pt
                 ]{report}
+\newif\iffull
+\fullfalse
 
 \input{structure/00-00-style.tex}
 \input{structure/00-01-imports.tex}
@@ -12,8 +14,11 @@
 
 \begin{document}
 
-% \input{structure/01-title.tex}
-% \input{structure/02-front.tex}
+\iffull
+\input{structure/01-title.tex}
+\input{structure/02-front.tex}
+\fi
+
 \input{structure/03-body.tex}
 \input{structure/04-back.tex}
 

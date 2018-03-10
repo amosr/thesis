@@ -23,12 +23,12 @@ The benefit of this style is that each stream transformer can be reasoned about 
 
 There are numerous \emph{streaming models} to choose from, and we must commit to a particular model before we can start writing programs.
 Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the amount of bookkeeping the programmer must perform to write their program.
-[todo bookkeeping be more precise. really I just want to say they don't look like list programs]
+\TODO{bookkeeping be more precise. really I just want to say they don't look like list programs}
 % The streaming model determines which stream operations are supported including how streams can be connected together, and the overhead incurred when connecting streams together.
-% [A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.]
+% \ED{A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.}
 We must compare different streaming models to make an informed decision.
 We start our initial comparison by focussing on two low-overhead streaming models to illustrate their lack of expressivity and motivate the use of Kahn process networks as a streaming model.
-Later in [ref related] we will compare against some more expressive but less efficient streaming models.
+Later in \REF{related} we will compare against some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
@@ -108,7 +108,7 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
       stddevY = sqrt varianceY
   in covariance / (stddevX * stddevY)
 \end{lstlisting}
-\caption[One-pass correlation]{one-pass correlation [todo move to appendix, or maybe this can be an example in the Icicle chapter]}
+\caption[One-pass correlation]{one-pass correlation \TODO{move to appendix, or maybe this can be an example in the Icicle chapter}}
 \label{figs/impl/correlation}
 \end{figure}
 
@@ -131,7 +131,7 @@ priceOverTime stock =
 Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
 Whether we think of this program as one query or two is inconsequential; the important part is that the program as we have written it requires two traversals over the \Hs/timeprices/ list.
-List programs can traverse the same list many times, but later [ref taxonomy/pull] we shall see how this is a problem for streaming programs.
+List programs can traverse the same list many times, but later \REF{taxonomy/pull} we shall see how this is a problem for streaming programs.
 
 Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
 Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
@@ -189,7 +189,11 @@ digraph G {
   index -> pom_join;
   stock -> pot_tps;
 
+  graph [style="rounded corners"];
+
   subgraph cluster_priceOverTime  {
+    lblstyle="right";
+    label="priceOverTime";
     pot_tps [label="timeprices"];
     pot_cor [label="correlation"];
     pot_reg [label="regression"];
@@ -198,6 +202,8 @@ digraph G {
   };
 
   subgraph cluster_priceAgainstMarket {
+    lblstyle="left";
+    label="priceOverMarket";
     pom_join [label="joined"];
     pom_price [label="prices"];
     pom_cor [label="correlation"];
@@ -225,7 +231,7 @@ Since the stream might want to read from a file or update some local state, the 
 data Pull a = Pull (IO (Maybe a))
 \end{lstlisting}
 
-This representation involves some streaming overhead, and later in [ref taxonomy/stream-fusion] we shall see more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
+This representation involves some streaming overhead, and later in \REF{taxonomy/stream-fusion} we shall see more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
 These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described here; the same set of combinators can be implemented.
 
 With this stream representation we can implement analogues of the list combinators used in the example queries.
@@ -271,7 +277,7 @@ Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
 
 
-\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples; implementations are available in [ref appendix/taxonomy].
+\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples; implementations are available in \REF{appendix/taxonomy}.
 The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list implementations.
 The \Hs/join/ combinator must initialise some mutable state before returning its stream, so its result is also wrapped in \Hs/IO/.
 
@@ -300,7 +306,7 @@ priceOverTime_pull_bad stock = do
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
 By the time we go to compute the correlation and try to read the \Hs/timeprices/ stream again, it has already been read.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
-In fact, later [ref polarised] we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
+In fact, later \REF{polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
 
 Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
 When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
@@ -309,7 +315,7 @@ Rewinding would allow this program to compute the correct result, but the file w
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In this program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
 This is a simple instance of a transform known as \emph{tupling}, and automated tupling transforms such as \cite{hu1997tupling} exist, but are quite limited.
-We discuss tupling further in [ref related/tupling].
+We discuss tupling further in \REF{related/tupling}.
 
 \begin{lstlisting}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
@@ -377,7 +383,7 @@ As we shall see, the advantage of push streams is that they enable stream elemen
 A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs/IO/ effect, for example writing to a file, or writing to some mutable state.
 This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
-This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual, but later [ref taxonomy/polar] we shall reunite the two.
+This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual, but later \REF{taxonomy/polar} we shall reunite the two.
 
 \begin{lstlisting}
 data Push a r = Push
@@ -456,7 +462,7 @@ dup2 a1 a2 = Push push_a done_a
     return (r, r')
 \end{lstlisting}
 
-We could also use the applicative functor instance for push streams [ref appendix] to combine consumers together, specifying how to transform and combine the results.
+We could also use the applicative functor instance for push streams \REF{appendix} to combine consumers together, specifying how to transform and combine the results.
 The applicative functor definition is quite similar to the \Hs/dup2/ function specified above.
 This \Hs/dup2/ function could then be written equivalently as (\Hs/dup2 a1 a2 = (,) <$> a1 <*> a2/).
 
@@ -475,7 +481,7 @@ priceOverTime_push = do
 
 This program computes both correlation and regression in a streaming fashion.
 In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
-We shall see more examples of push programs in [ref icicle].
+We shall see more examples of push programs in \REF{icicle}.
 
 We cannot implement \Hs/priceOverMarket/ with push streams alone, because it requires joining two input streams by date.
 Recall the \Hs/join/ combinator, which takes two input streams and retrieves a value from each.
@@ -487,15 +493,169 @@ Push streams cannot implement @zip@, which pairs two inputs together, because th
 Except for one special case, push streams do not support multiple inputs.
 The special case is that a push stream can react to multiple inputs in the order they are received.
 As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
-In certain circumstances, however, we can control the order externally and use this merge to append two streams; see [ref related/push-append].
+In certain circumstances, however, we can control the order externally and use this merge to append two streams; see \REF{related/push-append}.
 
 % Pull and push streams are the two most fundamental stream types.
-Stream sharing allows push streams to support multiple queries, but they do not support multiple inputs.
-Pull streams support multiple inputs, but they do not support multiple queries.
-Soon [ref taxonomy/polarised] we shall combine the two together in the form of \emph{polarised streams}, to support multiple inputs and multiple queries.
-Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and how we can remove it.
+Stream sharing allows push streams to support multiple queries, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
+Soon \REF{taxonomy/polarised} we shall combine the two together in the form of \emph{polarised streams}, to support multiple inputs and multiple queries.
+Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and some methods to reduce it.
 
-% \section{Streaming overhead}
+\section{Streaming overhead}
+\TODO{move explanation of boxing, unboxing, SpecConstr, and so on from process/extraction/boxing and process/extraction/endpoints.}
+
+% One advantage of these representations is that we get a form of fusion for free, as part of general purpose optimisations.
+% For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
+% This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
+% With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
+
+This section looks at the streaming overhead involved in the above stream representations.
+We will focus on reducing overhead of pull streams, but the same techniques are applicable to push streams.
+
+There is another side to this though, which is the amount of overhead that streaming costs us.
+For simple operators like map, this representation works well.
+If we apply two functions to the elements in a stream, we expect there to be little additional streaming overhead.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g stream
+ = let bs = Pull.map f stream
+       cs = Pull.map g bs
+   in  cs
+\end{lstlisting}
+
+We could have easily written this program by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream/.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g (Pull pull_a) 
+ = Pull pull_c
+ where
+  pull_b = do
+    a <- pull_a
+    case a of
+      Nothing -> return Nothing
+      Just a' -> return (Just (f a'))
+
+  pull_c = do
+    b <- pull_b
+    case b of
+      Nothing -> return Nothing
+      Just b' -> return (Just (g a'))
+\end{lstlisting}
+
+In this program, whenever we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
+When there is a value, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
+This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
+Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value.
+All this wrapping and unwrapping is not the ideal execution strategy.
+
+Fortunately, our compiler is here to help us.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g (Pull pull_a) 
+ = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    let b = case a of
+            Nothing -> Nothing
+            Just a' -> (Just (f a'))
+    case b of
+      Nothing -> return Nothing
+      Just b' -> return (Just (g a'))
+\end{lstlisting}
+
+
+After inlining the definition of @pullMap@, we see that the definition for @bs@ can then be inlined into @cs@.
+With the help of case-of-case, as well as inlining the definition of @return@, we do in fact end up with the ideal code.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g (Pull pull_a)
+ = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    case a of
+      Nothing -> return Nothing
+      Just a' -> return (Just (g (f b)))
+\end{lstlisting}
+
+It is not always this easy.
+Let us consider the definition of filter.
+The pull action for filter requires a recursive loop for each element, because in order to pull a filtered element, we may need to pull an arbitrary number of elements from the source.
+If the predicate succeeds, we return the element, but if the predicate fails, we need to pull another input element to test.
+
+\begin{lstlisting}
+filter :: (a -> Bool) -> Pull a -> Pull a
+filter f (Pull as) = Pull go
+ where
+  go = do
+    v <- as
+    case v of
+     Nothing -> return Nothing
+     Just a  | f a
+             -> return a
+             | otherwise
+             -> go
+\end{lstlisting}
+
+This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
+Recursive functions like this are much harder to inline.
+More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:coaxing}.
+However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
+
+\subsection{Pulling without recursion}
+One of the problems with the pull-streams was filtering.
+The recursive definition of filter interfered with inlining.
+This is because the consumer is likely to be recursive as well, and inlining a recursive function into another recursive function is difficult.
+The solution offered by \citet{coutts2007stream} is to allow the definition of filter to return a value saying ``I haven't found it yet''.
+The consumer will then recursively rerun the filter until it is able to produce a value.
+In this way, filter no longer needs to be defined recursively, by telling its caller that it needs to be called again.
+
+For this representation, we introduce a new datatype @Step@ which is either a produced value, a skipped value, or the end of the stream.
+
+\begin{lstlisting}
+data PullSkip a
+  = PullSkip
+  { pullSkip :: IO (Step a) }
+
+data Step a
+  = Yield a | Skip | Done
+\end{lstlisting}
+
+All these different stream representations are just ways to coax the general purpose compiler optimisations into producing good code.
+So much time is spent, and wasted, finding the right representation that happens to fit the compiler optimisations we have.
+For the Java virtual machine, push streams with continuations are the best representation to convince it to produce tight loop bodies.
+For the Glasgow Haskell Compiler (GHC), co-iterative pull streams are the best representation because they allow filters to be fully inlined.
+But we know exactly the kind of code we want to produce, so why not instead of relying on the general purpose optimisations, just produce the right code to start with.
+
+This is the motivation behind \citet{kiselyov2016stream}'s work on stream fusion, which uses staged compilation to ensure that the right code is produced, and allows type-level guarantees that fusion will occur.
+However, their streams are still fundamentally pull-based, which means they are unable to express sharing between streams, or unzipping streams.
+
+\subsection{All this boxing and unboxing}
+To convert a vector to a pull stream, we need to keep track of the current index across calls to the pull function.
+We can achieve this with a mutable reference.
+
+\begin{lstlisting}
+pullOfVector :: Vector a -> IO (Pull a)
+pullOfVector vector = do
+  ref <- newIORef 0
+  return (Pull (pull_a ref))
+ where
+  pull_a ref = do
+    index <- readIORef ref
+    writeIORef ref (index + 1)
+    if index < Vector.length vector
+      then return (Just (Vector.index vector index))
+      else return Nothing
+\end{lstlisting}
+
+This mutable reference is boxed. \TODO{talk about boxed mutable reference}
+
+
+
 % 
 % 
 % 

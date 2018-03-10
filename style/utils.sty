@@ -1,12 +1,13 @@
 %!TEX root = ../Main.tex
 
-\newcommand{\NB}[1]	{\emph{\textbf{NB:} #1}}
-\newcommand{\TODO}[1]	{\emph{\textbf{TODO:} #1}}
-\newcommand{\ISSUE}[1]	{\emph{\textbf{ISSUE:} #1}}
-\newcommand{\CITE}	{\textbf{CITE} }
-\newcommand{\CITEME}[1] {\textbf{CITE: {#1}}}
-\newcommand{\REF}	{\textbf{REF }}
-\newcommand{\REFTODO}[1]	{[\textbf{REF:} #1\ldots]}
+\newcommand{\ED}[2]	{[#1 \emph{#2}]}
+
+\newcommand{\NB}[1]	{\ED{nb}{#1}}
+\newcommand{\TODO}[1]	{\ED{todo}{#1}}
+\newcommand{\ISSUE}[1]	{\ED{issue}{#1}}
+\newcommand{\CITE}[1]	{\ED{cite}{#1} }
+\newcommand{\REF}[1]	{\ED{ref}{#1}}
+\newcommand{\REFTODO}[1]	{\ED{ref}{#1}}
 
 \newcommand{\refT}[2]	{\hyperref[#2]{#1~\ref*{#2},~page~\pageref{#2}}}
 \newcommand{\refChapter}[1]	{\refT{Chapter}{#1}}

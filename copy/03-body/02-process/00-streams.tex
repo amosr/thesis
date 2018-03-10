@@ -87,61 +87,6 @@ pullZip (Pull as) (Pull bs) = Pull abs
     (_      , _      ) -> return  Nothing
 \end{code}
 
-\subsection{Fusion}
-One of the nice things about this representation is that we get a form of fusion for free, as part of general purpose optimisations.
-For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
-This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
-With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
-
-There is another side to this though, which is the amount of overhead that streaming costs us.
-For simple operators like map, this representation work well. If we map two functions over the stream, we expect there to be little additional streaming overhead.
-
-\begin{code}
-mapMap :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-mapMap f g as 
- = let bs = pullMap f as
-       cs = pullMap g bs
-   in  cs
-\end{code}
-
-After inlining the definition of @pullMap@, we see that the definition for @bs@ can then be inlined into @cs@.
-With the help of case-of-case, as well as inlining the definition of @return@, we do in fact end up with the ideal code.
-
-\begin{code}
-mapMap :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-mapMap f g (Pull as)
- = let cs = do
-          v <- as
-          case v of
-           Nothing -> return Nothing
-           Just b  -> return (g (f b))
-   in Pull cs
-\end{code}
-
-It is not always this easy.
-Let us consider the definition of filter.
-The pull action for filter requires a recursive loop for each element, because in order to pull a filtered element, we may need to pull an arbitrary number of elements from the source.
-If the predicate succeeds, we return the element, but if the predicate fails, we need to pull another input element to test.
-
-\begin{code}
-pullFilter :: (a -> Bool) -> Pull a -> Pull a
-pullFilter f (Pull as) = Pull go
- where
-  go = do
-    v <- as
-    case v of
-     Nothing -> return Nothing
-     Just a  | f a
-             -> return a
-             | otherwise
-             -> go
-\end{code}
-
-This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
-Recursive functions like this are much harder to inline.
-More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:coaxing}.
-However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
-
 
 \subsection{Linearity}
 So far, pull streams have treated us well. We have been able to implement a few simple operations, and it shouldn't require too much imagination to believe that other operations such as append could be implemented too.
@@ -261,33 +206,6 @@ data Copull a
 According to \citet{biboudis2017expressive} this stream representation is better for Java JIT compilation, as it allows the producer to have a simple for-loop structure, while the consumer can be inlined at runtime.
 It is not obvious how to implement either zip or unzip for this stream representation, so perhaps it is the intersection between push and pull: only straight-line computations.
 
-\subsection{Pulling without recursion}
-One of the problems with the pull-streams was filtering.
-The recursive definition of filter interfered with inlining.
-This is because the consumer is likely to be recursive as well, and inlining a recursive function into another recursive function is difficult.
-The solution offered by \citet{coutts2007stream} is to allow the definition of filter to return a value saying ``I haven't found it yet''.
-The consumer will then recursively rerun the filter until it is able to produce a value.
-In this way, filter no longer needs to be defined recursively, by telling its caller that it needs to be called again.
-
-For this representation, we introduce a new datatype @Step@ which is either a produced value, a skipped value, or the end of the stream.
-
-\begin{code}
-data PullSkip a
-  = PullSkip
-  { pullSkip :: IO (Step a) }
-
-data Step a
-  = Yield a | Skip | Done
-\end{code}
-
-All these different stream representations are just ways to coax the general purpose compiler optimisations into producing good code.
-So much time is spent, and wasted, finding the right representation that happens to fit the compiler optimisations we have.
-For the Java virtual machine, push streams with continuations are the best representation to convince it to produce tight loop bodies.
-For the Glasgow Haskell Compiler (GHC), co-iterative pull streams are the best representation because they allow filters to be fully inlined.
-But we know exactly the kind of code we want to produce, so why not instead of relying on the general purpose optimisations, just produce the right code to start with.
-
-This is the motivation behind \citet{kiselyov2016stream}'s work on stream fusion, which uses staged compilation to ensure that the right code is produced, and allows type-level guarantees that fusion will occur.
-However, their streams are still fundamentally pull-based, which means they are unable to express sharing between streams, or unzipping streams.
 
 \section{Pulling and pushing, together}
 

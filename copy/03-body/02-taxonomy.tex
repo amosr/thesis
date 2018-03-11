@@ -243,9 +243,9 @@ map a_to_b (Pull pull_a) = Pull pull_b
  where
   pull_b = do
     maybe_a <- pull_a
-    case maybe_a of
-      Just a -> return (a_to_b a)
-      Nothing -> return Nothing
+    return (case maybe_a of
+             Just a  -> (a_to_b a)
+             Nothing -> Nothing)
 \end{lstlisting}
 
 Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
@@ -511,75 +511,68 @@ Before looking at more expressive models, however, we will look at what overhead
 This section looks at the streaming overhead involved in the above stream representations.
 We will focus on reducing overhead of pull streams, but the same techniques are applicable to push streams.
 
-There is another side to this though, which is the amount of overhead that streaming costs us.
-For simple operators like map, this representation works well.
-If we apply two functions to the elements in a stream, we expect there to be little additional streaming overhead.
+For simple combinators like map, this representation works well.
+The following function applies two functions to the elements in a stream.
 
 \begin{lstlisting}
 map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-map2 f g stream
- = let bs = Pull.map f stream
-       cs = Pull.map g bs
-   in  cs
+map2 f g stream_a
+ = let stream_b = Pull.map f stream_a
+       stream_c = Pull.map g stream_b
+   in  stream_c
 \end{lstlisting}
 
-We could have easily written this program by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream/.
+We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
+Fortunately, after some optimisation, both programs incur the same amount of overhead.
+To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
+After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
 
 \begin{lstlisting}
-map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-map2 f g (Pull pull_a) 
- = Pull pull_c
+map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_b = do
     a <- pull_a
-    case a of
-      Nothing -> return Nothing
-      Just a' -> return (Just (f a'))
-
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (f a')))
   pull_c = do
     b <- pull_b
-    case b of
-      Nothing -> return Nothing
-      Just b' -> return (Just (g a'))
+    return (case b of
+             Nothing -> Nothing
+             Just b' -> (Just (g a')))
 \end{lstlisting}
 
-In this program, whenever we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
-When there is a value, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
+When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
+When there are stream elements to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
 This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
-Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value.
-All this wrapping and unwrapping is not the ideal execution strategy.
+Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
 
-Fortunately, our compiler is here to help us.
+To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
+Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, and nest the case expression inside the scrutinee of the case expression from @pull_c@.
 
 \begin{lstlisting}
-map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-map2 f g (Pull pull_a) 
- = Pull pull_c
+map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_c = do
     a <- pull_a
-    let b = case a of
-            Nothing -> Nothing
-            Just a' -> (Just (f a'))
-    case b of
-      Nothing -> return Nothing
-      Just b' -> return (Just (g a'))
+    return (case (case a of
+                   Nothing -> Nothing
+                   Just a' -> (Just (f a')))
+             Nothing -> Nothing
+             Just b' -> (Just (g b')))
 \end{lstlisting}
 
+The \emph{case-of-case} transform converts this nested case expression to a single case expression.
 
-After inlining the definition of @pullMap@, we see that the definition for @bs@ can then be inlined into @cs@.
-With the help of case-of-case, as well as inlining the definition of @return@, we do in fact end up with the ideal code.
 
 \begin{lstlisting}
-map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-map2 f g (Pull pull_a)
- = Pull pull_c
+map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_c = do
     a <- pull_a
-    case a of
-      Nothing -> return Nothing
-      Just a' -> return (Just (g (f b)))
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (g (f b))))
 \end{lstlisting}
 
 It is not always this easy.

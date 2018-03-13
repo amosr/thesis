@@ -244,14 +244,14 @@ map a_to_b (Pull pull_a) = Pull pull_b
   pull_b = do
     maybe_a <- pull_a
     return (case maybe_a of
-             Just a  -> (a_to_b a)
-             Nothing -> Nothing)
+             Nothing -> Nothing
+             Just a  -> Just (a_to_b a))
 \end{lstlisting}
 
 Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
 Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ and asks for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
 When the stream is not finished, we apply the transform function \Hs/a_to_b/ to the pulled element and return the transformed element.
-When a consumer asks a producer for the next value, control flow bubbles up from consumer to producer.
+In pull streams, consumers asks producers for the next value, and control flow bubbles up from consumer to producer.
 
 We can implement \Hs/foldl/ also.
 Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/.
@@ -263,8 +263,8 @@ foldl k z (Pull pull_a) = loop z
   loop state = do
     maybe_a <- pull_a
     case maybe_a of
-      Just a -> loop (k state a)
       Nothing -> return state
+      Just a -> loop (k state a)
 \end{lstlisting}
 
 This implementation of \Hs/foldl/ calls the local function \Hs/loop/ with the initial state of \Hs/z/.
@@ -446,11 +446,12 @@ As before, we can use this @foldl@ function to implement @correlation@ and @regr
 
 In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
-The following function, \Hs/dup2/, duplicates a stream among two consumers, and returns a pair containing both results.
+The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
+We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \REF{taxonomy/polarised}.
 
 \begin{lstlisting}
-dup2 :: Push a r -> Push a r' -> Push a (r,r')
-dup2 a1 a2 = Push push_a done_a
+dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
+dup_ooo a1 a2 = Push push_a done_a
  where
   push_a a = do
     push a1 a
@@ -463,19 +464,19 @@ dup2 a1 a2 = Push push_a done_a
 \end{lstlisting}
 
 We could also use the applicative functor instance for push streams \REF{appendix} to combine consumers together, specifying how to transform and combine the results.
-The applicative functor definition is quite similar to the \Hs/dup2/ function specified above.
-This \Hs/dup2/ function could then be written equivalently as (\Hs/dup2 a1 a2 = (,) <$> a1 <*> a2/).
+The applicative functor definition is quite similar to the \Hs/dup_ooo/ function specified above.
+This \Hs/dup_ooo/ function could then be written equivalently as (\Hs/dup_ooo a1 a2 = (,) <$> a1 <*> a2/).
 
 With these combinators, we can write the \Hs/priceOverTime/ query using push streams.
 
 \begin{lstlisting}
 priceOverTime_push :: IO (Push Record (Line,Double))
 priceOverTime_push = do
-  reg   <- Pull.regression
-  cor   <- Pull.correlation
-  let cm = Pull.contramap
+  reg   <- Push.regression
+  cor   <- Push.correlation
+  let cm = Push.contramap
     (\r -> (daysSinceEpoch (time r), price r))
-    (Pull.dup2 reg cor)
+    (Push.dup_ooo reg cor)
   return cm
 \end{lstlisting}
 
@@ -500,154 +501,167 @@ Stream sharing allows push streams to support multiple queries, but they do not 
 Soon \REF{taxonomy/polarised} we shall combine the two together in the form of \emph{polarised streams}, to support multiple inputs and multiple queries.
 Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and some methods to reduce it.
 
-\section{Streaming overhead}
-\TODO{move explanation of boxing, unboxing, SpecConstr, and so on from process/extraction/boxing and process/extraction/endpoints.}
+\section{Polarised streams}
 
-% One advantage of these representations is that we get a form of fusion for free, as part of general purpose optimisations.
-% For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
-% This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
-% With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
-
-This section looks at the streaming overhead involved in the above stream representations.
-We will focus on reducing overhead of pull streams, but the same techniques are applicable to push streams.
-
-For simple combinators like map, this representation works well.
-The following function applies two functions to the elements in a stream.
+We cannot mention pull streams multiple times or share the elements among multiple pull consumers.
+We can, however, share the elements of a pull stream among one push consumer and one pull consumer.
+We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull).
 
 \begin{lstlisting}
-map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
-map2 f g stream_a
- = let stream_b = Pull.map f stream_a
-       stream_c = Pull.map g stream_b
-   in  stream_c
-\end{lstlisting}
-
-We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
-Fortunately, after some optimisation, both programs incur the same amount of overhead.
-To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
-After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
-
-\begin{lstlisting}
-map2 f g (Pull pull_a) = Pull pull_c
+dup_ioi_ignore_result :: Pull a -> Push a r -> Pull a
+dup_ioi_ignore_result (Pull pull_a) push_b = Pull pull_a'
  where
-  pull_b = do
-    a <- pull_a
-    return (case a of
-             Nothing -> Nothing
-             Just a' -> (Just (f a')))
-  pull_c = do
-    b <- pull_b
-    return (case b of
-             Nothing -> Nothing
-             Just b' -> (Just (g a')))
-\end{lstlisting}
-
-When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
-When there are stream elements to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
-This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
-Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
-
-To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
-Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, and nest the case expression inside the scrutinee of the case expression from @pull_c@.
-
-\begin{lstlisting}
-map2 f g (Pull pull_a) = Pull pull_c
- where
-  pull_c = do
-    a <- pull_a
-    return (case (case a of
-                   Nothing -> Nothing
-                   Just a' -> (Just (f a')))
-             Nothing -> Nothing
-             Just b' -> (Just (g b')))
-\end{lstlisting}
-
-The \emph{case-of-case} transform converts this nested case expression to a single case expression.
-
-
-\begin{lstlisting}
-map2 f g (Pull pull_a) = Pull pull_c
- where
-  pull_c = do
-    a <- pull_a
-    return (case a of
-             Nothing -> Nothing
-             Just a' -> (Just (g (f b))))
-\end{lstlisting}
-
-It is not always this easy.
-Let us consider the definition of filter.
-The pull action for filter requires a recursive loop for each element, because in order to pull a filtered element, we may need to pull an arbitrary number of elements from the source.
-If the predicate succeeds, we return the element, but if the predicate fails, we need to pull another input element to test.
-
-\begin{lstlisting}
-filter :: (a -> Bool) -> Pull a -> Pull a
-filter f (Pull as) = Pull go
- where
-  go = do
-    v <- as
+  pull_a' = do
+    v <- pull_a
     case v of
-     Nothing -> return Nothing
-     Just a  | f a
-             -> return a
-             | otherwise
-             -> go
+     Nothing -> do
+      _ <- done push_b
+      return Nothing
+     Just a -> do
+      push push_b a
+      return (Just a)
 \end{lstlisting}
 
-This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
-Recursive functions like this are much harder to inline.
-More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:coaxing}.
-However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
+We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source @push_a@, pushes the value to sink @push_b@, and returns the value to the caller.
+The result of the push stream is ignored because the pull stream representation has no way to return a result at the end of the stream.
 
-\subsection{Pulling without recursion}
-One of the problems with the pull-streams was filtering.
-The recursive definition of filter interfered with inlining.
-This is because the consumer is likely to be recursive as well, and inlining a recursive function into another recursive function is difficult.
-The solution offered by \citet{coutts2007stream} is to allow the definition of filter to return a value saying ``I haven't found it yet''.
-The consumer will then recursively rerun the filter until it is able to produce a value.
-In this way, filter no longer needs to be defined recursively, by telling its caller that it needs to be called again.
-
-For this representation, we introduce a new datatype @Step@ which is either a produced value, a skipped value, or the end of the stream.
+Encoding the result of a stream inside the stream itself is not important for single-consumer pull streams, because it is usually the consumer of the stream that computes the result.
+When mixing stream representations to allow multiple consumers, however, we need to be able to capture the result of all the consumers.
+We extend the pull stream representation: instead of returning a @Maybe@ with @Nothing@ to signal the end of the stream, streams now return an @Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream.
 
 \begin{lstlisting}
-data PullSkip a
-  = PullSkip
-  { pullSkip :: IO (Step a) }
-
-data Step a
-  = Yield a | Skip | Done
+data PullResult a r = PullResult (IO (Either a r))
 \end{lstlisting}
 
-All these different stream representations are just ways to coax the general purpose compiler optimisations into producing good code.
-So much time is spent, and wasted, finding the right representation that happens to fit the compiler optimisations we have.
-For the Java virtual machine, push streams with continuations are the best representation to convince it to produce tight loop bodies.
-For the Glasgow Haskell Compiler (GHC), co-iterative pull streams are the best representation because they allow filters to be fully inlined.
-But we know exactly the kind of code we want to produce, so why not instead of relying on the general purpose optimisations, just produce the right code to start with.
-
-This is the motivation behind \citet{kiselyov2016stream}'s work on stream fusion, which uses staged compilation to ensure that the right code is produced, and allows type-level guarantees that fusion will occur.
-However, their streams are still fundamentally pull-based, which means they are unable to express sharing between streams, or unzipping streams.
-
-\subsection{All this boxing and unboxing}
-To convert a vector to a pull stream, we need to keep track of the current index across calls to the pull function.
-We can achieve this with a mutable reference.
+With this extended pull stream representation, we can implement a version of @dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together.
 
 \begin{lstlisting}
-pullOfVector :: Vector a -> IO (Pull a)
-pullOfVector vector = do
-  ref <- newIORef 0
-  return (Pull (pull_a ref))
+dup_ioi :: PullResult a r -> Push a r' -> PullResult a (r,r')
+dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
  where
-  pull_a ref = do
-    index <- readIORef ref
-    writeIORef ref (index + 1)
-    if index < Vector.length vector
-      then return (Just (Vector.index vector index))
-      else return Nothing
+  pull_a' = do
+    v <- pull_a
+    case v of
+     Right r -> do
+      r' <- done push_b
+      return (Right (r,r'))
+     Left a -> do
+      push push_b a
+      return (Left a)
 \end{lstlisting}
 
-This mutable reference is boxed. \TODO{talk about boxed mutable reference}
+% There is very little change between the two versions of @dup_ioi@
+We can implement other combinators for the new representation similarly.
+We use the same naming convention for suffixes, for example @map_i@ for mapping pull streams, and @map_o@ for contravariantly mapping push streams.
+When consuming a pull stream by folding over it, we must return the fold result as well as the stream result, as in the following type signature for @foldl_i@.
+\begin{lstlisting}
+foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
+\end{lstlisting}
+
+We can duplicate streams when at least one consumer is a push stream.
+Joining streams together by date is the dual: at least one producer must be a pull stream.
+Recall that the @join@ combinator required both inputs to be pull streams, and could not be implemented with push streams alone.
+This corresponds to the following type with our new stream representation.
+
+\begin{lstlisting}
+join_iii :: (a -> b -> Ordering) -> PullResult a r -> PullResult b r' -> IO (PullResult (a,b) (r,r'))
+\end{lstlisting}
+
+We can also join two streams when one is pull and the other is push.
+
+\begin{lstlisting}
+join_ioo :: (a -> b -> Ordering) -> PullResult a r -> Push (a,b) r'   -> IO (Push b (r,r'))
+\end{lstlisting}
+
+We can convert a pull stream to a push stream, but not vice versa.
+Talk about @drain@.
+
+We can execute the two @priceAnalysis@ queries, @priceOverTime@ and @priceOverMarket@, by mixing pull and push streams.
+This mixture of pull and push streams is called \emph{polarised streams}~\cite{lippmeier2016polarized}.
+We proceed by assigning a polarity of push or pull to each stream in the program, starting with the input streams.
+The @priceOverMarket@ query joins the input streams together, which requires at least one input
+We wish to join the input streams together, so they must be pull streams.
+Both inputs must be pull streams because we wish to join them together, which .
+
+The unique abilities and constraints of pull and push streams
+With this new @dup_ioi@ combinator, 
+\autoref{figs/polar/priceOverTime-priceOverMarket}
 
 
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock; index;
+  stock_dup_ioi [label="dup_ioi"];
+
+  index -> pom_join[style="*-*"];
+  stock -> stock_dup_ioi[style="*-*"];
+  stock_dup_ioi -> pom_join[style="*-*"];
+  stock_dup_ioi -> pot_tps[style="o-o"];
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_priceOverTime  {
+    lblstyle="right";
+    label="priceOverTime";
+    pot_tps [label="map_o"];
+    pot_dup_ooo [label="dup_ooo"];
+    pot_cor [label="correlation_o"];
+    pot_reg [label="regression_o"];
+    pot_tps -> pot_dup_ooo[style="o-o"];
+    pot_dup_ooo -> pot_cor[style="o-o"];
+    pot_dup_ooo -> pot_reg[style="o-o"];
+  };
+
+  subgraph cluster_priceAgainstMarket {
+    lblstyle="left";
+    label="priceOverMarket";
+    pom_join [label="join_ii"];
+    pom_price [label="map_i"];
+    pom_dup_ioi [label="dup_ioi"];
+    pom_cor [label="correlation_i"];
+    pom_reg [label="regression_o"];
+    pom_join -> pom_price[style="*-*"];
+    pom_price -> pom_dup_ioi[style="*-*"];
+    pom_dup_ioi -> pom_cor[style="*-*"];
+    pom_dup_ioi -> pom_reg[style="o-o"];
+  };
+}
+\end{dot2tex}
+\caption[Polarised dependency graph for queries priceOverTime and priceOverMarket]{polarised dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
+\label{figs/polar/priceOverTime-priceOverMarket}
+\end{figure}
+
+
+
+
+\subsection{Zipping and unzipping}
+Two things about zips.
+
+If we wrote correlation as taking two input pull streams, we couldn't do it because it requires a cycle.
+
+\begin{lstlisting}
+correlation_ii :: Pull Double r -> Pull Double r' -> IO (Double, (r,r'))
+correlation_ii stream_a stream_b = correlation_i (zip_iii stream_a stream_b)
+\end{lstlisting}
+
+When implementing zip for this pull representation, we have to decide what to do with the results of the input streams.
+Normally, zip is able to ``short-circuit'' and finish processing once either input finishes.
+Taking the stream results into account, this means the stream result is whichever finishes first.
+The type of this short-circuiting zip would be the following.
+
+\begin{lstlisting}
+zip_iii_shortcircuit :: Pull a r -> Pull b r' -> Pull (a,b) (Either r r')
+\end{lstlisting}
+
+When the input streams have meaningful result values which we wish to use, the zip implementation reads and throws away the values from the longer stream to capture the result from both streams.
+The type signature tells us about the execution strategy.
+
+\begin{lstlisting}
+zip_iii :: Pull a r -> Pull b r' -> Pull (a,b) (r,r')
+\end{lstlisting}
 
 % 
 % 

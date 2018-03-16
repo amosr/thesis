@@ -31,6 +31,7 @@ We start our initial comparison by focussing on two low-overhead streaming model
 Later in \REF{related} we will compare against some more expressive but less efficient streaming models.
 
 \section{Gold panning}
+\label{taxonomy/gold-panning}
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Let us start by describing a situation in which we would like to execute many queries.
 To avoid mixing up the details of streaming with the details of the example, we initially assume that the dataset fits in memory as a list and ignore details about efficiency.
@@ -131,7 +132,7 @@ priceOverTime stock =
 Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
 Whether we think of this program as one query or two is inconsequential; the important part is that the program as we have written it requires two traversals over the \Hs/timeprices/ list.
-List programs can traverse the same list many times, but later \REF{taxonomy/pull} we shall see how this is a problem for streaming programs.
+List programs can traverse the same list many times, but later \autoref{taxonomy/pull} we shall see how this is a problem for streaming programs.
 
 Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
 Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
@@ -218,9 +219,8 @@ digraph G {
 \label{figs/procs/priceOverTime-priceOverMarket}
 \end{figure}
 
-\section{The basics}
-
-\subsection{Pull streams}
+\section{Pull streams}
+\label{taxonomy/pull}
 
 The first streaming model we will look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
 The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
@@ -306,11 +306,11 @@ priceOverTime_pull_bad stock = do
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
 By the time we go to compute the correlation and try to read the \Hs/timeprices/ stream again, it has already been read.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
-In fact, later \REF{polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
+In fact, later \autoref{taxonomy/polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
 
 Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
 When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
-Rewinding would allow this program to compute the correct result, but the file would have to be read from disk again.
+Rewinding would allow this program to compute the correct result, but the file would be read from disk again.
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In this program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
@@ -375,7 +375,8 @@ Pull streams are not helping us execute multiple queries at a time.
 If we wish to execute multiple queries in a single-pass, we need to be able to mention streams multiple times.
 To execute these shared streams, each time we read from a shared stream, we need some way to distribute this element among all of the shared stream's consumers.
 
-\subsection{Push streams}
+\section{Push streams}
+\label{taxonomy/push}
 
 \emph{Push streams} are the conceptual dual of pull streams: rather than the consumer trying to pull from the producer, in push streams the producer pushes to the consumer.
 As we shall see, the advantage of push streams is that they enable stream elements to be shared among multiple consumers: a producer can push the same value to multiple consumers.
@@ -383,7 +384,7 @@ As we shall see, the advantage of push streams is that they enable stream elemen
 A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs/IO/ effect, for example writing to a file, or writing to some mutable state.
 This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
-This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual, but later \REF{taxonomy/polar} we shall reunite the two.
+This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual.
 
 \begin{lstlisting}
 data Push a r = Push
@@ -447,7 +448,7 @@ As before, we can use this @foldl@ function to implement @correlation@ and @regr
 In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
 The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
-We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \REF{taxonomy/polarised}.
+We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \autoref{taxonomy/polarised}.
 
 \begin{lstlisting}
 dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
@@ -490,21 +491,21 @@ At every step the combinator must choose which stream to pull from, pulling on t
 With push streams, a consumer cannot choose which input stream to pull from, or when: the consumer is a function waiting to be called with its input, and must always be ready to accept values from it as they come.
 
 This failure to join two streams by date is a symptom of a more general limitation of push streams.
-Push streams cannot implement @zip@, which pairs two inputs together, because the consumer must control the computation to alternate between each input.
+Push streams also cannot implement @zip@, which pairs two inputs together, because the consumer must control the computation to alternate between each input.
 Except for one special case, push streams do not support multiple inputs.
 The special case is that a push stream can react to multiple inputs in the order they are received.
 As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
-In certain circumstances, however, we can control the order externally and use this merge to append two streams; see \REF{related/push-append}.
+In certain circumstances we can control the push order and use this merge to append two streams; see \REF{related/push-append}.
+Because the push order is controlled outside of the merge, appending two streams in this way separates the append logic from the merge combinator which defines the appended stream.
 
 % Pull and push streams are the two most fundamental stream types.
-Stream sharing allows push streams to support multiple queries, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
-Soon \REF{taxonomy/polarised} we shall combine the two together in the form of \emph{polarised streams}, to support multiple inputs and multiple queries.
-Before looking at more expressive models, however, we will look at what overhead is involved in these push and pull models, and some methods to reduce it.
-
 \section{Polarised streams}
+\label{taxonomy/polarised}
 
-We cannot mention pull streams multiple times or share the elements among multiple pull consumers.
-We can, however, share the elements of a pull stream among one push consumer and one pull consumer.
+Stream sharing allows push streams to support multiple queries via sharing, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
+Combining pull and push streams in the form of \emph{polarised streams} allows us to support multiple inputs and multiple queries.
+
+Although we cannot share the elements of a pull stream among multiple pull consumers, we can share the elements of a pull stream among one push consumer and one pull consumer.
 We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull).
 
 \begin{lstlisting}
@@ -551,17 +552,42 @@ dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
 \end{lstlisting}
 
 % There is very little change between the two versions of @dup_ioi@
-We can implement other combinators for the new representation similarly.
+Modifying @dup_ioi_ignore_result@ to work on the new representation only required changing the constructors for the stream and adding the return value; other combinators are modified similarly.
 We use the same naming convention for suffixes, for example @map_i@ for mapping pull streams, and @map_o@ for contravariantly mapping push streams.
-When consuming a pull stream by folding over it, we must return the fold result as well as the stream result, as in the following type signature for @foldl_i@.
+When consuming a pull stream by folding over it, we must return the fold result as well as the stream result.
+The type signature for @foldl_i@ changes to include the stream result; the implementation change is similar to the change for @dup_ioi@.
+
 \begin{lstlisting}
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
 \end{lstlisting}
 
-We can duplicate streams when at least one consumer is a push stream.
+We can also convert a pull stream to a push stream.
+We call this operation \emph{draining} the pull stream, where a dr.
+
+\begin{lstlisting}
+drain_io :: Pull a r -> Push a r' -> IO (r, r')
+drain_io (Pull pull_a) push_a = loop
+ where
+  loop = do
+    v <- pull_a
+    case v of
+     Left a -> do
+      push push_a a
+     Right r -> do
+      r' <- done push_a
+      return (r, r')
+\end{lstlisting}
+
+Draining
+
+To convert the other direction and turn a push stream into a pull stream, we would
+
+
+With @dup_ioi@ and @dup_ooo@ we saw that we can duplicate streams when at least one consumer is a push stream.
 Joining streams together by date is the dual: at least one producer must be a pull stream.
 Recall that the @join@ combinator required both inputs to be pull streams, and could not be implemented with push streams alone.
 This corresponds to the following type with our new stream representation.
+
 
 \begin{lstlisting}
 join_iii :: (a -> b -> Ordering) -> PullResult a r -> PullResult b r' -> IO (PullResult (a,b) (r,r'))
@@ -573,12 +599,10 @@ We can also join two streams when one is pull and the other is push.
 join_ioo :: (a -> b -> Ordering) -> PullResult a r -> Push (a,b) r'   -> IO (Push b (r,r'))
 \end{lstlisting}
 
-We can convert a pull stream to a push stream, but not vice versa.
-Talk about @drain@.
-
 We can execute the two @priceAnalysis@ queries, @priceOverTime@ and @priceOverMarket@, by mixing pull and push streams.
 This mixture of pull and push streams is called \emph{polarised streams}~\cite{lippmeier2016polarized}.
 We proceed by assigning a polarity of push or pull to each stream in the program, starting with the input streams.
+
 The @priceOverMarket@ query joins the input streams together, which requires at least one input
 We wish to join the input streams together, so they must be pull streams.
 Both inputs must be pull streams because we wish to join them together, which .

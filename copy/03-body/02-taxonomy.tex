@@ -277,15 +277,40 @@ Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
 
 
-\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples; implementations are available in \REF{appendix/taxonomy}.
-The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list implementations.
-The \Hs/join/ combinator must initialise some mutable state before returning its stream, so its result is also wrapped in \Hs/IO/.
+\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples.
+The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions; implementations are available in \REF{appendix/taxonomy}.
+
+The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
+Both input streams are sorted by some key, which the comparison function extracts and compares.
+If the keys are equal, \Hs/join/ returns the pair.
+Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+In our @priceOverMarket@ example the files are sorted by date and the comparison function compares the dates.
+We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
+% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
+% The join function takes the two input streams, as well as functions to extract the key from each input record.
+
 
 \begin{figure}
 \begin{lstlisting}
 correlation :: Pull (Double,Double) -> IO Double
 regression  :: Pull (Double,Double) -> IO Line
-join        :: (a -> b -> Ordering) -> Pull a -> Pull b -> IO (Pull (a,b))
+
+join        :: (a -> b -> Ordering) -> Pull a -> Pull b -> Pull (a,b)
+join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
+   a <- pull_a
+   b <- pull_b
+   go a b)
+ where
+  go (Just a) (Just b)
+   = case comparekey a b of
+      EQ -> return (Just (a,b))
+      LT -> do
+        a' <- pull_a
+        go a' b
+      GT -> do
+        b' <- pull_b
+        go a b'
+  go _ _ = return Nothing
 \end{lstlisting}
 \caption{Pull stream combinators}
 \label{figs/impl/pull/combinator}
@@ -348,18 +373,10 @@ We can use the same function \Hs/regressionCorrelation_pull/ that we used above.
 \begin{lstlisting}
 priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
 priceOverMarket_pull stock index =
-  joined    <- Pull.join (\s i   -> time s `compare` time i) stock index
-  let prices = Pull.map  (\(s,i) -> (price s, price i))        joined
+  let joined = Pull.join (\s i   -> time s `compare` time i) stock index
+  let prices = Pull.map  (\(s,i) -> (price s, price i))      joined
   regressionCorrelation_pull prices
 \end{lstlisting}
-
-
-The \Hs/join/ in this query executes by reading a value from each input stream, and comparing the times.
-If the times are equal, \Hs/join/ gives the pair of values to \Hs/correlation/, before reading new values from both streams.
-Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
-We can perform this join in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
-% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
-% The join function takes the two input streams, as well as functions to extract the key from each input record.
 
 We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
 
@@ -561,8 +578,9 @@ The type signature for @foldl_i@ changes to include the stream result; the imple
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
 \end{lstlisting}
 
-We can also convert a pull stream to a push stream.
-We call this operation \emph{draining} the pull stream, where a dr.
+We can also convert a pull stream to a push stream: we call this operation \emph{draining} the pull stream.
+To drain a stream, we loop over all the values in the pull stream and push each one into the push stream.
+At the end, we return a pair of the results of both streams.
 
 \begin{lstlisting}
 drain_io :: Pull a r -> Push a r' -> IO (r, r')
@@ -578,26 +596,65 @@ drain_io (Pull pull_a) push_a = loop
       return (r, r')
 \end{lstlisting}
 
-Draining
+We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@.
 
-To convert the other direction and turn a push stream into a pull stream, we would
+\begin{lstlisting}
+dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
+dup_ioo pull0 push1 push2 = drain_io pull0 (dup_ooo push1 push2)
+\end{lstlisting}
 
-
-With @dup_ioi@ and @dup_ooo@ we saw that we can duplicate streams when at least one consumer is a push stream.
-Joining streams together by date is the dual: at least one producer must be a pull stream.
+With @dup_ioi@, @dup_ioo@ and @dup_ooo@ we saw that we can duplicate a stream when at least one consumer is a push stream.
+Joining multiple input streams together, as in the @join@ combinator, is the dual: at least one producer must be a pull stream.
 Recall that the @join@ combinator required both inputs to be pull streams, and could not be implemented with push streams alone.
-This corresponds to the following type with our new stream representation.
-
-
-\begin{lstlisting}
-join_iii :: (a -> b -> Ordering) -> PullResult a r -> PullResult b r' -> IO (PullResult (a,b) (r,r'))
-\end{lstlisting}
-
-We can also join two streams when one is pull and the other is push.
+With the polarised naming convection, this version of @join@ is called @join_iii@.
+Because the input streams may have result values we wish to preserve, we must ensure that the joined stream's result contains the results of both inputs.
+To compute both results, when one stream ends before the other we must drain the stream with leftovers until we reach the result.
+Other than the results, the implementation of @join_iii@ follows very closely the implementation of @join@.
 
 \begin{lstlisting}
-join_ioo :: (a -> b -> Ordering) -> PullResult a r -> Push (a,b) r'   -> IO (Push b (r,r'))
+join_iii :: (a -> b -> Ordering)
+         -> PullResult a r
+         -> PullResult b r'
+         -> PullResult (a,b) (r,r')
+join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
+   a <- pull_a
+   b <- pull_b
+   go a b)
+ where
+  go (Left a) (Left b)
+   = case comparekey a b of
+      EQ -> return (Left (a,b))
+      LT -> do
+        a' <- pull_a
+        go a' b
+      GT -> do
+        b' <- pull_b
+        go a b'
+  go (Right a) (Right b) = return (Right (a,b))
+  go (Left _) (Right b) = do
+    a' <- pull_a
+    go a' (Right b)
+  go (Right a) (Left _) = do
+    b' <- pull_b
+    go (Right a) b'
 \end{lstlisting}
+
+
+We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
+Conceptually, this has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
+The type signature for @join_ioo@ follows; note that the output push stream is given as an argument, while the input push stream is the return value.
+
+\begin{lstlisting}
+join_ioo :: (a -> b -> Ordering)
+         -> PullResult a r
+         -> Push (a,b) r'
+         -> Push b (r,r')
+\end{lstlisting}
+
+The returned push stream accepts values of type @b@.
+When a new value is pushed, it repeatedly reads values from the input pull stream until the pulled value is equal to or greater than the pushed value using the given ordering function to compare the keys.
+When the ordering function says the two keys are equal, it pushes the pair to the output stream.
+Other multiple-input combinators can be implemented similarly, by executing
 
 We can execute the two @priceAnalysis@ queries, @priceOverTime@ and @priceOverMarket@, by mixing pull and push streams.
 This mixture of pull and push streams is called \emph{polarised streams}~\cite{lippmeier2016polarized}.

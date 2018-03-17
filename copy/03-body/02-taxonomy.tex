@@ -649,6 +649,24 @@ join_ioo :: (a -> b -> Ordering)
          -> PullResult a r
          -> Push (a,b) r'
          -> Push b (r,r')
+join_ioo comparekey (PullResult pull_a) push_ab = Push push_b done_b
+ where
+  push_b b = do
+    a <- pull_a
+    case a of
+     Left a' -> case comparekey a b of
+      EQ -> push push_ab (a,b)
+      LT -> push_b b
+      GT -> return ()
+     Right _ -> return () 
+
+  done_b = do
+    a <- pull_a
+    case a of
+     Left _ -> done_b
+     Right a' -> do
+      b <- done push_ab
+      return (a,b)
 \end{lstlisting}
 
 The returned push stream accepts values of type @b@.

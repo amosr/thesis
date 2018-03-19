@@ -158,7 +158,7 @@ To match day against day and discard any days missing from either input, we join
 We then extract both prices from the joined result and compute the regression and correlation.
 Again, this function requires two traversals of the \Hs/prices/ list.
 
-Since both analyses provide useful information, we wish to perform both.
+Since both analyses provide useful information, we will perform both.
 This is a simple matter of constructing a pair.
 
 \begin{lstlisting}
@@ -530,7 +530,8 @@ Because the push order is controlled outside of the merge, appending two streams
 \label{taxonomy/polarised}
 
 Stream sharing allows push streams to support multiple queries via sharing, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
-Combining pull and push streams in the form of \emph{polarised streams} allows us to support multiple inputs and multiple queries.
+Combining pull and push streams in the form of \emph{polarised streams} allows us to support multiple inputs and multiple queries~\citep{lippmeier2016polarized}.
+
 
 Although we cannot share the elements of a pull stream among multiple pull consumers, we can share the elements of a pull stream among one push consumer and one pull consumer.
 We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull).
@@ -701,7 +702,6 @@ For @priceOverMarket@, we can join both pull streams and map over it.
 To compute both regression and correlation, one of the folds must be a push; in this case either consumer can be pull or push and the decision is inconsequential.
 There are many ways to assign polarities to this program, but they all compute the same result.
 
-
 \begin{figure}
 \center
 \begin{dot2tex}[dot]
@@ -749,62 +749,144 @@ digraph G {
 \end{figure}
 
 \autoref{figs/impl/polar/priceOverTime-priceOverMarket} shows the implementation of this polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/.
-This implementation is more complicated than the list version, but it does execute in a streaming single-pass.
-The control flow is represented backwards in the places where push streams are used and forwards where pull streams are used.
+This streaming single-pass implementation requires more complex control-flow than the list version.
+Stream elements flow ``backwards'' from function result to argument in the places where push streams are used, and flow ``forwards'' where pull streams are used.
+When a pull stream is duplicated into a push stream, the stream results for the push stream are nested inside the resulting pull stream; recovering these results requires pattern-matching on the nested tuple.
 
 \begin{figure}
 \begin{lstlisting}
-priceOverTime_polar :: IO (Push Record (Line,Double))
-priceOverTime_polar = do
-  reg   <- regression_o
-  cor   <- correlation_o
-  let cm = map_o (\r -> (daysSinceEpoch (time r), price r))
-                 (Push.dup_ooo reg cor)
-  return cm
+priceOverTime_o :: IO (Push Record (Line,Double))
+priceOverTime_o = do
+  pot_regres    <- regression_o
+  pot_correl    <- correlation_o
+  let folds      = Push.dup_ooo reg cor
+  let timeprices = map_o (\r -> (daysSinceEpoch (time r), price r)) folds
+  return timeprices
 
-priceAnalyses_polar :: PullResult Record r -> PullResult Record r'
-                    -> IO ((Line,Double), (Line, Double))
-priceAnalyses_polar stock index = do
-  pot        <- priceOverTime_push
-  pom_regres <- regression_o
-  let stock'  = dup_ioi stock pot
-  let joined  = join_iii (\s i   -> time s `compare` time i) stock' index
+priceOverMarket_ii :: PullResult Record r -> PullResult Record r'
+                   -> IO (Line,(Double,(r,r')))
+priceOverMarket_ii stock index = do
+  let joined  = join_iii (\s i   -> time s `compare` time i) stock index
   let prices  = map_i    (\(s,i) -> (price s, price i))      joined
+  pom_regres <- regression_o
   let prices' = dup_ioi prices pom_regres
-  result     <- correlation_i prices'
+  correlation_i prices'
+
+priceAnalyses_ii :: PullResult Record r -> PullResult Record r'
+                 -> IO ((Line,Double), (Line, Double))
+priceAnalyses_ii stock index = do
+  pot        <- priceOverTime_o
+  let stock'  = dup_ioi stock pot
+  result     <- priceOverMarket_ii stock' index
   case result of 
-    (potC,(potR,((),((),(pomC,pomR)) ->
+    (potC,(potR,((r,(pomC,pomR)),r'))) ->
       return ((potC,potR), (pomC,pomR))
 \end{lstlisting}
 \caption[Polarised implementation of priceOverTime and priceOverMarket]{polarised implementation of \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
 \label{figs/impl/polar/priceOverTime-priceOverMarket}
 \end{figure}
 
-This mixture of pull and push streams is called \emph{polarised streams}~\cite{lippmeier2016polarized}.
+Assigning polarities is a \emph{global analysis}: we need to inspect the dependency graph containing all queries, rather than looking at each query or each combinator in isolation.
+If we add a new query to \Hs/priceAnalyses/, we need to consider the existing polarities when assigning polarities to the new query.
+Suppose we have an \emph{industry index} which, like the market index, contains average prices of representative subset of stocks.
+For lists, we can reuse the @priceOverMarket@ query to compute how closely our stock follows the industry.
+For polarised streams, we cannot reuse @priceOverMarket_ii@ in @priceAnalyses_ii@ to compare the stock against both indices, because this would require duplicating the stock stream into two pull consumers.
+We need to implement another version of the same query with different polarities: @priceOverMarket_oi@.
+Polarised streams are not composible and can require code duplication.
 
-\subsection{Zipping and unzipping}
-If we wrote correlation as taking two input pull streams, we couldn't do it because it requires a cycle.
+\subsection{Diamonds and zips}
+
+Recall that the definition of \Hs/correlation/ takes a list of pairs of doubles and performs a fold over them.
+We could have also written \Hs/correlation/ to take two lists of doubles and pairing the elements together before folding them.
+When correlating values from the same input list, the list-of-pairs version requires one fewer intermediate list; when correlating values from different lists, the pair-of-lists version is slightly more convenient.
+Which version is preferable depends on the situation, but the difference is usually quite minor.
+
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock;
+  stock -> pot_dup[style="*-*"];
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_priceOverTime  {
+    lblstyle="left";
+    label="priceOverTime_c";
+    pot_dup [label="dup_ioi"];
+    pot_time [label="map_i time"];
+    pot_price [label="map_o price"];
+    pot_dup -> pot_time[style="*-*"];
+    pot_dup -> pot_price[style="o-o"];
+
+    subgraph cluster_correlation {
+    // lblstyle="below=4cm";
+      lblstyle="above";
+      label="correlation";
+      potc_zip [label="zip_ioo"];
+      pot_cor [label="foldl_o"];
+      potc_zip -> pot_cor[style="o-o"];
+    };
+    pot_time -> potc_zip[style="*-*"];
+    pot_price -> potc_zip[style="o-o"];
+  };
+}
+\end{dot2tex}
+\caption[Polarised dependency graph for priceOverTime correlation using zip]{polarised dependency graph for priceOverTime correlation using with zip.}
+\label{figs/polar/correlation-zip}
+\end{figure}
+\begin{figure}
+\begin{lstlisting}
+zip_ioo :: PullResult a r -> Push (a,b) r' -> Push b (r,r')
+zip_ioo (Pull pull_a) push_ab = Push push_b done_b
+ where
+  push_b b = do
+   a <- pull_a
+   case a of
+    Left a' -> push push_ab (a',b)
+    Right _ -> return ()
+  done_b = do
+   a <- pull_a
+   case a of
+    Left _  -> done_b
+    Right r -> do
+     r' <- done push_ab
+     return (r,r')
+\end{lstlisting}
+\caption[polarised implementation of \Hs/zip_ioo/]{polarised implementation of \Hs/zip_ioo/}
+\label{figs/polar/impl/zip_ioo}
+\end{figure}
+
+
+With polarised streams, we cannot execute @priceOverTime@ with the pair-of-lists version, although we can assign polarities.
+\autoref{figs/polar/correlation-zip} shows a polarised graph for a version of @priceOverTime@ that only computes the correlation and uses zip.
+The @zip_ioo@ combinator is implemented in \autoref{figs/polar/impl/zip_ioo} similarly to the @join_ioo@ combinator, with an input pull, an input push, and an output push.
+When the input push stream receives a value, @zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
+
+Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
+The polarised diagram shows \emph{elements} flowing down, but the \emph{control} flow for push streams is upwards.
+With downward arrows for pull streams and upward arrows for push streams, there is a cycle between @dup_ioi@, @zip_ioo@ and the two maps.
+
+The following implementation also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
+Unfortunately, this implementation will not compute a result.
+All the combinators are \emph{passive}, responding to push or pull requests but not actively pulling or pushing.
+The @zip_ioo@ combinator waits for values \TODO{}.
+
+
 
 \begin{lstlisting}
-correlation_ii :: Pull Double r -> Pull Double r' -> IO (Double, (r,r'))
-correlation_ii stream_a stream_b = correlation_i (zip_iii stream_a stream_b)
-\end{lstlisting}
+priceOverTime_c :: PullResult Record r -> IO (Double, r)
+priceOverTime_c stock =
+  let stock'  = dup_ioi stock prices
+      times   = map_i time stock'
+      prices  = map_o price cor
+      cor     = correlation_io times
+  in cor
 
-% When implementing zip for this pull representation, we have to decide what to do with the results of the input streams.
-% Normally, zip is able to ``short-circuit'' and finish processing once either input finishes.
-% Taking the stream results into account, this means the stream result is whichever finishes first.
-% The type of this short-circuiting zip would be the following.
-% 
-% \begin{lstlisting}
-% zip_iii_shortcircuit :: Pull a r -> Pull b r' -> Pull (a,b) (Either r r')
-% \end{lstlisting}
-% 
-% When the input streams have meaningful result values which we wish to use, the zip implementation reads and throws away the values from the longer stream to capture the result from both streams.
-% The type signature tells us about the execution strategy.
-% 
-% \begin{lstlisting}
-% zip_iii :: Pull a r -> Pull b r' -> Pull (a,b) (r,r')
-% \end{lstlisting}
+correlation_io :: PullResult Double r -> Push Double (Double, r)
+correlation_io stream_a _b = zip_ioo stream_a correlation_o
+\end{lstlisting}
 
 % 
 % 

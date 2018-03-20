@@ -1,58 +1,3 @@
-\section{Kahn process network motivation}
-
-Hopefully this query will tell us something interesting.
-Perhaps even both of these queries will tell us something interesting, so it would be nice to be able to compute both of them at the same time.
-Ideally, we could write the program to compute both like so:
-
-The @join@ inside @priceOverMarket@ pulls from its two inputs depending on which has the smaller key, while the @correlation@ inside @priceOverTime@ repeatedly pulls from the @stock@ stream.
-We must coordinate between the @join@ and the @correlation@, so that @correlation@ only receives a new value when @join@ agrees to read a new value.
-We must also be careful not to let one consumer get too far ahead of the other, because if one consumer gets ahead of the other we must store all the unconsumed elements in memory to allow the other consumer to catch up.
-
-
-
-We could implement a program which computes both queries as a concurrent process network.
-Each combinator inside each query, as well as each input stream, would become a communicating process in the network.
-The process network for both queries is shown in \autoref{figs/procs/priceOverTime-priceOverMarket}.
-Processes communicate through channels which they can pull values from, waiting until values are available, or push values to.
-By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
-When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
-The concurrent process network will naturally find the right coordination between the processes.
-
-Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
-All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
-If the sending process has performed any kind of computation on the integer, the sending process would most likely have the integer stored in a register, where it can be operated on directly by the processor.
-When the sending process wishes to send this value to the other process, it must lock the channel to prevent other writers or premature reads, copy the integer to memory where it can be read by the other process, and unlock the channel.
-Next, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
-In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
-
-Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
-This chunking reduces the cost of sending messages, but cannot eliminate it altogether --- the processes still need to communicate at least once.
-The size of the chunks determines how many communications are saved, so larger chunks mean less communication overhead.
-However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
-Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
-Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
-
-Fine-grained processes are desirable, because they allow us to write smaller processes and compose them together.
-This compositional style is a large part of the appeal of functional programming.
-Fine-grained processes tend to perform little computational work and a lot of communication.
-With fine-grained processes we may expose too much parallelism, leading to synchronisation and scheduling overheads that dominate the runtime \cite{chen1990impact}.
-
-% This discrepancy means each processor must swap between several processes, which takes time.
-% Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
-% We must find a middle-ground between too fine-grained processes.
-
-% \cite{chen1990impact}
-% "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."
-% "The most important characteristic is that, without the near-optimal scheme, performance at the operation level and at the statement level is actually worse than at the loop-iteration level."
-% "unless we have a very sophisticated scheduling strategy, exploiting very fine grain parallelism with only a limited amount of resources can yield poorer results than we have anticipated"
-
-% In \cite{vrba2009evaluating} it ... too much parallelism and not enough work.
-
-% Too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
-% In fact, the contrary is often true.
-% \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
-
-
 \input{figs/runtime/gold-panning.tex}
 
 
@@ -205,16 +150,6 @@ data Pull a = IO (Maybe a)
 Mixture of push and pull, but requires manually classifying streams in the process network as push or pull.
 As with push streams on their own, if we embed push stream transformations inside polarized dataflow, we still need to write the push streams in an awkard, backwards way.
 Cannot fuse \lstinline/unzip . zip/, which might not seem useful because it is superfluous, but it is possible that a larger program would have this somewhere inside it.
-
-\subsection{Kahn process networks}
-
-Push streams require a computation to have one producer which pushes to arbitrarily many consumers, which in turn may push to many consumers.
-This structure is a tree, rooted at the top-most producer.
-Pull streams, likewise, can only have one consumer and many producers: again a tree, this time rooted at the bottom-most consumer.
-Programs, however, are not trees; they are \emph{networks}, and they can mention the same variables as many times as they want.
-We use abstract syntax trees to represent programs, but in order to fit a network into a tree we must prune the `bad' branches; in an AST we refer to variables by name rather than occurrence.
-It feels as though we are constantly butting our heads against the disconnect between a program's true meaning and the tree representation we are so used to.
-
 
 \section{Many queries}
 
@@ -465,6 +400,179 @@ We take the processes in a Kahn Process Network, and convert it into a single pr
 % It is quite important, then, that our compound query does not take longer to execute than the original queries, combined.
 % In fact, we would like our compound query to execute in almost as little time as the slowest query on its own.
 % What we would like is not always achievable, but it can be helpful to have something to strive for.
+
+
+
+\section{Streaming overhead}
+% One advantage of these representations is that we get a form of fusion for free, as part of general purpose optimisations.
+% For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
+% This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
+% With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
+
+This section looks at the streaming overhead involved in the original pull stream representation.
+For simple combinators like map, this representation works well.
+The following function applies two functions to the elements in a stream.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g stream_a
+ = let stream_b = Pull.map f stream_a
+       stream_c = Pull.map g stream_b
+   in  stream_c
+\end{lstlisting}
+
+We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
+Fortunately, after some optimisation, both programs incur the same amount of overhead.
+To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
+After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_b = do
+    a <- pull_a
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (f a')))
+  pull_c = do
+    b <- pull_b
+    return (case b of
+             Nothing -> Nothing
+             Just b' -> (Just (g a')))
+\end{lstlisting}
+
+When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
+When there is a stream element to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
+This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
+Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
+
+To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
+Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression.
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    return (case (case a of
+                   Nothing -> Nothing
+                   Just a' -> (Just (f a')))
+             Nothing -> Nothing
+             Just b' -> (Just (g b')))
+\end{lstlisting}
+
+The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
+We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression.
+
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (g (f b))))
+\end{lstlisting}
+
+By applying some standard program transformations, we have combined the two maps into one, removing the overhead of additional constructors.
+Optimising compilers can perform comparable transforms as part of its suite of general purpose optimisations.
+
+\subsection{Skipping elements}
+
+The key to the above optimisation was transforming the program so that construction and case analysis were next to each other.
+The harder it is to put the two next to each other, the less likely it is that an optimising compiler will be able to remove the overhead automatically.
+Consider the definition of filter for pull streams.
+
+\begin{lstlisting}
+filter :: (a -> Bool) -> Pull a -> Pull a
+filter predicate (Pull pull_a) = Pull pull_a'
+ where
+  pull_a' = do
+    v <- pull_a
+    case v of
+     Nothing -> return Nothing
+     Just a  | predicate a -> return (Just a)
+             | otherwise   -> pull_a'
+\end{lstlisting}
+
+In the definition of @pull_a'@ we read from the input stream, @pull_a@, and check whether it is a stream element and whether it satisfies the predicate.
+When the predicate is satisfied we return the element; when the predicate is unsatisfied we call @pull_a'@, which reads from the input stream again.
+
+The following function maps filtered elements (\Hs/Pull.map f (Pull.filter predicate stream_a)/), after inlining the definitions of @filter@ and @map@ and unwrapping the pull streams.
+
+\begin{lstlisting}
+mapfilter :: (a -> b) -> (a -> Bool) -> Pull a -> Pull b
+mapfilter f predicate (Pull pull_a) = Pull pull_map
+ where
+  pull_filter = do
+    v <- pull_a
+    case v of
+     Nothing -> return Nothing
+     Just a  | predicate a -> return (Just a)
+             | otherwise   -> pull_a'
+  pull_map = do
+    a <- pull_filter
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (f a')))
+\end{lstlisting}
+
+In the previous example we inlined the pull function into its use-site; the analogous transform here would be to inline @pull_filter@ into @pull_map@.
+
+This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
+Recursive functions like this are much harder to inline.
+More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:coaxing}.
+However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
+
+One of the problems with the pull-streams was filtering.
+The recursive definition of filter interfered with inlining.
+This is because the consumer is likely to be recursive as well, and inlining a recursive function into another recursive function is difficult.
+The solution offered by \citet{coutts2007stream} is to allow the definition of filter to return a value saying ``I haven't found it yet''.
+The consumer will then recursively rerun the filter until it is able to produce a value.
+In this way, filter no longer needs to be defined recursively, by telling its caller that it needs to be called again.
+
+For this representation, we introduce a new datatype @Step@ which is either a produced value, a skipped value, or the end of the stream.
+
+\begin{lstlisting}
+data PullSkip a
+  = PullSkip
+  { pullSkip :: IO (Step a) }
+
+data Step a
+  = Yield a | Skip | Done
+\end{lstlisting}
+
+All these different stream representations are just ways to coax the general purpose compiler optimisations into producing good code.
+So much time is spent, and wasted, finding the right representation that happens to fit the compiler optimisations we have.
+For the Java virtual machine, push streams with continuations are the best representation to convince it to produce tight loop bodies.
+For the Glasgow Haskell Compiler (GHC), co-iterative pull streams are the best representation because they allow filters to be fully inlined.
+But we know exactly the kind of code we want to produce, so why not instead of relying on the general purpose optimisations, just produce the right code to start with.
+
+This is the motivation behind \citet{kiselyov2016stream}'s work on stream fusion, which uses staged compilation to ensure that the right code is produced, and allows type-level guarantees that fusion will occur.
+However, their streams are still fundamentally pull-based, which means they are unable to express sharing between streams, or unzipping streams.
+
+\subsection{All this boxing and unboxing}
+\TODO{move explanation of boxing, unboxing, SpecConstr, and so on from process/extraction/boxing and process/extraction/endpoints.}
+
+To convert a vector to a pull stream, we need to keep track of the current index across calls to the pull function.
+We can achieve this with a mutable reference.
+
+\begin{lstlisting}
+pullOfVector :: Vector a -> IO (Pull a)
+pullOfVector vector = do
+  ref <- newIORef 0
+  return (Pull (pull_a ref))
+ where
+  pull_a ref = do
+    index <- readIORef ref
+    writeIORef ref (index + 1)
+    if index < Vector.length vector
+      then return (Just (Vector.index vector index))
+      else return Nothing
+\end{lstlisting}
+
+This mutable reference is boxed. \TODO{talk about boxed mutable reference}
 
 
 

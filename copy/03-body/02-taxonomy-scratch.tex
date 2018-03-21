@@ -404,10 +404,6 @@ We take the processes in a Kahn Process Network, and convert it into a single pr
 
 
 \section{Streaming overhead}
-% One advantage of these representations is that we get a form of fusion for free, as part of general purpose optimisations.
-% For starters, because we are operating over an element-wise representation of the stream, composing streams together naturally happens per-element.
-% This means that even before any optimisations occur, we do not need to worry about whether the stream will be too large to fit in memory --- it will never be held entirely in memory in the first place.
-% With large streams, the memory usage is very important: it is the difference between the program running correctly, or running out of space and crashing.
 
 This section looks at the streaming overhead involved in the original pull stream representation.
 For simple combinators like map, this representation works well.

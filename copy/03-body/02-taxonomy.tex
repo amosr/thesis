@@ -392,6 +392,78 @@ Pull streams are not helping us execute multiple queries at a time.
 If we wish to execute multiple queries in a single-pass, we need to be able to mention streams multiple times.
 To execute these shared streams, each time we read from a shared stream, we need some way to distribute this element among all of the shared stream's consumers.
 
+\subsection{Streaming overhead}
+
+This section looks at the streaming overhead involved in the pull stream representation.
+For simple combinators like map, this representation works well.
+The following function applies two functions to the elements in a stream.
+
+\begin{lstlisting}
+map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
+map2 f g stream_a
+ = let stream_b = Pull.map f stream_a
+       stream_c = Pull.map g stream_b
+   in  stream_c
+\end{lstlisting}
+
+We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
+Fortunately, after some optimisation, both programs incur the same amount of overhead.
+To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
+After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_b = do
+    a <- pull_a
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (f a')))
+  pull_c = do
+    b <- pull_b
+    return (case b of
+             Nothing -> Nothing
+             Just b' -> (Just (g a')))
+\end{lstlisting}
+
+When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
+When there is a stream element to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
+This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
+Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
+
+To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
+Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression.
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    return (case (case a of
+                   Nothing -> Nothing
+                   Just a' -> (Just (f a')))
+             Nothing -> Nothing
+             Just b' -> (Just (g b')))
+\end{lstlisting}
+
+The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
+We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression.
+
+
+\begin{lstlisting}
+map2 f g (Pull pull_a) = Pull pull_c
+ where
+  pull_c = do
+    a <- pull_a
+    return (case a of
+             Nothing -> Nothing
+             Just a' -> (Just (g (f b))))
+\end{lstlisting}
+
+By applying some standard program transformations, we have combined the two maps into one, removing the overhead of additional constructors.
+Optimising compilers can perform comparable transforms as part of its suite of general purpose optimisations.
+This is discussed further in \REF{related/fusion}.
+
 \section{Push streams}
 \label{taxonomy/push}
 
@@ -915,19 +987,101 @@ Instead we must hand-optimise the program, combining the duplicate, maps and zip
 
 \section{Kahn process networks}
 
-Pull and push and polarised streams are all about where the computation is controlled.
+The difference between pull, push and polarised streams is where the computation is controlled.
 In pull streams the consumer controls the computation.
 In push streams the producer controls the computation.
 In polarised streams the active combinator, which may be a pull consumer and a push producer, controls the computation.
-All these systems have one place controlling the computation, which is the source of the limitations of pull and push streams.
+All these systems have one place controlling the computation.
+When we have multiple queries to execute, it can be hard to choose which one should control the computation.
 
-We could implement a program which computes both queries as a concurrent process network.
-Each combinator inside each query, as well as each input stream, would become a communicating process in the network.
-The process network for both queries is shown in \autoref{figs/procs/priceOverTime-priceOverMarket}.
-Processes communicate through channels which they can pull values from, waiting until values are available, or push values to.
-By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
-When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
-The concurrent process network will naturally find the right coordination between the processes.
+An alternate way to execute multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}, a kind of concurrent process network.
+Each combinator inside each query, as well as each input stream, becomes a communicating process in the network.
+Processes communicate through input channels which they can pull values from, or output channels which they can push values to.
+Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
+
+Concurrent programs can be hard to write and debug because the scheduler, which interleaves execution of the processes, appears to behave non-deterministically from the perspective of the processes.
+Programs may give different results for different schedules.
+Kahn process networks are a restricted form of process network that ensures processes execute deterministically, regardless of how processes are scheduled \cite{kahn1976coroutines}.
+Deterministic evaluation is achieved by imposing restrictions on how processes communicate; scheduling decisions cannot be observed.
+The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels can only be written to by a single process.
+The first restriction ensures processes cannot communicate via shared mutable state: if one process is reading from mutable state while another is writing a new value, the reading process can get the old value or new value, depending on how the processes are scheduled.
+Processes with shared mutable state can non-deterministically compute different results.
+Similarly, a process cannot \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
+Finally, only one process can push to a channel, because if two processes tried to push at the same time, the scheduler would have to decide the order the values were received.
+
+With Kahn process networks, we can implement a process which joins two streams sorted by date, and we can share streams among multiple consumers by broadcasting values to multiple output channels.
+We can also convert both push streams and pull streams to processes.
+
+\begin{figure}
+\begin{lstlisting}
+data Channel a
+
+data Network a
+instance Monad Network
+
+data Result  a
+instance Applicative Result
+
+map         :: (a -> b) -> Channel a
+            -> Network (Channel b)
+join        :: (a -> b -> Ordering) -> Channel a -> Channel b
+            -> Network (Channel (a,b))
+foldl       :: (a -> b -> a) -> a -> Channel b
+            -> Network (Result a)
+
+execute     :: Network (Result a) -> IO a
+\end{lstlisting}
+\caption[Types and combinators for Kahn process networks]{types and combinators for Kahn process networks.}
+\label{figs/kpn/combinators}
+\end{figure}
+
+\autoref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
+We leave discussion of implementation details for \REF{kpn}, and for now focus solely on the interface.
+The @Channel@ type denotes a communication channel between processes.
+The @Network@ monad describes how to construct a process network, although actual execution is deferred until after the entire network has been constructed.
+The @map@ and @join@ combinators have type signatures similar to list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
+
+Because execution is deferred, the @foldl@ combinator cannot return the fold result immediately; instead, it wraps it in a @Result@ type.
+The @Result@ type describes the result of executing a process network; it is a promise that the value will be available after all the processes in the network finish.
+The @Result@ is an applicative functor to allow multiple results to be combined together.
+The @execute@ function takes a process network description containing the result promise, and executes the processes before extracting the result.
+
+
+
+\begin{figure}
+\begin{lstlisting}
+correlation :: Channel (Double,Double) -> Network (Result Double)
+regression  :: Channel (Double,Double) -> Network (Result Line)
+
+priceOverTime :: Channel Record -> Network (Result (Line,Double)
+priceOverTime stock = do
+  timeprices <- map (\r -> (daysSinceEpoch (time r), price r)) stock
+  r          <- regression  timeprices
+  c          <- correlation timeprices
+  return ((,) <$> r <*> c)
+
+priceOverMarket :: Channel Record -> Channel Record -> Network (Result (Line,Double))
+priceOverMarket stock index = do
+  joined <- join (\s i   -> time s `compare` time i) stock index
+  prices <- map  (\(s,i) -> (price s, price i))      joined
+  r      <- regression  prices
+  c      <- correlation prices
+  return ((,) <$> r <*> c)
+
+priceAnalyses :: Channel Record -> Channel Record
+              -> Network (Result ((Line,Double),(Line,Double)))
+priceAnalysis stock index = do
+  pot <- priceOverTime   stock
+  pom <- priceOverMarket stock index
+  return ((,) <$> pot <*> pom)
+\end{lstlisting}
+\caption{implementations of \Hs/priceOverTime/, \Hs/priceOverMarket/, and \Hs/priceAnalyses/ as Kahn process network.} 
+\label{figs/kpn/impl/priceAnalyses}
+\end{figure}
+
+\autoref{figs/kpn/impl/priceAnalyses} shows how an implementation of the @priceAnalyses@ queries with Kahn process networks.
+There are some differences from the list version because the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
+The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
 All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
@@ -942,6 +1096,10 @@ The size of the chunks determines how many communications are saved, so larger c
 However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
 Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
+
+By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
+When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
+The concurrent process network will naturally find the right coordination between the processes.
 
 Fine-grained processes are desirable, because they allow us to write smaller processes and compose them together.
 This compositional style is a large part of the appeal of functional programming.

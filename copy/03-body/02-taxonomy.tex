@@ -393,6 +393,7 @@ If we wish to execute multiple queries in a single-pass, we need to be able to m
 To execute these shared streams, each time we read from a shared stream, we need some way to distribute this element among all of the shared stream's consumers.
 
 \subsection{Streaming overhead}
+\label{taxonomy/pull/streaming-overhead}
 
 This section looks at the streaming overhead involved in the pull stream representation.
 For simple combinators like map, this representation works well.
@@ -992,25 +993,33 @@ In pull streams the consumer controls the computation.
 In push streams the producer controls the computation.
 In polarised streams the active combinator, which may be a pull consumer and a push producer, controls the computation.
 All these systems have one place controlling the computation.
-When we have multiple queries to execute, it can be hard to choose which one should control the computation.
+When we have multiple queries to execute, it can be hard to choose just one combinator to control the entire computation.
 
-An alternate way to execute multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}, a kind of concurrent process network.
-Each combinator inside each query, as well as each input stream, becomes a communicating process in the network.
-Processes communicate through input channels which they can pull values from, or output channels which they can push values to.
+Another way to execute multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}, a kind of concurrent process network.
+Each combinator inside each query becomes a communicating process in the network.
+Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
 Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
 
-Concurrent programs can be hard to write and debug because the scheduler, which interleaves execution of the processes, appears to behave non-deterministically from the perspective of the processes.
-Programs may give different results for different schedules.
-Kahn process networks are a restricted form of process network that ensures processes execute deterministically, regardless of how processes are scheduled \cite{kahn1976coroutines}.
-Deterministic evaluation is achieved by imposing restrictions on how processes communicate; scheduling decisions cannot be observed.
-The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels can only be written to by a single process.
-The first restriction ensures processes cannot communicate via shared mutable state: if one process is reading from mutable state while another is writing a new value, the reading process can get the old value or new value, depending on how the processes are scheduled.
-Processes with shared mutable state can non-deterministically compute different results.
-Similarly, a process cannot \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
-Finally, only one process can push to a channel, because if two processes tried to push at the same time, the scheduler would have to decide the order the values were received.
+Concurrent programs can be hard to write and debug because the \emph{schedule}, how processes are interleaved during execution, depends on the environment.
+Because the environment is not controlled by the processes, we say the schedule is chosen \emph{non-deterministically}.
+Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
+Kahn process networks are a restricted form of static process network that ensures processes compute the same result across different schedules \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
+Kahn process networks ensure deterministic results by imposing restrictions on how processes communicate so that scheduling decisions cannot be observed.
+% The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels are written to by a single process, broadcasting each value to all consumers of the channel.
+All communication between processes is through first-in-first-out channels.
+Processes with shared mutable state can non-deterministically compute different results: if one process were reading from mutable state while another were writing a new value, the reading process may get the old value or new value, depending on how the processes were scheduled.
+Restricting all communication through channels outlaws processes from communicating via shared mutable state.
+Reading from channels is blocking: processes are not allowed to \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
+Channels are written to by a single process, broadcasting each value to all consumers of the channel.
+Only one process is allowed to push to a channel: if two processes tried to push to the same channel at the same time, the scheduler would have to decide the order the values were received.
 
-With Kahn process networks, we can implement a process which joins two streams sorted by date, and we can share streams among multiple consumers by broadcasting values to multiple output channels.
+With Kahn process networks, we can implement a process which joins sorted streams by pulling from each input channel as in the @join@ combinator, and we can share streams among multiple consumers because pushed values are broadcast to each consumer.
 We can also convert both push streams and pull streams to processes.
+
+Kahn process networks can use bounded channels to ensure communication between processes executes in bounded memory.
+Kahn process networks with bounded channels still compute results deterministically, but can introduce \emph{artificial deadlocks} when the computation would succeed with a sufficiently large buffer, but the given bounds are too small.
+There are dynamic algorithms to identify artificial deadlocks at runtime and resolve them by increasing buffer sizes \cite{parks1995bounded,geilen2003requirements}.
+
 
 \begin{figure}
 \begin{lstlisting}
@@ -1022,14 +1031,14 @@ instance Monad Network
 data Result  a
 instance Applicative Result
 
-map         :: (a -> b) -> Channel a
-            -> Network (Channel b)
-join        :: (a -> b -> Ordering) -> Channel a -> Channel b
-            -> Network (Channel (a,b))
-foldl       :: (a -> b -> a) -> a -> Channel b
-            -> Network (Result a)
+map     :: (a -> b) -> Channel a
+        -> Network (Channel b)
+join    :: (a -> b -> Ordering) -> Channel a -> Channel b
+        -> Network (Channel (a,b))
+foldl   :: (a -> b -> a) -> a -> Channel b
+        -> Network (Result a)
 
-execute     :: Network (Result a) -> IO a
+execute :: Network (Result a) -> IO a
 \end{lstlisting}
 \caption[Types and combinators for Kahn process networks]{types and combinators for Kahn process networks.}
 \label{figs/kpn/combinators}
@@ -1038,10 +1047,10 @@ execute     :: Network (Result a) -> IO a
 \autoref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
 We leave discussion of implementation details for \REF{kpn}, and for now focus solely on the interface.
 The @Channel@ type denotes a communication channel between processes.
-The @Network@ monad describes how to construct a process network, although actual execution is deferred until after the entire network has been constructed.
-The @map@ and @join@ combinators have type signatures similar to list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
+The @Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
+The @map@ and @join@ combinators have type signatures similar to the list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
 
-Because execution is deferred, the @foldl@ combinator cannot return the fold result immediately; instead, it wraps it in a @Result@ type.
+Because execution is deferred, the @foldl@ combinator cannot return the fold result immediately; the result is wrapped in a @Result@ type.
 The @Result@ type describes the result of executing a process network; it is a promise that the value will be available after all the processes in the network finish.
 The @Result@ is an applicative functor to allow multiple results to be combined together.
 The @execute@ function takes a process network description containing the result promise, and executes the processes before extracting the result.
@@ -1079,33 +1088,30 @@ priceAnalysis stock index = do
 \label{figs/kpn/impl/priceAnalyses}
 \end{figure}
 
-\autoref{figs/kpn/impl/priceAnalyses} shows how an implementation of the @priceAnalyses@ queries with Kahn process networks.
-There are some differences from the list version because the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
+\autoref{figs/kpn/impl/priceAnalyses} shows the @priceAnalyses@ queries implemented as a Kahn process network.
+There are some differences from the list version: the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
 The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
-All the communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
-If the sending process has performed any kind of computation on the integer, the sending process would most likely have the integer stored in a register, where it can be operated on directly by the processor.
-When the sending process wishes to send this value to the other process, it must lock the channel to prevent other writers or premature reads, copy the integer to memory where it can be read by the other process, and unlock the channel.
-Next, the receiving process must perform the inverse operation by locking the channel, copying the integer from memory to a register, and unlock the channel.
-In terms of absolute runtime, this all happens quite quickly, but it is quite a roundabout way to copy an integer from one register to another register --- perhaps even the \emph{same} register, if the sending process has been swapped out, and the receiving process swapped in.
+Communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
+If the sending process has performed any computation on the integer, the sending process most likely has the integer stored in a register, where it can be operated on directly by the processor.
+To send this value to the other process, the sending process locks the channel to prevent other writers or premature reads, copies the integer to memory where it can be read by the other process, and unlocks the channel.
+Next, the receiving process performs the inverse operation, locking the channel, copying the integer from memory to a register, and unlocking the channel.
+Sending messages is an expensive way to copy an integer from one register to another register --- perhaps even the same register, if the sending process has been swapped out and the receiving process swapped in.
 
-Concurrent process network implementations usually amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
-This chunking reduces the cost of sending messages, but cannot eliminate it altogether --- the processes still need to communicate at least once.
-The size of the chunks determines how many communications are saved, so larger chunks mean less communication overhead.
+Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
+Chunking reduces the cost of sending messages, but cannot eliminate it altogether.
+Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
 However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
 Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
 
-By making the channels fixed-size, we do not have to worry about one process getting too far ahead of another.
-When a process tries to push to a lagging process, the pusher waits until the lagger has caught up, and has room for more values.
-The concurrent process network will naturally find the right coordination between the processes.
-
-Fine-grained processes are desirable, because they allow us to write smaller processes and compose them together.
-This compositional style is a large part of the appeal of functional programming.
+Another way to reduce the cost of communication is constructing larger processes.
+From a functional programming perspective, small, fine-grained processes are desirable, because they allow us to write smaller process for each combinator and compose them together.
 Fine-grained processes tend to perform little computational work and a lot of communication.
 With fine-grained processes we may expose too much parallelism, leading to synchronisation and scheduling overheads that dominate the runtime \cite{chen1990impact}.
 
+Compared to the \autoref{taxonomy/pull/streaming-overhead}
 % This discrepancy means each processor must swap between several processes, which takes time.
 % Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
 % We must find a middle-ground between too fine-grained processes.
@@ -1120,5 +1126,4 @@ With fine-grained processes we may expose too much parallelism, leading to synch
 % Too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
 % In fact, the contrary is often true.
 % \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
-
 

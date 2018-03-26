@@ -461,7 +461,7 @@ map2 f g (Pull pull_a) = Pull pull_c
              Just a' -> (Just (g (f b))))
 \end{lstlisting}
 
-By applying some standard program transformations, we have combined the two maps into one, removing the overhead of additional constructors.
+By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
 Optimising compilers can perform comparable transforms as part of its suite of general purpose optimisations.
 This is discussed further in \REF{related/fusion}.
 
@@ -1092,29 +1092,39 @@ priceAnalysis stock index = do
 There are some differences from the list version: the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
 The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
-Concurrent process networks give us the desired high-level semantics, but they do not provide the ideal execution strategy.
-Communication between processes introduces extra overhead: consider when one process sends a machine integer to another process.
-If the sending process has performed any computation on the integer, the sending process most likely has the integer stored in a register, where it can be operated on directly by the processor.
-To send this value to the other process, the sending process locks the channel to prevent other writers or premature reads, copies the integer to memory where it can be read by the other process, and unlocks the channel.
-Next, the receiving process performs the inverse operation, locking the channel, copying the integer from memory to a register, and unlocking the channel.
-Sending messages is an expensive way to copy an integer from one register to another register --- perhaps even the same register, if the sending process has been swapped out and the receiving process swapped in.
-
-Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
-Chunking reduces the cost of sending messages, but cannot eliminate it altogether.
+Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
+In \autoref{taxonomy/pull/streaming-overhead} we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which is sometimes removed by general purpose compiler optimisations.
+Communication between processes requires more overhead than allocating @Maybe@ values, and is not removed by general purpose optimisations.
+To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
+Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
+Chunking reduces the cost of sending messages, but increases memory and cache pressure.
 Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
-However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
-Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
-Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
+However, larger chunks also mean that each chunk array requires more memory and are less likely to fit in cache.
+Since each channel between processes requires its own chunk, larger process networks have more chunks in memory at the same time.
+The optimal chunk size is a trade-off between communication overhead and memory usage, which is usually found by experimentation.
 
-Another way to reduce the cost of communication is constructing larger processes.
-From a functional programming perspective, small, fine-grained processes are desirable, because they allow us to write smaller process for each combinator and compose them together.
-Fine-grained processes tend to perform little computational work and a lot of communication.
-With fine-grained processes we may expose too much parallelism, leading to synchronisation and scheduling overheads that dominate the runtime \cite{chen1990impact}.
 
-Compared to the \autoref{taxonomy/pull/streaming-overhead}
-% This discrepancy means each processor must swap between several processes, which takes time.
-% Even if we have enough processors to execute each process on a different processor, we still risk having too fine-grained communication, if the amount of computation each process performs is less than the amount of communication it performs.
-% We must find a middle-ground between too fine-grained processes.
+% consider when one process sends a machine integer to another process.
+% If the sending process has performed any computation on the integer, the sending process most likely has the integer stored in a register, where it can be operated on directly by the processor.
+% To send this value to the other process, the sending process locks the channel to prevent other writers or premature reads, copies the integer to memory where it can be read by the other process, and unlocks the channel.
+% Next, the receiving process performs the inverse operation, locking the channel, copying the integer from memory to a register, and unlocking the channel.
+% Sending messages is an expensive way to copy an integer from one register to another register --- perhaps even the same register, if the sending process has been swapped out and the receiving process swapped in.
+
+% Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with an integer in each, chunked communication sends one message containing an array of integers.
+% Chunking reduces the cost of sending messages, but cannot eliminate it altogether.
+% Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
+% However, larger chunks also mean that each array requires more memory and are less likely to fit in memory or cache.
+% Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
+% Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
+
+From a functional programming perspective, small, fine-grained processes are desirable because they allow us to write a process for each combinator and compose them together.
+From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
+We can reduce the cost of communication by combining multiple connected processes together into one larger process.
+The combined process performs the task of multiple processes communicates by local variables instead of channels.
+The
+In \REF{kpn} we will see an algorithm to \emph{fuse} processes together.
+
+In fact, \REF{kpn/benchmarks}
 
 % \cite{chen1990impact}
 % "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."

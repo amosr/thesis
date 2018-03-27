@@ -1045,7 +1045,7 @@ execute :: Network (Result a) -> IO a
 \end{figure}
 
 \autoref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
-We leave discussion of implementation details for \REF{kpn}, and for now focus solely on the interface.
+We leave discussion of the implementation for \REF{kpn}, and for now focus solely on this simplified version of the interface.
 The @Channel@ type denotes a communication channel between processes.
 The @Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
 The @map@ and @join@ combinators have type signatures similar to the list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
@@ -1119,12 +1119,13 @@ The optimal chunk size is a trade-off between communication overhead and memory 
 
 From a functional programming perspective, small, fine-grained processes are desirable because they allow us to write a process for each combinator and compose them together.
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
-We can reduce the cost of communication by combining multiple connected processes together into one larger process.
-The combined process performs the task of multiple processes communicates by local variables instead of channels.
-The
-In \REF{kpn} we will see an algorithm to \emph{fuse} processes together.
-
-In fact, \REF{kpn/benchmarks}
+We can reduce the amount of communication by combining multiple connected processes together into one larger process.
+The combined process performs the task of each individual process, but communicates by local variables instead of channels.
+In \REF{kpn/fusion} we describe an algorithm to combine processes together to reduce overhead.
+For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
+A single process executes sequentially, removing any potential speedup from parallelism.
+Our benchmarks \REF{kpn/benchmarks} show that the sequential version is faster than the concurrent version executed on several processors.
+Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation requires to achieve similar performance~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}
 % "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."
@@ -1136,4 +1137,16 @@ In fact, \REF{kpn/benchmarks}
 % Too much parallelism might make the program \emph{scalable}, in that adding more processors will speed the program, but unfortunately it does not ensure absolute performance.
 % In fact, the contrary is often true.
 % \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
+
+\section{Discussion}
+We have seen the relative advantages of various streaming models.
+Pull streams support multiple inputs, and can take advantage of an optimising compiler to reduce overhead.
+Push streams support multiple queries, and are written back-to-front with explicit duplication for sharing streams.
+Polarised streams support multiple inputs and multiple queries, require polarity analysis of the entire dependency graph, and are written partially back-to-front and partially front-to-back.
+Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
+
+In the next chapter we will see Icicle, a language for specifying push stream queries \REF{icicle}.
+Icicle queries are written front-to-back and streams can be shared without requiring explicit duplication.
+Queries are compiled to folds over push streams which can be executed concurrently.
+After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together \REF{kpn}.
 

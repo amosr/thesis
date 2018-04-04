@@ -7,18 +7,18 @@ Horizontal fusion for imperative loops is relatively easily, when the loops have
 The problem with imperative loops occurs when trying to remove duplicate computations.
 Firstly, the `definition' of a computation is split across multiple places: because the initial value of an accumulator and its update expression are in separate parts of the program, some analysis must be done to recover these.
 For example, in the following loop, @a@ and @b@ have equivalent `update' expressions, but could denote very different computations depending on the implementation of @function@.
-\begin{code}
+\begin{lstlisting}
 a = 0;
 b = 1;
 for (...) {
   a = function(a);
   b = function(b);
 }
-\end{code}
+\end{lstlisting}
 
 Secondly, the order of statements in a loop affects the meaning: when accumulators are mutually dependent on each other, one can reorder the statements to produce a different, but still valid program.
 These two loops are not equivalent:
-\begin{code}
+\begin{lstlisting}
 a = 0;
 b = 1;
 for (...) {
@@ -29,7 +29,7 @@ for (...) {
   b = a - b;
   a = a + b;
 }
-\end{code}
+\end{lstlisting}
 
 Neither of these problems are insurmountable, but the analysis required certainly complicates our goal of removing duplicate computation after fusion.
 
@@ -38,7 +38,7 @@ Firstly, each accumulator should be defined in one place: this means that if two
 Secondly, reordering statements (or accumulators) should not affect the meaning: two programs are equivalent if they contain equivalent sets of bindings, regardless of ordering.
 
 We now convert the first example to folds:
-\begin{code}
+\begin{lstlisting}
 a = 0;
 b = 1;
 for (...) {
@@ -57,7 +57,7 @@ loop ... {
         then function(b);
   }
 }
-\end{code}
+\end{lstlisting}
 
 Each fold binding must be grouped inside a @stage@ block, which allows mutual recursion across folds.
 In this case, there is no mutual recursion, so the stages only contain one binding each.
@@ -68,7 +68,7 @@ The update or `kons' expression comes after @then@, and in the update expression
 It now becomes easier to see that the two folds are not equivalent, as the entire definitions are in one place.
 
 The next example requires mutual recursion.
-\begin{code}
+\begin{lstlisting}
 a = 0;
 b = 1;
 for (...) {
@@ -85,7 +85,7 @@ loop ... {
         then new a - b;
   }
 }
-\end{code}
+\end{lstlisting}
 
 Here, the update expression for @a@ refers to a later fold, @b@.
 Update expressions can refer to later fold bindings in the same stage, as well as all earlier fold bindings.
@@ -100,7 +100,7 @@ Disallowing cycles ensures an execution order.
 
 By making the distinction between `old value' and `new value' explicit, the ordering in the program no longer has any effect on the semantics.
 After converting the reordered loop with different semantics, the two programs are no longer alpha-equivalent:
-\begin{code}
+\begin{lstlisting}
 a = 0;
 b = 1;
 for (...) {
@@ -117,7 +117,7 @@ loop ... {
         then a + new b;
   }
 }
-\end{code}
+\end{lstlisting}
 
 \section{Preliminary transforms}
 
@@ -133,7 +133,7 @@ Key-value maps can be similarly split into a special map from key to index, and 
 Splitting these complex structures into their constituent parts exposes more opportunities for elimination removal.
 The following program computes the mean of the loop elements. Here, the sum and count are both computed, and stored in a pair.
 
-\begin{code}
+\begin{lstlisting}
 loop item {
   stage {
     fold sumcount
@@ -148,10 +148,10 @@ loop item {
        fst sumcount / snd sumcount;
   }
 }
-\end{code}
+\end{lstlisting}
 
 If another query were to compute the sum as well, it is not obvious looking at the two expressions that @sum@ and @fst sumcount@ are equivalent:
-\begin{code}
+\begin{lstlisting}
 loop item {
   stage {
     fold sum
@@ -160,10 +160,10 @@ loop item {
        sum + item;
   }
 }
-\end{code}
+\end{lstlisting}
 
 Now, by splitting the @sumcount@ pair into two bindings named @sumcount1@ and @sumcount2@, it becomes easier to see that the definitions of @sum@ and @sumcount1@ are equivalent.
-\begin{code}
+\begin{lstlisting}
 loop item {
   stage {
     fold sumcount1
@@ -182,12 +182,12 @@ loop item {
        sumcount1 / sumcount2;
   }
 }
-\end{code}
+\end{lstlisting}
 
 
 \section{Stage-local duplicate removal}
 Here is an example of a stage with two counters.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold a = 0 then c + 1
   fold b = 0 then c + 1
@@ -201,19 +201,19 @@ Execution:
 [ a = 3, b = 3, c = 6 ]
 [ a = 7, b = 7, c = 6 ]
 [ a = 7, b = 7, c = 14 ]
-\end{code}
+\end{lstlisting}
 
 The bindings for @a@ and @b@ here are identical, and so one can be replaced with the other, by substituting @b := a@ and removing the binding for @b@.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold a = 0 then c + 1
   fold c = 0 then a + a
 }
-\end{code}
+\end{lstlisting}
 
 Another example is a single count, spread across two recursive bindings.
 Here, @a@ and @b@ depend on each other, but both have the same body modulo alpha.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold a = 0 then b + 1
   fold b = 0 then a + 1
@@ -222,15 +222,15 @@ Execution:
 [ a = 0, b = 0 ]
 [ a = 1, b = 1 ]
 [ a = 2, b = 2 ]
-\end{code}
+\end{lstlisting}
 
 One can place them into equivalence groups based on their bodies: @a@ and @b@ go in the same equivalence group, and so any reference to @a@ or @b@ refers to the equivalence group containing both.
 Equivalence groups are then squashed together, with a single binding for each equivalence group.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold a = 0 then a + 1
 }
-\end{code}
+\end{lstlisting}
 
 
 
@@ -245,7 +245,7 @@ We find the strongly connected components of the program graph, so that each str
 When treating the program as a graph, each binding is a node and references to a fold @f@ as either @f@ for the current value, or @new f@ for the new value, both count as edges to @f@.
 
 As a contrived example, we have bindings @sum@ and @count@ on their own, and another pair of bindings @a@ and @b@ which depend on each other, as well as on @sum@ and @count@.
-\begin{code}
+\begin{lstlisting}
 loop item {
   stage {
     fold count = 0 then count + 1;
@@ -256,21 +256,21 @@ loop item {
     fold b     = 0 then sum + new a;
   }
 }
-\end{code}
+\end{lstlisting}
 
 The graph looks something like this.
-\begin{code}
+\begin{lstlisting}
   count     sum
     |        |
     V        V
     a <----> b
-\end{code}
+\end{lstlisting}
 
 The strongly connected components are found, and ripped out into separate stages.
 The bindings of each stage are sorted topologically, but this time only @new@ references count as edges in the graph.
 This is because @new@ references require the new, updated value of the fold, but other references use the value that is already available at the start of the iteration.
 Hence, only @new@ references impose an ordering constraint.
-\begin{code}
+\begin{lstlisting}
 loop item {
   stage {
     fold count = 0 then count + 1;
@@ -283,7 +283,7 @@ loop item {
     fold b     = 0 then sum + new a;
   }
 }
-\end{code}
+\end{lstlisting}
 
 \section{Stage layers}
 Once we have a list or set of stages, we can perform a topological ordering over the stages themselves.
@@ -310,7 +310,7 @@ This substitution is later performed on the rest of the program, so that after t
 During the process of checking, there may be multiple possible substitutions that appear to work.
 The following program defines three mutually recursive counters; two of the counters increment by one, and the last increments by two.
 Because of the mutual recursion, this ends up making each counter increment by a repeating pattern: one, one, two.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold a = 0 then b + 1
   fold b = 0 then c + 1
@@ -323,47 +323,47 @@ Execution:
 [ a = 4, b = 4, c = 4 ]
 [ a = 5, b = 5, c = 6 ]
 [ a = 6, b = 7, c = 7 ]
-\end{code}
+\end{lstlisting}
 
 Now, suppose we wish to check if the following stage is a duplicate of the previous counters.
 Note that these bindings are actually in a different order to the previous bindings, whereas the equivalent order would be @x@, @y@ then @z@.
-\begin{code}
+\begin{lstlisting}
 stage {
   fold y = 0 then z + 1
   fold x = 0 then y + 1
   fold z = 0 then x + 2
 }
-\end{code}
+\end{lstlisting}
 
 We start by inpsecting @y@, the first binding, and check against all bindings in the other set.
 We wish to find a substitution from the names @x@, @y@ and @z@ to the names @a@, @b@ and @c@.
 The substitution cannot mention any names other than those bound by the two stages.
 
 There appear to be two possibilities for @y@: it is alpha-equivalent to both @a@ and @b@, producing two different substitutions:
-\begin{code}
+\begin{lstlisting}
 (Y1)
 y := a
 z := b
 (Y2)
 y := b
 z := c
-\end{code}
+\end{lstlisting}
 
 We continue checking the remaining bindings, by producing substitutions for @x@.
 Like @y@, @x@ fits both @a@ and @b@, with two possible substitutions:
-\begin{code}
+\begin{lstlisting}
 (X1)
 x := a
 y := b
 (X2)
 x := b
 z := c
-\end{code}
+\end{lstlisting}
 
 We can cross-product these substitutions together, composing (Y1) with (X1) and so on, producing four possible substitutions.
 The first two contain contradictions and are discarded immediately.
 The next two seem plausible, so far.
-\begin{code}
+\begin{lstlisting}
 (Y1X1)
 y := a
 y := b
@@ -378,17 +378,17 @@ z := c
 x := b
 y := b
 z := c
-\end{code}
+\end{lstlisting}
 
 Now we check the final binding, @z@, which produces only one possible substitution:
-\begin{code}
+\begin{lstlisting}
 (Z1)
 z := c
 x := a
-\end{code}
+\end{lstlisting}
 
 Composing (Z1) with (Y2X1) and (Y2X2), we find that (Y2X1Z1) is the only remaining possibility, since (Z1) and (Y2X2) are contradictory.
-\begin{code}
+\begin{lstlisting}
 (Y2X1Z1)
 x := a
 y := b
@@ -396,7 +396,7 @@ z := c
 (Y2X2Z1)
 x := a
 x := b
-\end{code}
+\end{lstlisting}
 
 We can now remove the stage containing @x@, @y@ and @z@, while performing this substitution over the remainder of the program, so that any references to @x@ become references to @a@, and so on.
 

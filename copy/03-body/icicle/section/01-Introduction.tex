@@ -1,43 +1,121 @@
 %!TEX root = ../Main.tex
-\chapter{Introduction}
 \label{icicle:s:Introduction}
 
-At Ambiata we perform feature generation for machine learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2016 this was a lot of data.}
+This chapter is based on a previously published paper \citep{robinson2016icicle}.
+At Ambiata we perform feature generation for machine learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2016, when the original paper was published, this was a lot of data.}
 For such applications we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
 Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion or incremental update then the cost of the computation would begin to exceed the salaries of the developers.
 
 For example queries, suppose we have a table, @stocks@, containing daily open and close prices for a set of companies. We want to compute the number of days where the open price exceeded the close price, and vice versa. We also want the mean of the open price for days in which the open price exceeded the close price. In Icicle we write the three queries as follows:
 
-\begin{code}
-table stocks { open : Int, close : Int }
+% \begin{lstlisting}
+% averageincrease stocks =
+%  let diffs = map (\r -> open r - close r) stocks
+%  mean (filter (>0) diffs)
+% \end{lstlisting}
+
+% \begin{lstlisting}
+% table stocks { open : Double, close : Double }
+% query 
+%   more = filter open > close of count;
+%   less = filter open < close of count;
+%   mean = filter open > close of sum open / count;
+% \end{lstlisting}
+% 
+% \begin{lstlisting}
+% mean :: IO (Push Double Double)
+% mean = do
+%   sum   <- Push.foldl sum 0
+%   count <- Push.foldl (\c r -> c + 1) 0
+%   return ((/) <$> sum <*> count)
+% 
+% meanOverMean :: IO (Push Record (Double,Double,Double))
+% meanOverMean = do
+%   mean_open <- mean
+%   mean_more <- mean
+%   proportions <$> mean_open <*> filter (\r -> open r > close r) mean_more
+%  where
+%   proportions mean_open mean_more = (mean_open / mean_more, mean_open, mean_more)
+% \end{lstlisting}
+% 
+% \begin{lstlisting}
+% let mean_open = sum open / count
+% let mean_more = filter open > close of sum open / count
+%   (mean_open / mean_more, mean_open, mean_more)
+% 
+% -------
+% (\mean_open mean_more -> (mean_open / mean_more, mean_open, mean_more))
+%   <$> ((/) <$> map open sum <*> count)
+%   <*> (filter (\r -> open r > close r) ((/) <$> map open sum <*> count))
+% 
+% -------
+% let mean_open = (/) <$> map open sum <*> count
+%     mean_more = filter (\r -> open r > close r) ((/) <$> map open sum <*> count)
+% in (,,) <$> ((/) <$> mean_open <*> mean_more) <*> mean_open <*> mean_more
+% 
+% -------
+% let mean_open = sum open / count
+% filter open > close of
+% let mean_more = sum open / count
+%   (mean_open / mean_more, mean_open, mean_more)
+% 
+% -------
+% let mean_open = (/) <$> map open sum <*> count
+% in filter (\r -> open r > close r)
+%     (let mean_more = (/) <$> map open sum <*> count
+%      in (,,) <$> ((/) <$> mean_open <*> mean_more) <*> mean_open <*> mean_more)
+% \end{lstlisting}
+
+
+\begin{lstlisting}
+table stocks { open : Double, close : Double }
 query 
   more = filter open > close of count;
   less = filter open < close of count;
   mean = filter open > close of sum open / count;
-\end{code}
+\end{lstlisting}
+
 
 In the above code, @open > close@ and @close < open@ are filter predicates, and @count@ counts how many times the predicate is true.
 
+We can express this using the push streams from \autoref{taxonomy/push}.
+Apparently common sub-expressions are rare in functional programs.
+\cite{chitil1997common}
+
+\begin{lstlisting}
+data Record = Record
+ { time  :: Time
+ , open  :: Double
+ , close :: Double }
+
+queries :: Push Record (Double,Double,Double)
+queries = (,,) <$> more <*> less <*> mean
+ where
+  more = filter (\r -> open r > close r) count
+  less = filter (\r -> open r < close r) count
+  mean = filter (\r -> open r > close r) ((/) <$> map open sum <*> count)
+\end{lstlisting}
+
 Such a joint query can be converted to a back-end language like SQL, but doing so by hand is tedious and error prone. As the three queries use different filter predicates we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter. We must instead lift each predicate to an expression-level conditional and compute the count by summing the conditional:
-\begin{code}
+\begin{lstlisting}
   SELECT SUM(IF(open > close, 1,    0))
        , SUM(IF(open < close, 1,    0))
        , SUM(IF(open > close, open, 0))
        / SUM(IF(open > close, 1,    0))
   FROM stocks;
-\end{code}
+\end{lstlisting}
 
 As we see, the result of query fusion tends to have many common sub expressions, and we wish to guarantee that the duplicates in the fused result are eliminated.
 
 Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data. As a counter example, suppose we have a table with two fields @key@ and @value@, and we wish to find the mean of values whose key matches the last one in the table. We might try something like:
-\begin{code}
-  table kvs { key : Date; value : Real }
+\begin{lstlisting}
+  table kvs { key : Date; value : Double }
   query avg = let k = last key
               in  filter (key == k) of mean value;
-\end{code}
+\end{lstlisting}
 
-Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally. While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start. We need a better solution. The contributions of this paper are:
+Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally. While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start. We need a better solution. The contributions of this chapter are:
 \begin{itemize}
 \item
 We present a domain specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received\sref{icicle:s:IcicleSource};

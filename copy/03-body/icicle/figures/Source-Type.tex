@@ -1,6 +1,7 @@
 %!TEX root = ../Main.tex
 
-\begin{figure*}
+\begin{figure}
+  \scriptsize
 
 $$
 \boxed{\Typecheck{\Gamma}{e}{\TauMode}}
@@ -143,6 +144,10 @@ $$
 {
   \TypecheckP{p}{(\NN,~\NN)~\to~\BB}
 }{PrimRel}
+\ruleAx
+{
+  \TypecheckP{(@,@)}{(T,~T')~\to~(T~\times~T')}
+}{PrimTuple}
 $$
 
 $$
@@ -229,5 +234,5 @@ $$
 
 \caption{Types of expressions}
 \label{icicle:fig:source:type:exp}
-\end{figure*}
+\end{figure}
 

@@ -1,7 +1,8 @@
 %!TEX root = ../Main.tex
 
 \begin{figure}
-
+  \begin{center}
+  \begin{minipage}{0.4\textwidth}
 \begin{tabbing}
 MMMM \= MM \= MMM \= MM \= MMMMMM \= \kill
 $\mi{T}$
@@ -40,7 +41,7 @@ $\mi{Exp}$, $e$
 
 $\mi{Prim}$, $p$
 \GrammarDefTab
-  $(@+@)~|~(@-@)~|~(@*@)~|~(@/@)~|~(@==@)~|~(@/=@)~|~(@<@)~|~(@>@)$
+  $(@+@)~|~(@-@)~|~(@*@)~|~(@/@)~|~(@==@)~|~(@/=@)~|~(@<@)~|~(@>@)~|~(@,@)$
 \GrammarAlt
   $@lookup@~|~@fst@~|~@snd@$
 \\
@@ -64,6 +65,8 @@ $\mi{Top}$
 \GrammarDefTab
   $\mi{Table};~\ov{\mi{Def};}$
 \end{tabbing}
+\end{minipage}
+  \end{center}
 
 \caption{Icicle Grammar}
 \label{icicle:fig:source:grammar}

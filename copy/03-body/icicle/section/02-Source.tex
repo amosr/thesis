@@ -179,7 +179,9 @@ Rules EBoxStream and EBoxFold lift constant values to stream results and aggrega
 % Conversion to a stream transformer ignores the input stream and returns the pure value.
 % Conversion to a fold has no state, and the eject function returns the pure value.
 
-Rules EPrimValue, EPrimStream and EPrimFold apply primitive operators to constant values, streams and aggregations respectively. In EPrimStream the result is a new stream transformer that applies the primitive to each of the elements gained from the input streams. In EPrimFold the result consists of new update and eject functions that get their input values by applying the update and eject functions gained by evaluating the arguments.
+Rules EPrimValue, EPrimStream and EPrimFold apply primitive operators to constant values, streams and aggregations respectively.
+In EPrimStream the result is a new stream transformer that applies the primitive to each of the elements gained from the input streams.
+In EPrimFold the result consists of new update and eject functions that get their input values by applying the update and eject functions gained by evaluating the arguments.
 
 % For pure values, the values are unboxed and the primitive is applied.
 % For streams, a new stream is created and the input heap applied to all streams before applying the primitive.

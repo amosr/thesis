@@ -46,7 +46,7 @@ Icicle uses a modal type system to infer whether applicative syntax would be req
 
 In this example, both @more@ and @mean@ compute the count with the same filter predicate.
 When the same computation is used by multiple queries, we would like to compute the value only once and share the result among all the queries that use it.
-Common subexpression elimination (CSE) removes some duplicate computations but, as its name suggests, it is limited to structural subexpressions~\cite{chitil1997common}.
+Common subexpression elimination (CSE) removes some duplicate computations but, as its name suggests, it is limited to structural subexpressions~\cite{chitil1997uncommon}.
 Neither of the filtered counts is a subexpression of the other, so CSE will not remove the duplicate computation.
 In Icicle we remove this duplicate work by converting queries to an intermediate language, described in \autoref{icicle:s:IcicleCore}, which decomposes the query into individual folds.
 

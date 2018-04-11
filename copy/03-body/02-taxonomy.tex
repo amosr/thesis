@@ -583,7 +583,7 @@ priceOverTime_push = do
 
 This program computes both correlation and regression in a streaming fashion.
 In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
-We shall see more examples of push programs in \REF{icicle}.
+We shall see more examples of push programs in \autoref{part:icicle}.
 
 We cannot implement \Hs/priceOverMarket/ with push streams alone, because it requires joining two input streams by date.
 Recall the \Hs/join/ combinator, which takes two input streams and retrieves a value from each.
@@ -595,7 +595,7 @@ Push streams also cannot implement @zip@, which pairs two inputs together, becau
 Except for one special case, push streams do not support multiple inputs.
 The special case is that a push stream can react to multiple inputs in the order they are received.
 As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
-In certain circumstances we can control the push order and use this merge to append two streams; see \REF{related/push-append}.
+In certain circumstances we can control the push order and use this merge to append two streams.
 Because the push order is controlled outside of the merge, appending two streams in this way separates the append logic from the merge combinator which defines the appended stream.
 
 % Pull and push streams are the two most fundamental stream types.
@@ -1145,7 +1145,7 @@ Push streams support multiple queries, and are written back-to-front with explic
 Polarised streams support multiple inputs and multiple queries, require polarity analysis of the entire dependency graph, and are written partially back-to-front and partially front-to-back.
 Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
 
-In the next chapter we will see Icicle, a language for specifying push stream queries \REF{icicle}.
+In the next chapter we will see Icicle, a language for specifying push stream queries \autoref{part:icicle}.
 Icicle queries are written front-to-back and streams can be shared without requiring explicit duplication.
 Queries are compiled to folds over push streams which can be executed concurrently.
 After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together \REF{kpn}.

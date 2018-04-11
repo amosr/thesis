@@ -1,5 +1,6 @@
 \usepackage{listings}
 \usepackage{lstlinebgrd}
+\usepackage{etoolbox}
 
 \colorlet{TemplateStage}{Blue}
 
@@ -60,14 +61,16 @@
     % keywordstyle=[3]\color{Bittersweet},
     % keywordstyle=[4]\color{RoyalPurple},
     captionpos=b,
-    aboveskip=2\medskipamount,
+    aboveskip=1\medskipamount,
+    belowskip=1\medskipamount,
+    framesep=1.5em,
     xleftmargin=0.5\parindent,
     xrightmargin=0.5\parindent,
     flexiblecolumns=false,
     escapechar={\%},
     texcl=true,
     showstringspaces=false,
-    frame=tb,
+    frame=l,
 }
 
 \lstset{
@@ -76,5 +79,68 @@
   basewidth={0.5em,0.45em},
 }
 
-\newcommand\Hs{\lstinline}
+\lstdefinelanguage{icicle}%
+  {morekeywords={table,let,fold,filter,group,in,of,then,function,query,%
+                Int,Bool,Map,Element,Aggregate,Date,},%
+   keepspaces,%
+   sensitive,%
+   morecomment=[l]--,%
+   morecomment=[n]{\{-}{-\}},%
+   morestring=[b]",%
+   % Single char doesn't work as a string because of primes
+   % morestring=[b]'%
+   % Nice symbols
+   literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            {|}{{$\mid$}}1
+  }[keywords,comments,strings]%
 
+\lstdefinelanguage{icicle-core}%
+  {morekeywords={plan,fold,then,filter,group,%
+                before,folds,after,return,%
+                Int,Bool,Map,Element,Aggregate,Date,},%
+   keepspaces,%
+   sensitive,%
+   morecomment=[l]--,%
+   morecomment=[n]{\{-}{-\}},%
+   morestring=[b]",%
+   % Single char doesn't work as a string because of primes
+   % morestring=[b]'%
+   % Nice symbols
+   literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            {|}{{$\mid$}}1
+  }[keywords,comments,strings]%
+
+\lstdefinelanguage{sql}%
+  {morekeywords={SELECT,SUM,IF,WHERE,FROM},%
+   keepspaces,%
+   sensitive,%
+  }[keywords,comments,strings]%
+
+
+
+\lstnewenvironment{icicle}{\noindent\minipage{\linewidth}\lstset{language=icicle}}{\endminipage}
+\lstnewenvironment{icicle-core}{\noindent\minipage{\linewidth}\lstset{language=icicle-core}}{\endminipage}
+\lstnewenvironment{haskell}{\noindent\minipage{\linewidth}\lstset{language=Haskell}}{\endminipage}
+\lstnewenvironment{sql}{\noindent\minipage{\linewidth}\lstset{language=sql}}{\endminipage}
+
+\BeforeBeginEnvironment{icicle}{\par}
+\BeforeBeginEnvironment{icicle-core}{\par}
+\BeforeBeginEnvironment{haskell}{\par}
+\BeforeBeginEnvironment{sql}{\par}
+
+\AfterEndEnvironment{icicle}{\par}
+\AfterEndEnvironment{icicle-core}{\par}
+\AfterEndEnvironment{haskell}{\par}
+\AfterEndEnvironment{sql}{\par}
+
+\newcommand\Hs{\lstinline}

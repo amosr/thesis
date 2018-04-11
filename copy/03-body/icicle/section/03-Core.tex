@@ -60,39 +60,40 @@ $\mi{Plan}$
 
 Before we discuss an example query plan we first define the @count@ and @sum@ functions used in earlier sections.
 Both functions are simple folds:
-\begin{lstlisting}
+\begin{icicle}
 function count
  = fold c = 0 then c + 1;
 
 function sum (e : Element Int)
  = fold s = 0 then s + e;
-\end{lstlisting}
+\end{icicle}
 
 Inlining these functions into the three stocks queries from \hyperref[icicle:s:Introduction]{the start of the chapter} yields the following set of queries:
 
-\begin{lstlisting}
+\begin{icicle}
 table stocks { open : Int, close : Int }
 query 
-  more = filter open > close of fold more_c = 0 then more_c + 1;
-  less = filter open < close of fold less_c = 0 then less_c + 1;
+  more = filter open > close of (fold more_c = 0 then more_c + 1);
+  less = filter open < close of (fold less_c = 0 then less_c + 1);
   mean = filter open > close of
       (fold mean_s = 0 then mean_s + open) / (fold mean_c = 0 then mean_c + 1);
-\end{lstlisting}
+\end{icicle}
 
 Each query is converted to a query plan separately.
 When we convert the @more@ query, we define the count inside a filter, and use it in the return section.
 
-\begin{lstlisting}
+\begin{icicle-core}
 plan stocks { open : Int; close : Int; }
 folds { filter open > close {
     fold c    : Int = 0 then c + 1; } }
 return { more : Int = c; }
-\end{lstlisting}
+\end{icicle-core}
 
 We convert the @less@ and @mean@ queries similarly.
-For the @mean@ query, the sum and the count are both defined inside a filter, and the division is performed after processing the entire input.
+For the @mean@ query, the sum and the count are both defined inside a filter.
+The division is performed in the @after@ section because it is an aggregate operation.
 
-\begin{lstlisting}
+\begin{icicle-core}
 plan stocks { open : Int; close : Int; }
 folds { filter open < close {
     fold c    : Int = 0 then c + 1; } }
@@ -104,7 +105,7 @@ folds { filter open > close {
     fold s    : Int = 0 then s + open; } }
 after  { sc   : Int = s / c }
 return { mean : Int = sc; }
-\end{lstlisting}
+\end{icicle-core}
 
 To fuse the three query plans together we freshen the names of each binding, then simply concatenate the corresponding parts of the anatomy.
 The single-pass restriction on queries makes the fusion process so simple, because it ensures that there are no fusion-preventing dependencies between any two query plans. 
@@ -112,7 +113,7 @@ After concatenating the plans, we merge the filter blocks for @more@ and @mean@,
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
 Now the queries are interspersed but the stages are expressed separately, we are free to rearrange each stage without affecting the other stages.
 
-\begin{lstlisting}
+\begin{icicle-core}
 plan stocks { open : Int; close : Int; }
 folds {
   filter open > close {
@@ -125,13 +126,13 @@ after  { mean_sc : Int = mean_s / mean_c }
 return { more    : Int = more_c;
          less    : Int = less_c;
          mean    : Int = mean_sc; }
-\end{lstlisting}
+\end{icicle-core}
 
 We can now use common subexpression elimination to remove the duplicate count, @mean_c@, as its binding is alpha-equivalent to the binding for @more_c@.
 In the after section, the reference to @mean_c@ is replaced by @more_c@.
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 queries :: IO (Push Record (Int,Int,Int))
 queries = do
   more_c <- newIORef 0
@@ -156,8 +157,9 @@ queries = do
     return (more_c', less_c', div mean_s' mean_c')
         
   return (Push push done)
-\end{lstlisting}
-\caption{Compiled push queries}
+\end{haskell}
+  \TODO{this is in @IO@, and has a different type from the earlier version. need to modify push representation to \Hs/Push a r = (IO (a -> IO (), IO r))/ so reference construction can be done as part of stream}
+\caption{Push implementation of queries after inlining combinators}
 \label{icicle:fig:core:push_query}
 \end{figure}
 
@@ -167,32 +169,32 @@ The reference initialisations and updates are located in different parts of the 
 We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms are generally polynomial time.
 With the intermediate representation of Icicle we can use a common subexpression elimination algorithm~\cite{chitil1997common}, which requires $O(n \log n)$ time.
 
-\subsection{Streaming the unstreamable}
+\subsection{A more complicated example}
 
 The previous queries were simple to translate to the intermediate language; the query from \autoref{icicle:s:ElementsAndAggregates} is a bit more involved.
 We first define the @mean@ and @last@ functions used in the query.
 The @mean@ function then divides the @sum@ by the @count@.
-\begin{lstlisting}
+\begin{icicle}
 function mean (e : Element Int)
  = sum e / count;
-\end{lstlisting}
+\end{icicle}
 
 The @last@ function uses a @fold@ that initializes the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream.
-\begin{lstlisting}
+\begin{icicle}
 function last (d : Element Date)
  = fold l = NO_DATE then d;
-\end{lstlisting}
+\end{icicle}
 
-% \begin{lstlisting}
+% \begin{icicle}
 %   query avg = let k    = last key in
 %               let avgs = group key of mean value
 %               in  lookup k avgs
-% \end{lstlisting}
+% \end{icicle}
 
 
 Inlining the above functions into the query from \autoref{icicle:s:ElementsAndAggregates} yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
-\begin{lstlisting}
+\begin{icicle}
 query avg
  =    let lst = (fold l = NO_DATE then key)
    in let map = group key of
@@ -200,44 +202,44 @@ query avg
                 / (fold c = 0 then c + 1) )
    in let ret = lookup lst map
    in     ret
-\end{lstlisting}
+\end{icicle}
 
 To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
 The @lst@ binding becomes a single fold, initialized to @NO_DATE@ and updated with the current @key@.
-\begin{lstlisting}
+\begin{icicle-core}
 plan kvs {      key : Date; value : Int;       }
 folds    { fold fL  : Date = NO_DATE then key  }
 after    {      lst : Date = fL                }
-\end{lstlisting}
+\end{icicle-core}
 
 For the @map@ binding, each fold accumulator inside the body of the @group@ construct is nested within a @group@ in the intermediate language.
 Inside the context of the @group@, the binding for @s@ refers to the @Int@ value for the current key; outside the @group@, in the @after@ section, @s@ refers to a value of (@Map Date Int@) containing the values of all keys.
 Each time we receive a row from the table the accumulator associated with the @key@ is updated, using the default value @0@ if an entry for that key is not yet present.
-After we have processed the entire table we join the maps and divide each sum with its corresponding count to yield a map of means for each key.
-\begin{lstlisting}
+After we have processed the entire table we join the maps and divide each sum by its corresponding count to yield a map of means for each key.
+\begin{icicle-core}
 folds  { group key
           { fold s : Int = 0 then s + value
           ; fold c : Int = 0 then c + 1 } }
 
 after  { map : Map Date Int
           = mapMap (\sc. fst sc / snd sc) (mapZip s c) }
-\end{lstlisting}
+\end{icicle-core}
 
 % It would be possible to convert this as a map of pairs of the sum and count.
 % Keeping this as two separate maps rather than a map of pairs exposes more opportunities for common subexpression elimination when fusion occurs.
 % For example, another query @group key of count@ can reuse the already constructed @gC@ map.
 
 Finally, the @ret@ binding from the original query is evaluated in the @after@ stage. In the @return@ stage we specify that the result of the overall query @avg@ is the result of the @ret@ binding.
-\begin{lstlisting}
+\begin{icicle-core}
   after  { ret : Int = lookup lst map }
   return { avg : Int = ret }
-\end{lstlisting}
+\end{icicle-core}
 
 
-To combine the plans from each binding we simply concatenate the corresponding parts of the anatomy.
-Given a fused query plan we then convert it to an imperative loop nest in a similar way to our prior work on flow fusion~\cite{lippmeier2013data}.
-When converting folds nested inside @filter@s, the update statements are nested inside @if@ statements.
-When converting folds nested inside @group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
+We then combine the plans from each binding.
+This query plan is then fused with any other queries that process the same input; the fused query plan is then translated to an imperative loop nest in a similar way to prior work on flow fusion~\cite{lippmeier2013data}.
+When translating folds nested inside @filter@s, the update statements are nested inside @if@ statements.
+When translating folds nested inside @group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
 As with @filter@s, @group@s with the same key can be merged together.
 The nested structure of @group@s allows us to share the same set of keys across multiple accumulators, further reducing duplicate work.
 

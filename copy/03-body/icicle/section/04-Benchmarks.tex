@@ -50,7 +50,7 @@ The R code is single threaded and would require at least 150 processors to reach
 
 \input{copy/03-body/icicle/figures/Bench-Queries.tex}
 
-Figure~\ref{icicle:fig:bench:queries} shows how the total read througput scales as the number of fused queries is increased.
+Figure~\ref{icicle:fig:bench:queries} shows how the total read throughput scales as the number of fused queries is increased.
 For each number of queries, we ran two versions of the fused result: one version that wrote the output to disk, and the other that piped the result to @/dev/null@.
 The graph shows the throughput of the disk version decreasing roughly linearly in the number of queries, while the version ignoring the output remains constant.
 This suggests that we are IO bound on the write side.

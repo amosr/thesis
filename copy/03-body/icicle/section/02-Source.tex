@@ -7,22 +7,22 @@ To allow incremental computation, all Icicle queries must execute in a single pa
 Sadly, not all queries \emph{can} be executed in a single pass: the key examples are queries that require random access indexing, or otherwise need to access data in an order different to what the stream provides.
 However, as we saw in the introduction, although a particular \emph{algorithm} may be impossible to evaluate in a streaming fashion, the desired \emph{value} may well be computable, if only we had a different algorithm.
 Here is the unstreamable example from the introduction again:
-\begin{lstlisting}
+\begin{icicle}
   table kvs { key : Date; value : Int }
   query avg = let k = last key
               in  filter (key == k) of mean value;
-\end{lstlisting}
+\end{icicle}
 
 The problem is that the value of @last key@ is only available once we have reached the end of the stream, but @filter@ needs this value to process the very first element in the same stream.
 We distinguish between these two access patterns by giving them different names: we say that @last key@ is an \emph{aggregate}, because to compute it we must have consumed the \emph{entire stream}, whereas the filter predicate is an \emph{element}-wise computation because it only needs access to the current element in the stream.
 
 The trick to compute our average in a streaming fashion is to recognize that @filter@ is selecting a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
-\begin{lstlisting}
+\begin{icicle}
   table kvs { key : Date; value : Int } 
   query avg = let k    = last  key in
               let avgs = group key of mean value
               in  lookup k avgs
-\end{lstlisting}
+\end{icicle}
 
 Here we use the @group@ construct to assign key-value pairs to groups as we obtain them, and compute the running mean of the values of each group. The @avgs@ value becomes a map of group keys to their running means. Once we reach the end of the stream we will have access to the last key and can lookup the final result.
 %% Review #1:
@@ -63,10 +63,10 @@ We also provide impure contextual information to the query such as the current d
 Icicle queries process tables of arbitrary size that may not fit in memory.
 As with other streaming models, each query must execute without requiring buffer space proportional to the size of the input.
 As a counter-example, here is a simple list function which cannot be executed in a streaming manner without reserving a buffer of the same size as the input:
-\begin{lstlisting}
+\begin{haskell}
 unbounded :: [Int] -> [(Int,Int)]
 unbounded xs = zip (filter (> 0) xs) (filter (< 0) xs)
-\end{lstlisting}
+\end{haskell}
 
 This function takes an input list @xs@, and pairs the elements that are greater than zero with those that are less than zero.
 If we try to convert this computation to a single-pass streaming implementation, it requires an unbounded buffer: if the stream contains $n$ positive values followed by $n$ negative values, then all positive values must be buffered until we reach the negative ones, which allow output to be produced.

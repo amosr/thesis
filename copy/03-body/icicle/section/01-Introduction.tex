@@ -1,7 +1,8 @@
 %!TEX root = ../Main.tex
 \label{icicle:s:Introduction}
 
-This chapter presents Icicle, a domain-specific language for writing queries as push streams; this work was first published as \citep{robinson2016icicle} and was performed in conjunction with a machine-learning company called Ambiata.
+This chapter presents Icicle, a domain-specific language for writing queries as push streams.
+This work was first published as \citep{robinson2016icicle} and was performed during an internship at a machine-learning company called Ambiata.
 At Ambiata we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018 this was a lot of data.}
 For such applications we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
@@ -13,14 +14,13 @@ We want to compute the number of days where the open price exceeded the close pr
 We also want the mean of the open price for days in which the open price exceeded the close price.
 In Icicle we write the three queries as follows:
 
-\begin{lstlisting}
+\begin{icicle}
 table stocks { open : Int, close : Int }
 query 
   more = filter open > close of count;
   less = filter open < close of count;
   mean = filter open > close of sum open / count;
-\end{lstlisting}
-
+\end{icicle}
 
 In the above code, @open > close@ and @close < open@ are filter predicates, and @count@ counts how many times the predicate is true.
 The input table, @stocks@, defines the open and close prices as @Int@s.
@@ -28,7 +28,7 @@ In Icicle, input tables have an implicit time field and the input stream is sort
 
 We can express the same three queries using the push streams from \autoref{taxonomy/push} as follows.
 
-\begin{lstlisting}
+\begin{haskell}
 data Record = Record
  { time :: Time, open :: Int, close :: Int }
 
@@ -38,39 +38,42 @@ queries = (,,) <$> more <*> less <*> mean
   more = filter (\r -> open r > close r) count
   less = filter (\r -> open r < close r) count
   mean = filter (\r -> open r > close r) (div <$> map open sum <*> count)
-\end{lstlisting}
+\end{haskell}
 
 Aside from syntactic differences, the two programs have the same structure.
-The applicative functor syntax is used to divide the sum by the count in the @mean@ query.
-Icicle uses a modal type system to infer whether applicative syntax would be required, as described in \autoref{icicle:s:ElementsAndAggregates:TypeSystem}.
+The applicative functor syntax is used to divide the sum by the count in the @mean@ query, because the division is performed on the result of the push stream.
+Icicle does not use the applicative syntax as it uses a modal type system to infer which computations are performed on the result of the stream, as described in \autoref{icicle:s:ElementsAndAggregates:TypeSystem}.
 
 In this example, both @more@ and @mean@ compute the count with the same filter predicate.
 When the same computation is used by multiple queries, we would like to compute the value only once and share the result among all the queries that use it.
 Common subexpression elimination (CSE) removes some duplicate computations but, as its name suggests, it is limited to structural subexpressions~\cite{chitil1997uncommon}.
 Neither of the filtered counts is a subexpression of the other, so CSE will not remove the duplicate computation.
-In Icicle we remove this duplicate work by converting queries to an intermediate language, described in \autoref{icicle:s:IcicleCore}, which decomposes the query into individual folds.
+In Icicle we remove this duplicate work by first converting queries to an intermediate language, described in \autoref{icicle:s:IcicleCore}.
+This intermediate language decomposes the query into individual folds, exposing the opportunities for common subexpression elimination.
 
 If we were using an existing database implementation, we could convert all three queries to a single query in a back-end language like SQL, but doing so by hand is tedious and error prone.
 As the three queries use different filter predicates we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter.
 We must instead lift each predicate to an expression-level conditional and compute the count by summing the conditional:
-\begin{lstlisting}
+
+\begin{sql}
   SELECT SUM(IF(open > close, 1,    0))
        , SUM(IF(open < close, 1,    0))
        , SUM(IF(open > close, open, 0))
        / SUM(IF(open > close, 1,    0))
   FROM stocks;
-\end{lstlisting}
+\end{sql}
 
 % As we see, the result of query fusion tends to have many common sub expressions, and we wish to guarantee that the duplicates in the fused result are eliminated.
 
 Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data.
 As a counter-example, suppose we have a table with two fields @key@ and @value@, and we wish to find the mean of values whose key matches the last one in the table.
 We might try something like:
-\begin{lstlisting}
+
+\begin{icicle}
   table kvs { key : Date; value : Int }
   query avg = let k = last key
               in  filter (key == k) of mean value;
-\end{lstlisting}
+\end{icicle}
 
 Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally.
 While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start.

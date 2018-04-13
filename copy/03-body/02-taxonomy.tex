@@ -40,11 +40,11 @@ Suppose we have a file containing the historical prices for a particular corpora
 The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.
 The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
 
-\begin{lstlisting}
+\begin{haskell}
 data Record = Record
  { time  :: Time
  , price :: Double }
-\end{lstlisting}
+\end{haskell}
 
 We wish to evaluate this stock to see whether it was, historically, a worthy investment.
 One quality of a good investment is that its price increases over time, and we can quantify this by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
@@ -70,7 +70,7 @@ The one-pass correlation algorithm keeps track of the running means, among other
 As such, the fold state contains more than just the correlation.
 After the fold has completed we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
 
-\begin{lstlisting}
+\begin{haskell}
 correlation :: [(Double,Double)] -> Double
 correlation = correlation_x (foldl correlation_k correlation_z)
 
@@ -78,10 +78,10 @@ type State = (Double, Double, Double, Double, Double, Double)
 correlation_z :: State
 correlation_k :: State -> (Double,Double) -> State
 correlation_x :: State -> Double
-\end{lstlisting}
+\end{haskell}
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 type State = (Double, Double, Double, Double, Double, Double)
 
 correlation_z :: State
@@ -108,26 +108,26 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
       stddevX = sqrt varianceX
       stddevY = sqrt varianceY
   in covariance / (stddevX * stddevY)
-\end{lstlisting}
+\end{haskell}
 \caption[One-pass correlation]{one-pass correlation \TODO{move to appendix, or maybe this can be an example in the Icicle chapter}}
 \label{figs/impl/correlation}
 \end{figure}
 
 \autoref{figs/impl/correlation} shows the implementations of \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/ [sweep this under the rug or refer to appendix]; we can implement a function to compute the regression similarly.
 
-\begin{lstlisting}
+\begin{haskell}
 regression :: [(Double,Double)] -> Line
 regression = regression_x (foldl regression_k regression_z)
-\end{lstlisting}
+\end{haskell}
 
 Now that we have functions to compute the linear regression and the correlation, we can combine them together with the following program.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
 priceOverTime stock =
   let timeprices = map (\r -> (daysSinceEpoch (time r), price r)) stock
   in (regression timeprices, correlation timeprices)
-\end{lstlisting}
+\end{haskell}
 
 Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
@@ -146,13 +146,13 @@ We can see in the comparison of stock price to index price that the stock has gr
 
 We can compute the comparison of stock over market with the following program.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
 priceOverMarket stock index =
   let joined = join (\s i   -> time s `compare` time i) stock index
       prices = map  (\(s,i) -> (price s, price i))      joined
   in (regression prices, correlation prices)
-\end{lstlisting}
+\end{haskell}
 
 To match day against day and discard any days missing from either input, we join the stock with the index based on the date.
 We then extract both prices from the joined result and compute the regression and correlation.
@@ -161,23 +161,23 @@ Again, this function requires two traversals of the \Hs/prices/ list.
 Since both analyses provide useful information, we will perform both.
 This is a simple matter of constructing a pair.
 
-\begin{lstlisting}
+\begin{haskell}
 priceAnalyses :: [Record] -> [Record] -> ((Line, Double), (Line, Double))
 priceAnalyses stock index =
   let pot = priceOverTime   stock
       pom = priceOverMarket stock index
   in (pot, pom)
-\end{lstlisting}
+\end{haskell}
 
 \autoref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
 The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
 The edges are dependencies from one value to another; \Hs/joined/ is computed by joining together the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to \Hs/joined/.
 The large boxes bisecting most of the nodes denote which nodes are defined inside the \Hs/priceOverTime/ function and which are defined in \Hs/priceOverMarket/.
-This dependency graph is neither a tree nor an inverted tree: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
+This dependency graph is a directed acyclic graph: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
 Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.
 
 Although this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
-Which streaming model we choose dictates how difficult this rewrite will be.
+Our choice of streaming model dictates how difficult this rewrite will be.
 
 \begin{figure}
 \center
@@ -222,22 +222,19 @@ digraph G {
 \section{Pull streams}
 \label{taxonomy/pull}
 
-The first streaming model we will look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
+The first streaming model we look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
 The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
 We represent a pull stream as a function with no parameters which either returns a value, or returns \Hs/Nothing/ when the stream is finished.
 Since the stream might want to read from a file or update some local state, the function is wrapped in \Hs/IO/.
 
-\begin{lstlisting}
+\begin{haskell}
 data Pull a = Pull (IO (Maybe a))
-\end{lstlisting}
-
-This representation involves some streaming overhead, and in \REF{taxonomy/stream-fusion} we shall see more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
-These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described here; the same set of combinators can be implemented.
+\end{haskell}
 
 With this stream representation we can implement analogues of the list combinators used in the example queries.
 We can map a function over a pull stream like so.
 
-\begin{lstlisting}
+\begin{haskell}
 map :: (a -> b) -> Pull a -> Pull b
 map a_to_b (Pull pull_a) = Pull pull_b
  where
@@ -246,7 +243,7 @@ map a_to_b (Pull pull_a) = Pull pull_b
     return (case maybe_a of
              Nothing -> Nothing
              Just a  -> Just (a_to_b a))
-\end{lstlisting}
+\end{haskell}
 
 Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
 Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ and asks for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
@@ -256,7 +253,7 @@ In pull streams, consumers asks producers for the next value, and control flow b
 We can implement \Hs/foldl/ also.
 Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/.
 
-\begin{lstlisting}
+\begin{haskell}
 foldl :: (b -> a -> b) -> b -> Pull a -> IO b
 foldl k z (Pull pull_a) = loop z
  where
@@ -265,7 +262,7 @@ foldl k z (Pull pull_a) = loop z
     case maybe_a of
       Nothing -> return state
       Just a -> loop (k state a)
-\end{lstlisting}
+\end{haskell}
 
 This implementation of \Hs/foldl/ calls the local function \Hs/loop/ with the initial state of \Hs/z/.
 The \Hs/loop/ function repeatedly pulls from the pull function, \Hs/pull_a/, updating the state for every element.
@@ -291,7 +288,7 @@ We can join the two files in a streaming manner because both input files are alr
 
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 correlation :: Pull (Double,Double) -> IO Double
 regression  :: Pull (Double,Double) -> IO Line
 
@@ -311,7 +308,7 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
         b' <- pull_b
         go a b'
   go _ _ = return Nothing
-\end{lstlisting}
+\end{haskell}
 \caption{Pull stream combinators}
 \label{figs/impl/pull/combinator}
 \end{figure}
@@ -319,14 +316,14 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
 We cannot naively translate the list version of \Hs/priceOverTime/ to use these streaming combinators, because the list version required multiple traversals.
 The following program will not compute the correct result because it uses the \Hs/timeprices/ stream twice.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverTime_pull_bad :: Pull Record -> IO (Line, Double)
 priceOverTime_pull_bad stock = do
   let timeprices = Pull.map (\r -> (daysSinceEpoch (time r), price r)) stock
   r <- Pull.regression  timeprices
   c <- Pull.correlation timeprices
   return (r, c)
-\end{lstlisting}
+\end{haskell}
 
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
 By the time we go to compute the correlation and try to read the \Hs/timeprices/ stream again, it has already been read.
@@ -340,9 +337,9 @@ Rewinding would allow this program to compute the correct result, but the file w
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In this program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
 This is a simple instance of a transform known as \emph{tupling}, and automated tupling transforms such as \cite{hu1997tupling} exist, but are quite limited.
-We discuss tupling further in \REF{related/tupling}.
+% We discuss tupling further in \REF{related/tupling}.
 
-\begin{lstlisting}
+\begin{haskell}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
 regressionCorrelation_pull stream = do
   (r,c) <- Pull.foldl both_k both_z stream
@@ -355,7 +352,7 @@ priceOverTime_pull :: Pull Record -> IO (Line, Double)
 priceOverTime_pull stock = do
   let timeprices = Pull.map (\r -> (daysSinceEpoch (time r), price r)) stock
   regressionCorrelation_pull timeprices
-\end{lstlisting}
+\end{haskell}
 
 
 This program computes the correct value.
@@ -370,20 +367,20 @@ This was relatively easy because both use-sites were folds.
 Let us turn our attention to the second query, \Hs/priceOverMarket/.
 We can use the same function \Hs/regressionCorrelation_pull/ that we used above.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
 priceOverMarket_pull stock index =
   let joined = Pull.join (\s i   -> time s `compare` time i) stock index
   let prices = Pull.map  (\(s,i) -> (price s, price i))      joined
   regressionCorrelation_pull prices
-\end{lstlisting}
+\end{haskell}
 
-We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
+We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in the list implementation of \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
 
 When we implemented the pull version of \Hs/priceOverTime/, we had to look at the two occurences where the \Hs/timeprices/ stream had been used.
 We had to inline both places where the stream was used and manually write a new function to do the work of both.
 Both were fairly simple folds.
-Doing the same for \Hs/priceAnalyses/ is quite a more complicated: we would need to implement a special version of the \Hs/join/ inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+Doing the same for \Hs/priceAnalyses/ is more complicated: we would need to implement a special version of the \Hs/join/ inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
 
 It might appear that, since the \Hs/joined/ stream contains pairs from both \Hs/stock/ and \Hs/index/, we could use this to compute the correlation and regression of the the \Hs/stock/ component alone.
 Such a query would likely be easier to combine with \Hs/priceOverMarket/, but this query would compute a different result, since the \Hs/joined/ stream only contains elements from \Hs/stock/ for which corresponding days exist in the \Hs/index/ stream.
@@ -395,24 +392,24 @@ To execute these shared streams, each time we read from a shared stream, we need
 \subsection{Streaming overhead}
 \label{taxonomy/pull/streaming-overhead}
 
-This section looks at the streaming overhead involved in the pull stream representation.
-For simple combinators like map, this representation works well.
-The following function applies two functions to the elements in a stream.
+This pull stream representation can incur some streaming overhead because of the allocated @Maybe@ values.
+For simple combinators such as map, however, the overhead can be optimised away.
+Consider the following function, which applies two functions to the elements in a stream.
 
-\begin{lstlisting}
+\begin{haskell}
 map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
 map2 f g stream_a
  = let stream_b = Pull.map f stream_a
        stream_c = Pull.map g stream_b
    in  stream_c
-\end{lstlisting}
+\end{haskell}
 
 We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
 Fortunately, after some optimisation, both programs incur the same amount of overhead.
 To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
 After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
 
-\begin{lstlisting}
+\begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_b = do
@@ -425,7 +422,7 @@ map2 f g (Pull pull_a) = Pull pull_c
     return (case b of
              Nothing -> Nothing
              Just b' -> (Just (g a')))
-\end{lstlisting}
+\end{haskell}
 
 When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
 When there is a stream element to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
@@ -435,7 +432,7 @@ Now, @pull_c@ must perform the same unwrapping and wrapping on the returned valu
 To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
 Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression.
 
-\begin{lstlisting}
+\begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_c = do
@@ -445,13 +442,13 @@ map2 f g (Pull pull_a) = Pull pull_c
                    Just a' -> (Just (f a')))
              Nothing -> Nothing
              Just b' -> (Just (g b')))
-\end{lstlisting}
+\end{haskell}
 
 The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
 We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression.
 
 
-\begin{lstlisting}
+\begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
  where
   pull_c = do
@@ -459,11 +456,15 @@ map2 f g (Pull pull_a) = Pull pull_c
     return (case a of
              Nothing -> Nothing
              Just a' -> (Just (g (f b))))
-\end{lstlisting}
+\end{haskell}
 
 By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
 Optimising compilers can perform comparable transforms as part of its suite of general purpose optimisations.
 This is discussed further in \REF{related/fusion}.
+
+% more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
+% These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described here; the same set of combinators can be implemented.
+
 
 \section{Push streams}
 \label{taxonomy/push}
@@ -476,11 +477,11 @@ This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
 This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual.
 
-\begin{lstlisting}
+\begin{haskell}
 data Push a r = Push
   { push :: a -> IO ()
   , done :: IO r }
-\end{lstlisting}
+\end{haskell}
 
 We augment the definition with an extra type parameter, \Hs/r/, for the result type.
 Since the result only becomes available at the end of the stream, we separate the two cases of the (\Hs/Maybe a/) argument into two functions, \Hs/push/ and \Hs/done/.
@@ -494,13 +495,13 @@ This inversion of pull streams results in a fundamental difference in how we pro
 We cannot map a function over the elements in push streams in the way we would lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
 Instead, we implement contravariant-map, or \Hs/contramap/, like so.
 
-\begin{lstlisting}
+\begin{haskell}
 contramap :: (a -> b) -> Push b r -> Push a r
 contramap a_to_b bs = Push push_a done_a
  where
   push_a a = push bs (a_to_b a)
   done_a   = done bs
-\end{lstlisting}
+\end{haskell}
 
 The \Hs/contramap/ function takes a function to convert values of type \Hs/a/ to values of type \Hs/b/ and a sink to push values of type \Hs/b/ to, returning a sink which can receive values of type \Hs/a/.
 When a producer tries to push an input value into the returned stream, the @push_a@ function converts this to a value of type @b@ and pushes it further on to the consumer of @b@.
@@ -509,20 +510,20 @@ The producer is in control while the consumer passively waits for its next input
 
 We \emph{do} in fact have a regular (covariant) map function for push streams, but this transforms the stream result rather than the input elements.
 
-\begin{lstlisting}
+\begin{haskell}
 map_result :: (r -> r') -> Push a r -> Push a r'
 map_result r_to_r' push_a = Push (push push_a) done_a'
  where
   done_a' = do
     r <- done push_a
     return (r_to_r' r)
-\end{lstlisting}
+\end{haskell}
 
 The type of \Hs/foldl/ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
 The return value is in \Hs/IO/ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
 As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold.
 
-\begin{lstlisting}
+\begin{haskell}
 foldl :: (b -> a -> b) -> b -> IO (Push a b)
 foldl k z = do
   ref <- newIORef z
@@ -531,7 +532,7 @@ foldl k z = do
        writeIORef ref (k state a)
   let done_a = readIORef ref
   return (Push push_a done_a)
-\end{lstlisting}
+\end{haskell}
 
 As before, we can use this @foldl@ function to implement @correlation@ and @regression@.
 
@@ -540,7 +541,7 @@ We can broadcast to two consumers by combining two consumers into one before con
 The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
 We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \autoref{taxonomy/polarised}.
 
-\begin{lstlisting}
+\begin{haskell}
 dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
 dup_ooo a1 a2 = Push push_a done_a
  where
@@ -552,7 +553,7 @@ dup_ooo a1 a2 = Push push_a done_a
     r  <- done a1
     r' <- done a2
     return (r, r')
-\end{lstlisting}
+\end{haskell}
 
 We could also use the applicative functor instance for push streams \REF{appendix} to combine consumers together, specifying how to transform and combine the results.
 The applicative functor implementation is similar to the \Hs/dup_ooo/ function specified above.
@@ -560,17 +561,17 @@ This \Hs/dup_ooo/ function could then be written equivalently as (\Hs/dup_ooo a1
 
 We can use \Hs/dup_ooo/ and \Hs/contramap/ to implement \Hs/unzip/, which deconstructs a stream of pairs into a pair of streams.
 
-\begin{lstlisting}
+\begin{haskell}
 unzip :: Push a r -> Push b r' -> Push (a,b) (r,r')
 unzip push_a push_b = dup_ooo (contramap fst push_a) (contramap snd push_b)
-\end{lstlisting}
+\end{haskell}
 
 Pairs of @a@ and @b@ flow from the returned push stream into the argument streams; when there are no more input pairs, the stream results are paired together and flow from the argument streams to the returned stream.
 This inverted control flow is because the stream elements are contravariant and the stream results are covariant.
 
 With these combinators, we can write the \Hs/priceOverTime/ query using push streams.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverTime_push :: IO (Push Record (Line,Double))
 priceOverTime_push = do
   reg   <- Push.regression
@@ -579,7 +580,7 @@ priceOverTime_push = do
     (\r -> (daysSinceEpoch (time r), price r))
     (Push.dup_ooo reg cor)
   return cm
-\end{lstlisting}
+\end{haskell}
 
 This program computes both correlation and regression in a streaming fashion.
 In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
@@ -609,7 +610,7 @@ Combining pull and push streams in the form of \emph{polarised streams} allows u
 Although we cannot share the elements of a pull stream among multiple pull consumers, we can share the elements of a pull stream among one push consumer and one pull consumer.
 We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull).
 
-\begin{lstlisting}
+\begin{haskell}
 dup_ioi_ignore_result :: Pull a -> Push a r -> Pull a
 dup_ioi_ignore_result (Pull pull_a) push_b = Pull pull_a'
  where
@@ -622,7 +623,7 @@ dup_ioi_ignore_result (Pull pull_a) push_b = Pull pull_a'
      Just a -> do
       push push_b a
       return (Just a)
-\end{lstlisting}
+\end{haskell}
 
 We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source @push_a@, pushes the value to sink @push_b@, and returns the value to the caller.
 The result of the push stream is ignored because the pull stream representation has no way to return a result at the end of the stream.
@@ -631,13 +632,13 @@ Encoding the result of a stream inside the stream itself is not important for si
 When mixing stream representations to allow multiple consumers, however, we need to be able to capture the result of all the consumers.
 We extend the pull stream representation: instead of returning a @Maybe@ with @Nothing@ to signal the end of the stream, streams now return an @Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream.
 
-\begin{lstlisting}
+\begin{haskell}
 data PullResult a r = PullResult (IO (Either a r))
-\end{lstlisting}
+\end{haskell}
 
 With this extended pull stream representation, we can implement a version of @dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together.
 
-\begin{lstlisting}
+\begin{haskell}
 dup_ioi :: PullResult a r -> Push a r' -> PullResult a (r,r')
 dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
  where
@@ -650,7 +651,7 @@ dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
      Left a -> do
       push push_b a
       return (Left a)
-\end{lstlisting}
+\end{haskell}
 
 % There is very little change between the two versions of @dup_ioi@
 Modifying @dup_ioi_ignore_result@ to work on the new representation only required changing the constructors for the stream and adding the return value; other combinators are modified similarly.
@@ -658,15 +659,15 @@ We use the same naming convention for suffixes, for example @map_i@ for mapping 
 When consuming a pull stream by folding over it, we return the fold result as well as the stream result.
 The type signature for @foldl_i@ changes to include the stream result; the implementation change is similar to the change for @dup_ioi@.
 
-\begin{lstlisting}
+\begin{haskell}
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
-\end{lstlisting}
+\end{haskell}
 
 We can also convert a pull stream to a push stream: we call this operation \emph{draining} the pull stream.
 To drain a stream, we loop over all the values in the pull stream and push each one into the push stream.
 At the end, we return a pair of the results of both streams.
 
-\begin{lstlisting}
+\begin{haskell}
 drain_io :: Pull a r -> Push a r' -> IO (r, r')
 drain_io (Pull pull_a) push_a = loop
  where
@@ -678,14 +679,14 @@ drain_io (Pull pull_a) push_a = loop
      Right r -> do
       r' <- done push_a
       return (r, r')
-\end{lstlisting}
+\end{haskell}
 
 We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@.
 
-\begin{lstlisting}
+\begin{haskell}
 dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
 dup_ioo pull0 push1 push2 = drain_io pull0 (dup_ooo push1 push2)
-\end{lstlisting}
+\end{haskell}
 
 We can also implement @dup_oii@ by flipping the arguments of @dup_ioi@, and compose the various @dup@ functions together to duplicate an arbitrary number of outputs.
 With @dup_ioi@, @dup_oii@, @dup_ioo@ and @dup_ooo@, we can duplicate a stream when there is no more than one pull consumer.
@@ -696,7 +697,7 @@ Because the input streams have result values, we ensure that the joined stream's
 To compute both results, when one stream ends before the other we drain the unfinished stream until we reach the result.
 Other than this draining, the implementation of @join_iii@ follows the implementation of @join@.
 
-\begin{lstlisting}
+\begin{haskell}
 join_iii :: (a -> b -> Ordering)
          -> PullResult a r
          -> PullResult b r'
@@ -722,7 +723,7 @@ join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
   go (Right a) (Left _) = do
     b' <- pull_b
     go (Right a) b'
-\end{lstlisting}
+\end{haskell}
 
 
 We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
@@ -730,7 +731,7 @@ Conceptually, this has an input pull stream of type @a@ and an input push stream
 The definition for @join_ioo@ follows.
 The output push stream is given as an argument while the input push stream is the return value.
 
-\begin{lstlisting}
+\begin{haskell}
 join_ioo :: (a -> b -> Ordering)
          -> PullResult a r
          -> Push (a,b) r'
@@ -753,7 +754,7 @@ join_ioo comparekey (PullResult pull_a) push_ab = Push push_b done_b
      Right a' -> do
       b <- done push_ab
       return (a,b)
-\end{lstlisting}
+\end{haskell}
 
 The returned push stream accepts values of type @b@.
 When a new value is pushed, it repeatedly reads values from the input pull stream until the pulled value is equal to or greater than the pushed value using the given ordering function to compare the keys.
@@ -827,7 +828,7 @@ Stream elements flow ``backwards'' from function result to argument in the place
 When a pull stream is duplicated into a push stream, the stream results for the push stream are nested inside the resulting pull stream; recovering these results requires pattern-matching on the nested tuple.
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 priceOverTime_o :: IO (Push Record (Line,Double))
 priceOverTime_o = do
   pot_regres    <- regression_o
@@ -854,7 +855,7 @@ priceAnalyses_ii stock index = do
   case result of 
     (potC,(potR,((r,(pomC,pomR)),r'))) ->
       return ((potC,potR), (pomC,pomR))
-\end{lstlisting}
+\end{haskell}
 \caption[Polarised implementation of priceOverTime and priceOverMarket]{polarised implementation of \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
 \label{figs/impl/polar/priceOverTime-priceOverMarket}
 \end{figure}
@@ -911,7 +912,7 @@ digraph G {
 \end{figure}
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 zip_ioo :: PullResult a r -> Push (a,b) r' -> Push b (r,r')
 zip_ioo (Pull pull_a) push_ab = Push push_b done_b
  where
@@ -927,7 +928,7 @@ zip_ioo (Pull pull_a) push_ab = Push push_b done_b
     Right r -> do
      r' <- done push_ab
      return (r,r')
-\end{lstlisting}
+\end{haskell}
 \caption[polarised implementation of \Hs/zip_ioo/]{polarised implementation of \Hs/zip_ioo/}
 \label{figs/polar/impl/zip_ioo}
 \end{figure}
@@ -946,7 +947,7 @@ This cycle complicates translating the graph to an implementation.
 The following incomplete implementation also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
 The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result.
 
-\begin{lstlisting}
+\begin{haskell}
 priceOverTime_c :: PullResult Record r -> IO (Double, r)
 priceOverTime_c stock =
   let stock' :: PullResult Record (Double,r)
@@ -961,7 +962,7 @@ priceOverTime_c stock =
 
 correlation_io :: PullResult Double r -> Push Double (Double, r)
 correlation_io stream_a = zip_ioo stream_a correlation_o
-\end{lstlisting}
+\end{haskell}
 
 This incomplete implementation constructs a stream transformer, but does not directly compute the stream result.
 All the combinators are \emph{passive combinators}, constructing a stream transformer that responds to push or pull requests rather than actively pulling or pushing.
@@ -987,6 +988,7 @@ Instead we must hand-optimise the program, combining the duplicate, maps and zip
 % 
 
 \section{Kahn process networks}
+\label{taxonomy/kpn}
 
 The difference between pull, push and polarised streams is where the computation is controlled.
 In pull streams the consumer controls the computation.
@@ -1022,7 +1024,7 @@ There are dynamic algorithms to identify artificial deadlocks at runtime and res
 
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 data Channel a
 
 data Network a
@@ -1039,7 +1041,7 @@ foldl   :: (a -> b -> a) -> a -> Channel b
         -> Network (Result a)
 
 execute :: Network (Result a) -> IO a
-\end{lstlisting}
+\end{haskell}
 \caption[Types and combinators for Kahn process networks]{types and combinators for Kahn process networks.}
 \label{figs/kpn/combinators}
 \end{figure}
@@ -1058,7 +1060,7 @@ The @execute@ function takes a process network description containing the result
 
 
 \begin{figure}
-\begin{lstlisting}
+\begin{haskell}
 correlation :: Channel (Double,Double) -> Network (Result Double)
 regression  :: Channel (Double,Double) -> Network (Result Line)
 
@@ -1083,7 +1085,7 @@ priceAnalysis stock index = do
   pot <- priceOverTime   stock
   pom <- priceOverMarket stock index
   return ((,) <$> pot <*> pom)
-\end{lstlisting}
+\end{haskell}
 \caption{implementations of \Hs/priceOverTime/, \Hs/priceOverMarket/, and \Hs/priceAnalyses/ as Kahn process network.} 
 \label{figs/kpn/impl/priceAnalyses}
 \end{figure}

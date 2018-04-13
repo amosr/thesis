@@ -1,0 +1,90 @@
+Correct, but far noisier push version of queries
+\begin{lstlisting}
+data Record = Record
+ { time :: Time, open :: Double, close :: Double }
+
+queries :: IO (Push Record (Int,Int,Double))
+queries = do
+  q0 <- more
+  q1 <- less
+  q2 <- mean
+  return ((,,) <$> q0 <*> q1 <*> q2)
+ where
+  more = filter (\r -> open r > close r) <$> count
+  less = filter (\r -> open r < close r) <$> count
+  mean = do
+    s <- sum
+    c <- count
+    return (filter (\r -> open r > close r) ((/) <$> map open s <*> c)
+\end{lstlisting}
+
+\begin{lstlisting}
+data Record = Record
+ { time :: Time, open :: Double, close :: Double }
+
+queries :: Push Record (Int,Int,Double)
+queries = (,,) <$> more <*> less <*> mean
+ where
+  more = filter (\r -> open r > close r) count
+  less = filter (\r -> open r < close r) count
+  mean = filter (\r -> open r > close r) ((/) <$> map open sum <*> count)
+\end{lstlisting}
+
+\begin{lstlisting}
+averageincrease stocks =
+ let diffs = map (\r -> open r - close r) stocks
+ mean (filter (>0) diffs)
+\end{lstlisting}
+
+\begin{lstlisting}
+table stocks { open : Double, close : Double }
+query 
+  more = filter open > close of count;
+  less = filter open < close of count;
+  mean = filter open > close of sum open / count;
+\end{lstlisting}
+
+\begin{lstlisting}
+mean :: IO (Push Double Double)
+mean = do
+  sum   <- Push.foldl sum 0
+  count <- Push.foldl (\c r -> c + 1) 0
+  return ((/) <$> sum <*> count)
+
+meanOverMean :: IO (Push Record (Double,Double,Double))
+meanOverMean = do
+  mean_open <- mean
+  mean_more <- mean
+  proportions <$> mean_open <*> filter (\r -> open r > close r) mean_more
+ where
+  proportions mean_open mean_more = (mean_open / mean_more, mean_open, mean_more)
+\end{lstlisting}
+
+\begin{lstlisting}
+let mean_open = sum open / count
+let mean_more = filter open > close of sum open / count
+  (mean_open / mean_more, mean_open, mean_more)
+
+-------
+(\mean_open mean_more -> (mean_open / mean_more, mean_open, mean_more))
+  <$> ((/) <$> map open sum <*> count)
+  <*> (filter (\r -> open r > close r) ((/) <$> map open sum <*> count))
+
+-------
+let mean_open = (/) <$> map open sum <*> count
+    mean_more = filter (\r -> open r > close r) ((/) <$> map open sum <*> count)
+in (,,) <$> ((/) <$> mean_open <*> mean_more) <*> mean_open <*> mean_more
+
+-------
+let mean_open = sum open / count
+filter open > close of
+let mean_more = sum open / count
+  (mean_open / mean_more, mean_open, mean_more)
+
+-------
+let mean_open = (/) <$> map open sum <*> count
+in filter (\r -> open r > close r)
+    (let mean_more = (/) <$> map open sum <*> count
+     in (,,) <$> ((/) <$> mean_open <*> mean_more) <*> mean_open <*> mean_more)
+\end{lstlisting}
+

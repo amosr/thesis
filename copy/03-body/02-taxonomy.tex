@@ -489,6 +489,14 @@ Since the result only becomes available at the end of the stream, we separate th
 When we have a value we call \Hs/push/.
 When the stream is finished we call \Hs/done/ to retrieve the result.
 
+% Most consumers also have some initialisation that needs to be performed, for example opening an output file or constructing a mutable reference in which to accumulate values.
+% In the \Hs/Push/ type, the \Hs/init/ function performs initialisation and returns a \Hs/PushRep/.
+% \begin{haskell}
+% data Push a r = Push
+%   { init :: IO (PushRep a r) }
+% \end{haskell}
+
+
 
 In this representation, it is the consumers that are values of type (\Hs/Push a r/): they are sinks into which we can push values of type \Hs/a/, and eventually get an \Hs/r/ back.
 This inversion of pull streams results in a fundamental difference in how we program with push streams, and what we can express with push streams.
@@ -1096,7 +1104,7 @@ There are some differences from the list version: the process network is constru
 The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
-In \autoref{taxonomy/pull/streaming-overhead} we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which is sometimes removed by general purpose compiler optimisations.
+In \autoref{taxonomy/pull/streaming-overhead} we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
 Communication between processes requires more overhead than allocating @Maybe@ values, and is not removed by general purpose optimisations.
 To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
 Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
@@ -1120,10 +1128,10 @@ The optimal chunk size is a trade-off between communication overhead and memory 
 % Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 % Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
 
-From a functional programming perspective, small, fine-grained processes are desirable because they allow us to write a process for each combinator and compose them together.
+From a functional programming perspective, small, fine-grained processes like those used in our example are desirable because they allow us to write a process for each combinator and compose them together.
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
 We can reduce the amount of communication by combining multiple connected processes together into one larger process.
-The combined process performs the task of each individual process, but communicates by local variables instead of channels.
+The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
 In \REF{kpn/fusion} we describe an algorithm to combine processes together to reduce overhead.
 For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
 A single process executes sequentially, removing any potential speedup from parallelism.
@@ -1148,7 +1156,7 @@ Push streams support multiple queries, and are written back-to-front with explic
 Polarised streams support multiple inputs and multiple queries, require polarity analysis of the entire dependency graph, and are written partially back-to-front and partially front-to-back.
 Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
 
-In the next chapter we will see Icicle, a language for specifying push stream queries \autoref{part:icicle}.
+In the next chapter we will see Icicle, a language for specifying push stream queries (\autoref{part:icicle}).
 Icicle queries are written front-to-back and streams can be shared without requiring explicit duplication.
 Queries are compiled to folds over push streams which can be executed concurrently.
 After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together \REF{kpn}.

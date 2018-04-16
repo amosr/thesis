@@ -240,4 +240,111 @@ As we cannot encode all possible orderings into the definition of the processes 
 
 % A process network is a set of multiple processes that can be evaluated concurrently. Any inputs that are not produced as outputs of processes are assumed to be external inputs --- their values will be provided by the environment. Processes form the essence of stream computation, and a single process can be given a straightforward sequential semantics by mapping to an imperative language. By fusing multiple processes into a single one, we are effectively giving a sequential interpretation for concurrent processes.
 
+\section{Fusion}
+\label{s:Fusion}
+
+The core fusion algorithm constructs a static execution schedule for a single pair of processes. To fuse a whole process group we fuse successive pairs of processes until only one remains. 
+
+Fig.~\ref{fig:Fusion:Types} defines some auxiliary grammar used during fusion. We extend the exiting $Label$ grammar with an additional alternative, $Label_S \times Label_S$ which we use for the labels in a fused result process. Each $Label_S$ consists of a $Label$ from one of the  source processes, paired with a map from $Channel$ to the statically known part of that channel's current $\InputState$. The definition of $Label$ is now recursive. While fusing a whole process group, as we fuse pairs of individual processes the labels in the result collect more and more information. Each label of the final, completely fused process encodes the joint state that all the original source processes would be in at that point.
+
+% These new labels $Label_S$ consist of a pair of source labels, as well as the static part of the $\InputState$ of each input channel. 
+
+% If the static $\InputState_S$ is $@pending@_S$, there is a value waiting to be pulled, do not know the actual value. 
+
+We also extend the existing $Variable$ grammar with a (@chan@ c) form which represents the stream buffer variable associated with channel @c@. We only need one stream buffer variable for each channel, and naming them like this saves us from inventing fresh variable names in the definition of the fusion rules (we used a fresh name @b1@ back in \S\ref{s:Fusion:FusingPulls} to avoid introducing a new mechanism at that point in the discussion) 
+
+Still in Fig.~\ref{fig:Fusion:Types}, $\ChanType_2$ classifies how channels are used, and possibly shared, between two processes. Type @in2@ indicates that the two processes @pull@ from the same channel, and these actions must then be coordinated. Type @in1@ indicates that only a single process pulls from the channel. Type @in1out1@ indicates that one process pushes to the channel and the other pulls from the same. Type @out1@ indicates that the channel is pushed to by a single process. Each output channel is uniquely owned and cannot be pushed to by more than one process.
+
+\input{copy/03-body/02-process/figures/Fusion-types.tex}
+\input{copy/03-body/02-process/figures/Fusion-fusePair.tex}
+
+
+\smallskip
+% -------------------------------------
+Fig.~\ref{fig:Fusion:Def:Top} defines function \ti{fusePair} that fuses a pair of processes together, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from Fig.~\ref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states we add them to a map $bs$ of joint label to corresponding the instruction, and repeat the process to a fixpoint where no more states can be discovered.
+
+\input{copy/03-body/02-process/figures/Fusion-tryStepPair.tex}
+
+% -------------------------------------
+Fig.~\ref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which of two processes to advance.
+
+Clauses (PreferJump1) and (PreferJump2) are heuristics which prioritize processes that can perform a @jump@. This heuristic helps to collect @jump@ instructions together in the result process, which are then easier for post-fusion optimization (\S\ref{s:Optimisation}) to handle. As clause (PreferJump2) calls $\ti{tryStep}$ with the instructions in swapped order, if \ti{tryStep} succeeds we use $\ti{swaplabels}$ (from Fig.~\ref{fig:Fusion:Utils}) to re-swap the labels in the result.
+
+Clauses (DeferPull1) and (DeferPull2) are similar heuristics, which defer @pull@ instructions if possible. We do this because @pull@ instructions may block, while other instructions are more likely to produce immediate results.
+
+Clauses (Run1) and (Run2) apply when one process can advance using some other instruction. We try the first process first, and if that can advance then so be it. This priority means that fusion is left-biased, preferring advancement of the left process over the second.
+
+\input{copy/03-body/02-process/figures/Fusion-tryStep.tex}
+
+
+% -------------------------------------
+\smallskip
+Fig.~\ref{fig:Fusion:Def:Step} defines function \ti{tryStep} which schedules a single instruction. This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
+
+Clause (LocalJump) applies when the left process wants to jump.
+In this case, the result instruction simply performs the corresponding jump, leaving the right process where it is. 
+
+Clause (LocalCase) is similar, except that there are two destination labels.
+
+Clause (LocalPush) applies when the left process wants to push to a non-shared output channel.
+In this case the push can be performed directly, with no additional coordination required.
+
+Clause (SharedPush) applies when the left process wants to push to a shared channel. Pushing to a shared channel requires the downstream process to be ready to accept the value at the same time. We encode this constraint by requiring the static input state of the downstream channel to be $@none@_S$. When this is satisfied, the result instruction stores the pushed value in the stream buffer variable $@chan@~c$'' and sets the static input state to ``$@pending@_S$'', which indicates that the new value is now available. 
+
+Still in Fig.~\ref{fig:Fusion:Def:Step}, clause (LocalPull) applies when the left process wants to pull from a local channel, which requires no coordination.
+
+Clause (SharedPull) applies when the left process wants to pull from a shared channel that the other process either pulls from or pushes to. We know that there is already a value in the stream buffer variable, because the state for that channel is $@pending@_S$. The result instruction copies the value from the stream buffer variable into a variable specific to the left source process, and the corresponding $@have@_S$ channel state in the result label records that it has done so.
+
+Clause (SharedPullInject) applies when the left process wants to pull from a shared channel that both processes pull from, and neither already has a value. The result instruction is a @pull@ that loads the stream buffer variable.
+
+Clause (LocalDrop) applies when the left process wants to drop the current value from that it read from an unshared input channel, which requires no coordination.
+
+Clause (ConnectedDrop) applies when the left process wants to drop the current value that it received from an upstream process. As the value will have been sent via a heap variable instead of a still extant channel, the result instruction just performs a @jump@ while updating the static channel state.
+
+Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants to drop a value it gained from a channel which is shared by the other process. In (SharedDropOne) the channel states reveal that the other process is still using the value. In this case the result instruction is a @jump@ that only updates the static information that the left source process no longer requires this value. In (SharedDropBoth) then channel states reveal that the other process no longer needs the value either. In this case the result instruction is a real @drop@, because we are sure that neither process requires the value any longer.
+
+
+% -------------------------------------
+\input{copy/03-body/02-process/figures/FusionUtils.tex}
+
+\smallskip
+Fig.~\ref{fig:Fusion:Utils} contains definitions of some utility functions which we have already mentioned.
+Function \ti{channels} computes the $\ChanType_2$ map for a pair of processes.
+Function \ti{outlabels} gets the set of output labels for an instruction, which is used when computing the fixpoint of reachable states.
+Function \ti{swaplabels} flips the order of the compound labels in an instruction.
+
+\section{Proofs}
+\label{s:Proofs}
+
+Our fusion system is formalized in Coq, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels then the two source processes may also produce that same sequence. Note that due to non-determinism of process execution the converse is not true in practice: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders. 
+
+% Note that the converse is not necessarily true: just because two processes can evaluate to a particular output does not mean the fused program will evaluate to that. This is because, as explained in~\S\ref{s:EvaluationOrder}, evaluation of a process network is non-deterministic, and fusion commits to a particular evaluation order.
+
+\begin{code}
+Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
+                  (ss : Streams)         (h   : Heap)
+                  (l1 : L1)              (is1 : InputStates)
+                  (l2 : L2)              (is2 : InputStates) 
+  :  EvalBs (fuse P1 P2) ss h (LX l1 l2 is1 is2)
+  -> EvalOriginal Var1 P1 P2 is1 ss h l1
+  /\ EvalOriginal Var2 P2 P1 is2 ss h l2.
+\end{code}
+
+The @Soundness@ theorem uses @EvalBs@ to evaluate the fused program, and @EvalOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
+
+% Care must be taken to remove stream values that the other process has pulled but this one has not yet.
+%%% AR: Really would like to say something about this but no room to explain properly
+% For shared inputs when one program has pulled, the other program must be evaluated with the other value removed from the end of the stream.
+
+To aid mechanization, the Coq formalization has some small differences from the system presented earlier in this thesis.
+Firstly, the Coq formalization uses a separate @update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
+Performing this desugaring makes the low level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
+This desugaring also 
+This causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update. This is a fairly minor difference, and we have made this change in the paper version for ease of exposition.
+
+Secondly, the formalization only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process groups. Instead, we sequentially evaluate each source processes independently, and compare the output values to the ones produced by sequential evaluation of the fused result process. This is sufficient for our purposes because we are mainly interested in the value correctness of the fused program, rather than making a statement about the possible execution orders of the source processes when run concurrently.
+
+On the other hand, 
+Ideally, a future version of the formalisation would include this change.
+Secondly, our formalisation does not implement the concurrent evaluation semantics for processes, only sequential evaluation for a single process. Instead we sequentially evaluate both processes with the same input values and outputs. Despite these differences, the Coq formalisation gives us sufficient confidence in the correctness of the version presented here.
 

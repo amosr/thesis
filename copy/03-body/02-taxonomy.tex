@@ -459,11 +459,12 @@ map2 f g (Pull pull_a) = Pull pull_c
 \end{haskell}
 
 By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
-Optimising compilers can perform comparable transforms as part of its suite of general purpose optimisations.
-This is discussed further in \REF{related/fusion}.
+Optimising compilers perform similar transforms as part of their suite of general purpose optimisations.
+In this representation, the @filter@ combinator is expressed as a recursive function, which makes it harder to inline the definition and remove the overhead.
+In \REF{related/fusion} we discuss more sophisticated representations; for example in the Stream Fusion~\cite{coutts2007stream} representation, @filter@ is defined non-recursively to assist inlining.
+These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described above; the same set of combinators can be implemented with the same asymptotic space and time behaviour and improved constant factors.
 
 % more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
-% These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described here; the same set of combinators can be implemented.
 
 
 \section{Push streams}
@@ -475,7 +476,7 @@ As we shall see, the advantage of push streams is that they enable stream elemen
 A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs/IO/ effect, for example writing to a file, or writing to some mutable state.
 This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
-This is a common enough use-case that it justifies a momentary departure from the conceptual clarity of using the exact dual.
+This is a common enough use-case that it justifies a departure from the conceptual clarity of using the exact dual.
 
 \begin{haskell}
 data Push a r = Push

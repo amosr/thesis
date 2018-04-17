@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-% TODO: merge into 02-process/01-process:introduction as necessary
+% TODO: merge into 02-process/01-process:introduction as necessary. I think this can be deleted
 \chapter{Introduction}
 \label{s:Introduction}
 
@@ -30,11 +30,11 @@ In this paper we present Machine Fusion, a new approach. Each operator is expres
 
 In summary, we make the following contributions:
 \begin{itemize}
-\item a process calculus for encoding infinite streaming programs (\S\ref{s:Processes});
-\item an algorithm for fusing these processes, the first to support splits and joins (\S\ref{s:Fusion});
-\item numerical results that demonstrate that the algorithm is well behaved when the number of fused processes is large. The size of the fused result program is not excessive. (\S\ref{s:Evaluation});
-\item a formalization and proof of soundness for the core fusion algorithm in Coq (\S\ref{s:Proofs}).
+\item a process calculus for encoding infinite streaming programs (\autoref{s:Processes});
+\item an algorithm for fusing these processes, the first to support splits and joins (\autoref{s:Fusion});
+\item numerical results that demonstrate that the algorithm is well behaved when the number of fused processes is large. The size of the fused result program is not excessive. (\autoref{s:Evaluation});
+\item a formalization and proof of soundness for the core fusion algorithm in Coq (\autoref{s:Proofs}).
 \end{itemize}
 
-Our fusion transform for infinite stream programs also serves as the basis for an \emph{array} fusion system, using a natural extension to finite streams. We discuss this extension in \S\ref{s:Finite}.
+Our fusion transform for infinite stream programs also serves as the basis for an \emph{array} fusion system, using a natural extension to finite streams. We discuss this extension in \autoref{s:Finite}.
 

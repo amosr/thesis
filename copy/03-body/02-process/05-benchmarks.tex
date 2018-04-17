@@ -500,7 +500,7 @@ But by committing to the interleaving that copies \emph{all} @ac@, we can no lon
 
 Dynamically, if we were to try to execute the result process and the downstream @zip@ process concurrently, then the execution would deadlock.
 Statically, when we try to fuse the result process with the downstream @zip@ process then the deadlock is discovered and fusion fails.
-Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this will manifest as the failure of the $tryStepPair$ function from Fig.\ref{fig:Fusion:Def:StepPair}.
+Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this will manifest as the failure of the $tryStepPair$ function from \autoref{fig:Fusion:Def:StepPair}.
 The $tryStepPair$ function determines which of the instructions from either process can be executed next, and when execution is deadlocked there are none.
 
 On the upside, fusion failure is easy to detect.
@@ -532,7 +532,7 @@ In both cases the number of states in the result process grows linearly with the
 
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
-On the other hand, Fig.~\ref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N merge processes, N+1 input streams, and a single output stream. The output of each merge process is the input of the next, forming a chain of merges. In source notation the network for N = 3 is @sOut = merge sIn1 (merge sIn2 (merge sIn3 sIn4))@.
+On the other hand, \autoref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N merge processes, N+1 input streams, and a single output stream. The output of each merge process is the input of the next, forming a chain of merges. In source notation the network for N = 3 is @sOut = merge sIn1 (merge sIn2 (merge sIn3 sIn4))@.
 
 When fusing two processes the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the @instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
 

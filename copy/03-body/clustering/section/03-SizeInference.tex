@@ -41,9 +41,9 @@ MMMMMMMM \= MM  \= MM \= MMMMMM \= \kill
 % -----------------------------------------------------------------------------
 \subsection{Size Types, Constraints and Schemes}
 \label{clustering:s:SizeTypes}
-Figure~\ref{clustering:f:constraints} shows the grammar for size types, constraints and schemes. A size scheme is like a type constraint from Hindley-Milner type systems, except that it only mentions the size of each input array, instead of the element types as well.
+\autoref{clustering:f:constraints} shows the grammar for size types, constraints and schemes. A size scheme is like a type constraint from Hindley-Milner type systems, except that it only mentions the size of each input array, instead of the element types as well.
 
-A size may either be a variable $k$ or a cross product of two sizes. We use the latter to represent the result size of the @cross@ operator discussed in the previous section. Constraints may either be trivially $\true$, an equality $k = \tau$, or a conjunction of two constraints $C \wedge C$. We refer to the trivially true and equality constraints as \emph{atomic constraints}. Size schemes relate the sizes of each input and output array. For example, the size scheme for the @normalize2@ example from Figure~\ref{clustering:f:normalize2-clusterings} is as follows:
+A size may either be a variable $k$ or a cross product of two sizes. We use the latter to represent the result size of the @cross@ operator discussed in the previous section. Constraints may either be trivially $\true$, an equality $k = \tau$, or a conjunction of two constraints $C \wedge C$. We refer to the trivially true and equality constraints as \emph{atomic constraints}. Size schemes relate the sizes of each input and output array. For example, the size scheme for the @normalize2@ example from \autoref{clustering:f:normalize2-clusterings} is as follows:
 $$@normalize2@ ~:_s \forall k. (xs : k) \to (ys_1 : k,~ ys_2 : k)
 $$
 
@@ -71,7 +71,7 @@ However, the type inference systems for fully higher order dependently typed lan
 
 % -----------------------------------------------------------------------------
 \subsection{Constraint Generation}
-The rules for constraint generation are shown in Figure~\ref{clustering:f:ConstraintGeneration}. The top level judgment ~~$\SizeF{\program}{\sigma}$~~ assigns a size scheme to a program. It does this by extracting size constraints and then solving them. This rule, along with the constraint solving process is discussed in the next section. The judgment ~~$\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$ reads: ``Under environment~$\Gamma_1$, array variable $zs$ binds the result of $b$, producing a result environment $\Gamma_2$ and size constraints $C$''. The remaining judgment that extracts constraints from a list of bindings is similar. The environment $\Gamma$ has the following grammar:
+The rules for constraint generation are shown in \autoref{clustering:f:ConstraintGeneration}. The top level judgment ~~$\SizeF{\program}{\sigma}$~~ assigns a size scheme to a program. It does this by extracting size constraints and then solving them. This rule, along with the constraint solving process is discussed in the next section. The judgment ~~$\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$ reads: ``Under environment~$\Gamma_1$, array variable $zs$ binds the result of $b$, producing a result environment $\Gamma_2$ and size constraints $C$''. The remaining judgment that extracts constraints from a list of bindings is similar. The environment $\Gamma$ has the following grammar:
 $$
 \Gamma~ @::=@ ~~\cdot ~~|~~ \Gamma,~ \Gamma ~~|~~ zs : k ~~|~~ k ~~|~~ \exists k
 $$
@@ -103,7 +103,7 @@ Rule~(SProgram) also characterises the programs we accept: a program is \emph{va
 
 % -------------------------------------------------------------------
 \subsection{Constraint Solving and Generalization}
-The top-level rule in Figure~\ref{clustering:f:ConstraintGeneration} assigns a size scheme to a program by first extracting size constraints, before solving them and generalizing the result. In the rule, the solving process is indicated by $\textrm{SOLVE}$, and takes an environment and a constraint set, and produces a solved environment and constraint set. As the constraint solving process is both standard and straightforward, we only describe it informally.
+The top-level rule in \autoref{clustering:f:ConstraintGeneration} assigns a size scheme to a program by first extracting size constraints, before solving them and generalizing the result. In the rule, the solving process is indicated by $\textrm{SOLVE}$, and takes an environment and a constraint set, and produces a solved environment and constraint set. As the constraint solving process is both standard and straightforward, we only describe it informally.
 
 Recall from the previous section that in our generated constraints all the size variables named after program variables are on the left of atomic equality constraints, while all the unification and existential variables are on the right. To solve the constraints, we keep finding pairs of atomic equality constraints where the same variable appears on the left, unify the right of both of these constraints, and apply the resulting substitution to both the environment and original constraints. When there are no more pairs of constraints with the same variable on the left, the constraints are in solved form and we are finished.
 
@@ -135,7 +135,7 @@ $$
 \end{array}
 $$
 
-To produce the final size scheme, we look up the sizes of the input and output variables of the original program from the solved constraints and generalize appropriately. This process is determined by the top-level rule in Figure~\ref{clustering:f:ConstraintGeneration}. In this case, no rigid size variables appear in the result, so we can universally quantify all size variables.
+To produce the final size scheme, we look up the sizes of the input and output variables of the original program from the solved constraints and generalize appropriately. This process is determined by the top-level rule in \autoref{clustering:f:ConstraintGeneration}. In this case, no rigid size variables appear in the result, so we can universally quantify all size variables.
 $$@normalize2@ ~:_s \forall k. (xs : k) \to (ys_1 : k,~ ys_2 : k)
 $$
 
@@ -169,7 +169,7 @@ As variable $k_2$ is marked as rigid, we introduce an existential quantifier for
    filterLeft \(:\sb{s}\,\forall\,k\sb{1}.\,\exists\,k\sb{2}.\,(xs\,:\,k\sb{1})\;\to\;(ys\sb{1}\,:\,k\sb{1},\,ys\sb{2}\,:\,k\sb{2})\)
 \end{alltt}
 
-Note that, although Rule~(SProgram) from Figure~\ref{clustering:f:ConstraintGeneration} performs a \emph{generalisation} process, there is no corresponding instantiation rule. The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another. To say this another way, all subgraphs are fully inlined. Recall from \S\ref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program. We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
+Note that, although Rule~(SProgram) from \autoref{clustering:f:ConstraintGeneration} performs a \emph{generalisation} process, there is no corresponding instantiation rule. The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another. To say this another way, all subgraphs are fully inlined. Recall from \autoref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program. We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
 
 When producing size schemes, we do not permit the arguments of an operator graph to have existentially quantified sizes. This restriction is necessary to reject programs that we cannot statically guarantee will be well sized. For example:
 \begin{code}

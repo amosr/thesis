@@ -26,14 +26,29 @@ $$
   is[c] = @pending@~v
 }{
   \ProcBlockShake
-        {@pull@~c~x~(l,us)}
+        {@pull@~c~x~(l,us)~(l',us')}
         {is}
         {\Sigma}
         {\cdot}
         {l}
         {is[c \mapsto @have@]}
         {(us, x = v)}
-}{Pull}
+}{PullPending}
+$$
+
+$$
+\ruleIN{
+  is[c] = @closed@
+}{
+  \ProcBlockShake
+        {@pull@~c~x~(l,us)~(l',us')}
+        {is}
+        {\Sigma}
+        {\cdot}
+        {l'}
+        {is}
+        {us'}
+}{PullClosed}
 $$
 
 $$
@@ -50,6 +65,20 @@ $$
         {us}
 }{Push}
 $$
+
+$$
+\ruleAx{
+  \ProcBlockShake
+        {@close@~c~(l,us)}
+        {is}
+        {\Sigma}
+        {\Close~c}
+        {l}
+        {is}
+        {us}
+}{Close}
+$$
+
 
 $$
 \ruleIN{
@@ -90,6 +119,8 @@ $$
         {is}
         {us_t}
 }{CaseT}
+$$
+$$
 \ruleIN{
   \ExpEval{\Sigma}{e}{@False@}
 }{
@@ -120,7 +151,7 @@ $$
     {l}
     {is}
     {us}
-  \quad
+  \qquad
     \ExpEval{p[@heap@]}{us}{bs}
 }{
   \ProcShake
@@ -131,6 +162,29 @@ $$
            , ~~ @ins@~   \mapsto ~is]}
 }{Advance}
 $$
+
+% ---------------------------------------------------------
+\vspace{2em}
+
+$$
+  \boxed{\ProcsShake{\sgl{\Proc}}{\Action}{\sgl{\Proc}}}
+$$
+
+$$
+\ruleIN{
+  \ProcShake{p_i}{a}{p'_i}
+  \qquad
+  \forall j~|~j \neq i.~
+  \ProcInject{p_j}{a}{p'_j}
+}{
+  \ProcsShake{
+    \sgl{p_0 \ldots p_i \ldots p_n}
+  }{a}{
+    \sgl{p'_0 \ldots p'_i \ldots p'_n}
+  }
+}{AdvanceMany}
+$$
+
 
 
 \caption{Advancing processes}

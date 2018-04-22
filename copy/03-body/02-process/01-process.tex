@@ -1,43 +1,14 @@
 \chapter{Processes and networks}
 \label{chapter:process:processes}
 
-Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing at the same time, without the limitations of either representation.
-Kahn process networks \citep{kahn1976coroutines} are a flexible, expressive way of writing streaming computations, where a network is composed of communicating processes.
-Executing communicating processes introduces runtime overhead, as stream elements must be passed between processes. This additional communication means that a stream element which may have been in cache, has likely been swapped out by the time the consumer receives it. Or if the consumer is running on a different processor, it is unlikely to be in the lower level of cache in the first place.
-Furthermore, communication primitives likely require some kind of locking, which will add even more overhead.
-
-A lot of the time, the ideal execution model is actually just a simple imperative loop.
-By using concurrent processes we have gained expressivity, but at the cost of speed.
-We wish to instead take this concurrent process network and convert it back to sequential code, without any runtime scheduling or message passing overhead.
-
-\section{FilterMax}
-Let us turn back to our @filterMax@ example, to see how this can be encoded as a process network.
-
-\begin{code}
-filterMax :: Stream Int -> (Stream Int, Int)
-filterMax pts
- = let above = filter (>0) pts
-       maxim = maximum     pts
-   in (above, maxim)
-\end{code}
-
-This is not a complete example, so let us 
-
-\begin{code}
-network
-  pts = source array
-  above = filter (>0) pts
-  maxim = maximum     pts
-  sink above
-\end{code}
-
-Now, we must define the process for filtering a stream.
-\begin{code}
-filter :: (a -> Bool) -> Stream a -> Network (Stream a)
-filter f as = process out.
-  l0
-\end{code}
-
+% Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing at the same time, without the limitations of either representation.
+% Kahn process networks \citep{kahn1976coroutines} are a flexible, expressive way of writing streaming computations, where a network is composed of communicating processes.
+% Executing communicating processes introduces runtime overhead, as stream elements must be passed between processes. This additional communication means that a stream element which may have been in cache, has likely been swapped out by the time the consumer receives it. Or if the consumer is running on a different processor, it is unlikely to be in the lower level of cache in the first place.
+% Furthermore, communication primitives likely require some kind of locking, which will add even more overhead.
+% 
+% A lot of the time, the ideal execution model is actually just a simple imperative loop.
+% By using concurrent processes we have gained expressivity, but at the cost of speed.
+% We wish to instead take this concurrent process network and convert it back to sequential code, without any runtime scheduling or message passing overhead.
 
 \section{Process definition}
 
@@ -312,6 +283,44 @@ Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants t
 Function \ti{channels} computes the $\ChanType_2$ map for a pair of processes.
 Function \ti{outlabels} gets the set of output labels for an instruction, which is used when computing the fixpoint of reachable states.
 Function \ti{swaplabels} flips the order of the compound labels in an instruction.
+
+\section{Finite streams}
+\label{s:FiniteDetails}
+
+\TODO{these must be merged in with explanation above}
+The @pull@ instruction is modified to have two output labels, similar to @case@. The first, the success branch, is used when the input stream is still open and pulling succeeds, in which case the variable is set to the pulled value as before. The second output label, the closed branch, is used when the input stream has been closed, and the variable is not written to. This new @pull@ is analogous to a @pull@ followed by a @case@ in the infinite stream version.
+
+The @close@ instruction is used by a pushing process to close or end an output stream. Any subsequent pulls from this channel in other processes will take the closed branch. After an output channel is closed, it cannot be pushed to and remains closed forever.
+
+Finally, the @exit@ instruction is used once a process is finished with all its streams, and has nothing left to do. All output streams must be closed before the process finishes. This instruction has no output labels, as there is nothing further to execute.
+
+Also in Figure~\ref{fig:Finite:Instr}, the static input state used for fusion ($\InputStateF$) must now track closed streams. The new constructor $@closed@_F$ denotes that the stream is closed, while the rest is unchanged.
+
+For the fusion algorithm, the top-level function $\ti{fusePair}$ remains unchanged. The functions $\ti{outlabels}$ and $\ti{swaplabels}$ are not shown as they are easily modified by adding cases for the new instructions.
+
+Figure~\ref{fig:Finite:tryStepPair} shows the modified $\ti{tryStepPair}$ function. This function uses the same heuristics to decide which process to execute when both can progress, but now that the processes can finish with @exit@, we must take care to only finish the fused process once \emph{both} source processes are finished. The (DeferExit1) and (DeferExit2) clauses achieve this by forcing the other process to run if one is an @exit@. Once both processes are finished, both new clauses will fail while (Run1) succeeds, using the @exit@ from the first process. Another way to think of this is that if either process has work to do, the fused process still has work to do.
+
+Figure~\ref{fig:Finite:tryStep} shows the modified $\ti{tryStep}$ function.
+The clauses for the unchanged instructions @push@, @drop@, @case@ and @jump@ remain unchanged; these are reordered to the top of the function.
+
+The @pull@ clauses use $l'_o$ for the open output label, and $l'_c$ for the closed label.
+Clause (LocalPull) now uses two output labels, and leaves the other process as-is.
+
+Clause (SharedPull) applies when the channel state is @pending@, meaning there is already a value available. This means that the channel is not yet closed, and the success branch can be taken.
+
+Clause (SharedPullInject) applies when both processes need to pull from a shared input. As before, we execute a real @pull@, this time with two branches. In the success branch, the input states are set to @pending@ as before. In the closed branch, the input states are set to @closed@ so the next and subsequent pulls take the closed branch.
+
+Clause (SharedPullClosed) applies when the channel state is @closed@, which means either the other process has pulled and discovered that the channel is closed, or in case of connected input, the other process has closed the channel. Either way we simply jump, taking the closed branch of the @pull@.
+
+Clause (LocalClose) applies when closing a local output.
+
+Clause (SharedClose) applies when closing a connected output. As with (SharedPush), the other input state for the other process must be empty and ready to pull from the channel. The input state for the other process is then set to @closed@, forcing its next pull to take the closed branch.
+
+Finally, clause (LocalExit) allows the process to finish. However, recall that the $\ti{tryStepPair}$ function has been modified to only @exit@ when both processes are ready to finish.
+
+
+% -----------------------------------------------------------------------------
+
 
 \section{Proofs}
 \label{s:Proofs}

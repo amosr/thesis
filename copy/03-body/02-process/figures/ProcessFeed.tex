@@ -2,42 +2,6 @@
 
 \begin{figure}
 
-% ---------------------------------------------------------
-$$
-  \boxed{\ProcsShake{\sgl{\Proc}}{\Action}{\sgl{\Proc}}}
-$$
-
-$$
-\ruleIN{
-  \ProcShake{p_i}{\cdot}{p'_i}
-}{
-  \ProcsShake{
-    \sgl{p_0 \ldots p_i \ldots p_n}
-  }{\cdot}{
-    \sgl{p_0 \ldots p'_i \ldots p_n}
-  }
-}{ProcessesInternal}
-$$
-
-$$
-\ruleIN{
-  \ProcShake{p_i}{\Push~c~v}{p'_i}
-  \quad
-  \forall j~|~j \neq i.~
-  \ProcInject{p_j}{c}{v}{p'_j}
-}{
-  \ProcsShake{
-    \sgl{p_0 \ldots p_i \ldots p_n}
-  }{\Push~c~v}{
-    \sgl{p'_0 \ldots p'_i \ldots p'_n}
-  }
-}{ProcessesPush}
-$$
-
-
-% ---------------------------------------------------------
-\vspace{1em}
-
 \newcommand\vs {\ti{vs}}
 \newcommand\accs {\ti{accs}}
 \newcommand\network {\ti{ps}}
@@ -51,21 +15,6 @@ $$
       {\sgl{\Proc}}
   }
 $$
-$$
-\ruleIN{
-  \ProcsShake
-    {ps}
-    {\cdot}
-    {ps'}
-}{
-  \ProcsFeed
-    {cvs}
-    {ps}
-    {cvs}
-    {ps'}
-}{FeedInternal}
-$$
-
 
 % $$
 % \ruleIN{
@@ -140,6 +89,35 @@ $$
 }{FeedPush}
 $$
 
+$$
+\ruleIN{
+  \ProcsShake
+    {ps}
+    {\cdot}
+    {ps'}
+}{
+  \ProcsFeed
+    {cvs}
+    {ps}
+    {cvs}
+    {ps'}
+}{FeedInternal}
+\ruleIN{
+  \ProcsShake
+    {ps}
+    {\Close~c}
+    {ps'}
+}{
+  \ProcsFeed
+    {cvs}
+    {ps}
+    {cvs}
+    {ps'}
+}{FeedClose}
+$$
+
+
+
 
 % $$
 % \ruleIN{
@@ -168,7 +146,7 @@ $$
 $$
 \ruleIN{
   (\forall p \in \network.~c \not\in p[@outs@])
-\quad
+\qquad
   \ProcsInject
     {ps}
     {c}

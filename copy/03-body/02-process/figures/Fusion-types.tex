@@ -5,9 +5,9 @@
 \begin{tabbing}
 @MMMMMMMMMMMM@   \TABDEF \kill
 
-$\Label$        \> ::=  \> ~~~ $\ldots ~|~\Label_S~\times~\Label_S ~|~ \ldots$ \\
-$\Label_S$      \> =    \> ~~~ $\Label~\times~\MapType{\Chan}{\InputState_S}$  \\
-$\InputState_S$ \> ::=  \> ~~~ $@none@_S ~|~ @pending@_S ~|~ @have@_S$    \\
+$\Label$        \> ::=  \> ~~~ $\ldots ~|~\LabelF~\times~\LabelF ~|~ \ldots$ \\
+$\LabelF$      \> =    \> ~~~ $\Label~\times~\MapType{\Chan}{\InputStateF}$  \\
+$\InputStateF$ \> ::=  \> ~~~ $@none@_F ~|~ @pending@_F ~|~ @have@_F ~|~ @closed@_F$    \\
 $\Var$          \> ::=  \> ~~~ $\ldots ~|~@chan@~\Chan ~|~ \ldots$ \\
 \\
 

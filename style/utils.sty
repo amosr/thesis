@@ -12,3 +12,12 @@
 \newcommand{\refT}[2]	{\hyperref[#2]{#1~\ref*{#2},~page~\pageref{#2}}}
 \newcommand{\refChapter}[1]	{\refT{Chapter}{#1}}
 
+% Settle on a syntax for this later.
+% Might be too many nested pairs.
+\newcommand\nextStep[5]{\big((#1,~#2),~(#3,~#4),~#5 \big)}
+
+% I tried this colour in a colour blindness simulator and it seems to be OK.
+% Should still be readable when converted to grayscale.
+\definecolor{notec}{HTML}{C03020}
+\newcommand\note[1]{\textcolor{notec}{(#1)}}
+

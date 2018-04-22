@@ -3,38 +3,61 @@
 \begin{figure}
 
 $$
-\arrLR{
-  \boxed{\ProcInject{\Proc}{\Value}{\Chan}{\Proc}}
-}{
-  \boxed{\ProcsInject{\sgl{\Proc}}{\Value}{\Chan}{\sgl{\Proc}}}
-}
+\boxed{\ProcInject{\Proc}{\Action}{\Proc}}
 $$
 
 $$
 \ruleIN{
   p[@ins@][c] = @none@
 }{
-  \ProcInject{p}{v}{c}{p~[@ins@ \mapsto (p[@ins@][c \mapsto @pending@~v]) ] }
-}{InjectValue}
+  \ProcInject{p}{(\Push~c~v)}{p~[@ins@ \mapsto (p[@ins@][c \mapsto @pending@~v]) ] }
+}{InjectPush}
+$$
+
+$$
+\ruleIN{
+  p[@ins@][c] = @none@
+}{
+  \ProcInject{p}{(\Close~c)}{p~[@ins@ \mapsto (p[@ins@][c \mapsto @closed@]) ] }
+}{InjectClose}
 $$
 
 $$
 \ruleIN{
   c \not\in p[@ins@]
 }{
-  \ProcInject{p}{v}{c}{p}
-}{InjectIgnore}
+  \ProcInject{p}{(\Push~c~v)}{p}
+}{InjectNopPush}
 %
-\quad
+\enskip
 %
 \ruleIN{
-  \{~ \ProcInject{p_i}{v}{c}{p'_i} ~\}^i
+  c \not\in p[@ins@]
 }{
-  \ProcsInject{\sgl{p_i}^i}{v}{c}{\sgl{p'_i}^i}
+  \ProcInject{p}{(\Close~c)}{p}
+}{InjectNopClose}
+$$
+
+$$
+\ruleAx{
+  \ProcInject{p}{(\cdot)}{p}
+}{InjectNopInternal}
+$$
+
+
+$$
+\boxed{\ProcsInject{\sgl{\Proc}}{\Action}{\sgl{\Proc}}}
+$$
+
+$$
+\ruleIN{
+  \{~ \ProcInject{p_i}{a}{p'_i} ~\}^i
+}{
+  \ProcsInject{\sgl{p_i}^i}{a}{\sgl{p'_i}^i}
 }{InjectMany}
 $$
 
-\caption{Injection of values into input channels}
+\caption{Injection of message actions into input channels}
 \label{fig:Process:Eval:Inject}
 \end{figure}
 

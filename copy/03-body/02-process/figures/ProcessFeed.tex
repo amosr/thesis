@@ -78,21 +78,6 @@ $$
 \ruleIN{
   \ProcsShake
     {ps}
-    {\Push~c~v}
-    {ps'}
-}{
-  \ProcsFeed
-    {cvs}
-    {ps}
-    {cvs[c \mapsto (cvs[c] \listappend v)]}
-    {ps'}
-}{FeedPush}
-$$
-
-$$
-\ruleIN{
-  \ProcsShake
-    {ps}
     {\cdot}
     {ps'}
 }{
@@ -102,6 +87,21 @@ $$
     {cvs}
     {ps'}
 }{FeedInternal}
+$$
+
+$$
+\ruleIN{
+  \ProcsShake
+    {ps}
+    {\Push~c~v}
+    {ps'}
+}{
+  \ProcsFeed
+    {cvs}
+    {ps}
+    {cvs[c \mapsto (cvs[c] \listappend v)]}
+    {ps'}
+}{FeedPush}
 \ruleIN{
   \ProcsShake
     {ps}
@@ -119,29 +119,6 @@ $$
 
 
 
-% $$
-% \ruleIN{
-%   (\forall p \in \network.~c \not\in @outs@~p)
-% \quad
-%   \ProcsFeed
-%     {c=\vs, \accs}
-%     {\network}
-%     {\accs'}
-%     {\network'}
-% \quad
-%   \ProcsInject
-%     {\network'}
-%     {c}{v}
-%     {\network''}
-% }{
-%   \ProcsFeed
-%     {c=\vs \listappend [v], \accs}
-%     {\network}
-%     {c=\vs \listappend [v], \accs'}
-%     {\network''}
-% }{FeedExternal}
-% $$
-
 
 $$
 \ruleIN{
@@ -149,8 +126,7 @@ $$
 \qquad
   \ProcsInject
     {ps}
-    {c}
-    {v}
+    {(\Push~c~v)}
     {ps'}
 }{
   \ProcsFeed
@@ -158,7 +134,24 @@ $$
     {ps}
     {cvs[c \mapsto vs~]}
     {ps'}
-}{FeedExternal}
+}{FeedExternalPush}
+$$
+
+$$
+\ruleIN{
+  (\forall p \in \network.~c \not\in p[@outs@])
+\qquad
+  \ProcsInject
+    {ps}
+    {(\Close~c)}
+    {ps'}
+}{
+  \ProcsFeed
+    {cvs[c \mapsto [] ]}
+    {ps}
+    {cvs}
+    {ps'}
+}{FeedExternalClose}
 $$
 
 

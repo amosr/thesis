@@ -179,7 +179,7 @@ function mean (e : Element Int)
  = sum e / count;
 \end{icicle}
 
-The @last@ function uses a @fold@ that initializes the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream.
+The @last@ function uses a @fold@ that initialises the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream.
 \begin{icicle}
 function last (d : Element Date)
  = fold l = NO_DATE then d;
@@ -205,7 +205,7 @@ query avg
 \end{icicle}
 
 To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
-The @lst@ binding becomes a single fold, initialized to @NO_DATE@ and updated with the current @key@.
+The @lst@ binding becomes a single fold, initialised to @NO_DATE@ and updated with the current @key@.
 \begin{icicle-core}
 plan kvs {      key : Date; value : Int;       }
 folds    { fold fL  : Date = NO_DATE then key  }

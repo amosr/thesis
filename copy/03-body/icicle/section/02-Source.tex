@@ -16,7 +16,7 @@ Here is the unstreamable example from the introduction again:
 The problem is that the value of @last key@ is only available once we have reached the end of the stream, but @filter@ needs this value to process the very first element in the same stream.
 We distinguish between these two access patterns by giving them different names: we say that @last key@ is an \emph{aggregate}, because to compute it we must have consumed the \emph{entire stream}, whereas the filter predicate is an \emph{element}-wise computation because it only needs access to the current element in the stream.
 
-The trick to compute our average in a streaming fashion is to recognize that @filter@ is selecting a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
+The trick to compute our average in a streaming fashion is to recognise that @filter@ is selecting a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
 \begin{icicle}
   table kvs { key : Date; value : Int } 
   query avg = let k    = last  key in

@@ -55,6 +55,64 @@ $\quad\to~\Just (@push@~c~e~
       $
 \\[1ex]
 
+$@pull@~c~x~(l'_o,u'_o)~(l'_c,u'_c)$ \\
+
+$\quad~|~\cs[c]=@in1@$ & \note{LocalPull} \\
+$\quad\to~\Just (@pull@~c~x~
+      \nextStep
+        {l'_o}{s_p}
+        {l_q}{s_q}
+        {u'_o}
+      ~
+      \nextStep
+        {l'_c}{s_p}
+        {l_q}{s_q}
+        {u'_c})
+    $ 
+\\[1ex]
+
+$\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@pending@_F$ & \note{SharedPullPending} \\
+$\quad\to~\Just (@jump@~
+      \nextStep
+        {l'_o}
+          {\HeapUpdateOne{c}{@have@_F}{s_p}}
+        {l_q}
+          {s_q}
+        {\HeapUpdateOne{x}{@chan@~c}{u'_o}})
+        $ 
+\\[1ex]
+
+$\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@closed@_F$ & \note{SharedPullClosed} \\
+$\quad\to~\Just (@jump@~
+      \nextStep
+        {l'_c}{s_p}
+        {l_q}{s_q}
+        {u'_c})
+  $
+\\[1ex]
+
+
+$\quad~|~\cs[c]=@in2@ ~\wedge~ s_p[c]=@none@_F ~\wedge~ s_q[c]=@none@_F$ & \note{SharedPullInject} \\
+$\quad\to~\Just (@pull@~c~(@chan@~c)$ \\
+@              @
+      $\nextStep
+        {l_p}
+          {\HeapUpdateOne{c}{@pending@_F}{s_p}}
+        {l_q}
+          {\HeapUpdateOne{c}{@pending@_F}{s_q}}
+        {[]}$
+      \\
+@              @
+      $\nextStep
+        {l_p}
+          {\HeapUpdateOne{c}{@closed@_F}{s_p}}
+        {l_q}
+          {\HeapUpdateOne{c}{@closed@_F}{s_q}}
+        {[]})
+  $
+\\[1ex]
+
+
 $@drop@~c~(l',u')$ \\
   $\quad~|~\cs[c]=@in1@$ & \note{LocalDrop} \\
   $\quad\to~\Just (@drop@~c~
@@ -99,62 +157,6 @@ $\quad\to~\Just (@drop@~c~
           {s_q}
         {u'})
       $
-\\[1ex]
-
-$@pull@~c~x~(l'_o,u'_o)~(l'_c,u'_c)$ \\
-
-$\quad~|~\cs[c]=@in1@$ & \note{LocalPull} \\
-$\quad\to~\Just (@pull@~c~x~
-      \nextStep
-        {l'_o}{s_p}
-        {l_q}{s_q}
-        {u'_o}
-      ~
-      \nextStep
-        {l'_c}{s_p}
-        {l_q}{s_q}
-        {u'_c})
-    $ 
-\\[1ex]
-
-$\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@pending@_F$ & \note{SharedPull} \\
-$\quad\to~\Just (@jump@~
-      \nextStep
-        {l'_o}
-          {\HeapUpdateOne{c}{@have@_F}{s_p}}
-        {l_q}
-          {s_q}
-        {\HeapUpdateOne{x}{@chan@~c}{u'_o}})
-        $ 
-\\[1ex]
-
-$\quad~|~\cs[c]=@in2@ ~\wedge~ s_p[c]=@none@_F ~\wedge~ s_q[c]=@none@_F$ & \note{SharedPullInject} \\
-$\quad\to~\Just (@pull@~c~(@chan@~c)$ \\
-@              @
-      $\nextStep
-        {l_p}
-          {\HeapUpdateOne{c}{@pending@_F}{s_p}}
-        {l_q}
-          {\HeapUpdateOne{c}{@pending@_F}{s_q}}
-        {[]}$
-      \\
-@              @
-      $\nextStep
-        {l_p}
-          {\HeapUpdateOne{c}{@closed@_F}{s_p}}
-        {l_q}
-          {\HeapUpdateOne{c}{@closed@_F}{s_q}}
-        {[]})
-  $
-\\[1ex]
-
-$\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@closed@_F$ & \note{SharedPullClosed} \\
-$\quad\to~\Just (@jump@~
-      \nextStep
-        {l'_c}{s_p}
-        {l_q}{s_q}
-        {u'_c})
-  $
 \\[1ex]
 
 $@close@~c~(l',u')$ \\

@@ -126,21 +126,55 @@
    sensitive,%
   }[keywords,comments,strings]%
 
+\lstdefinelanguage{coq}%
+  {morekeywords={},%
+   keepspaces,%
+   sensitive,%
+   literate={+}{{$+$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            {|}{{$\mid$}}1
+            {/\\}{{$\wedge$}}2
+            {\\/}{{$\vee$}}2
+  }[keywords,comments,strings]%
+
+\lstdefinelanguage{process}%
+  {morekeywords={process,ins,outs,heap,label,instrs,pull,push,close,case,drop,jump,exit,else},%
+   keepspaces,%
+   sensitive,%
+   literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1 {/}{{$\nu$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            {|}{{$\mid$}}1
+  }[keywords,comments,strings]%
+
 
 
 \lstnewenvironment{icicle}{\noindent\minipage{\linewidth}\lstset{language=icicle}}{\endminipage}
 \lstnewenvironment{icicle-core}{\noindent\minipage{\linewidth}\lstset{language=icicle-core}}{\endminipage}
 \lstnewenvironment{haskell}{\noindent\minipage{\linewidth}\lstset{language=Haskell}}{\endminipage}
 \lstnewenvironment{sql}{\noindent\minipage{\linewidth}\lstset{language=sql}}{\endminipage}
+\lstnewenvironment{coq}{\noindent\minipage{\linewidth}\lstset{language=coq}}{\endminipage}
+\lstnewenvironment{process}{\noindent\minipage{\linewidth}\lstset{language=process}}{\endminipage}
 
 \BeforeBeginEnvironment{icicle}{\par}
 \BeforeBeginEnvironment{icicle-core}{\par}
 \BeforeBeginEnvironment{haskell}{\par}
 \BeforeBeginEnvironment{sql}{\par}
+\BeforeBeginEnvironment{coq}{\par}
+\BeforeBeginEnvironment{process}{\par}
 
 \AfterEndEnvironment{icicle}{\par}
 \AfterEndEnvironment{icicle-core}{\par}
 \AfterEndEnvironment{haskell}{\par}
 \AfterEndEnvironment{sql}{\par}
+\AfterEndEnvironment{coq}{\par}
+\AfterEndEnvironment{process}{\par}
 
 \newcommand\Hs{\lstinline}

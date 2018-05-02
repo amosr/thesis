@@ -145,6 +145,7 @@
   {morekeywords={process,ins,outs,heap,label,instrs,pull,push,close,case,drop,jump,exit,else},%
    keepspaces,%
    sensitive,%
+   morecomment=[l]--,%
    literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
             {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1 {/}{{$\nu$}}1
             {\\\\}{{\char`\\\char`\\}}1
@@ -178,3 +179,5 @@
 \AfterEndEnvironment{process}{\par}
 
 \newcommand\Hs{\lstinline}
+
+\def\lstiproc{\lstinline[language=process]}

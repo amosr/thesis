@@ -1,6 +1,7 @@
 \chapter{Processes and networks}
 \label{chapter:process:processes}
 
+\section{Gold panning with processes}
 In \autoref{taxonomy} we introduced the @priceAnalyses@ example, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
 \autoref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
 
@@ -67,57 +68,68 @@ A \emph{combinator} is a template for a process which parameterises it over the 
 Each process implements a logical \emph{operator} --- so we use ``operator'' when describing the values being computed, but ``process'' and ``machine'' when referring to the implementation.
 
 
+\subsection{Fold combinator}
 \begin{figure}
 \begin{process}
 foldl 
-  = \ (k  : b -> a -> b) (z   : b)
+  = \ (k  : b -> a -> b) (z   : b) (j : b -> c)
       (sIn: Stream a)    (sOut: Stream b). 
     / (s  : b) (v : a)   (F0..F4: Label).
     process
      { ins:    { sIn  }
      , outs:   { sOut }
      , heap:   { s = z, v }
-     , label:  F0
-     , instrs: { F0 = pull  sIn  v F1[] else F2[]
-               , F1 = drop  sIn    F0[s = k s v]
+     , label:    F0
+     , instrs: { F0 = pull  sIn     v  F1[] else F2[]
+               , F1 = drop  sIn        F0[s = k s v]
 
-               , F2 = push  sOut s F3[]
-               , F3 = close sOut   F4[]
+               -- sIn closed
+               , F2 = push  sOut (j s) F3[]
+               , F3 = close sOut       F4[]
                , F4 = exit } }
 \end{process}
 \caption{Process implementation of foldl}
 \label{figs/procs/impl/foldl}
 \end{figure}
 
-The definition of the @foldl@ combinator, which is used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \autoref{figs/procs/impl/foldl}.
+The definition of the @foldl@ combinator, used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \autoref{figs/procs/impl/foldl}.
+The combinator is parameterised by the fold state update function (@k@) and the fold state initialisation (@z@).
+In @correlation@ and @regression@, the result must be extracted from the fold state; we extend the standard presentation of @foldl@ with an eject function (@j@) to perform this extraction.
 The process reads from an input stream and, at the end of the input stream, produces a single-element output stream containing the fold result.
 The \emph{nu-binders} ($\nu@ (s : a) (v : b)@\ldots$) indicate that each time the @foldl@ combinator is instantiated, fresh names must be given to @s@, @v@ and so on, that do not conflict with other insantiations.
 The @s@ and @v@ bindings refer to variables in the mutable heap of the process.
-The @s@ variable stores the current fold state and is initialised to the initial fold value, @z@; the @v@ variable stores the most recent value from the input stream, and is left uninitialised.
+The @s@ variable stores the current fold state and is initialised to the initial fold value (@z@); the @v@ variable stores the most recent value from the input stream, and is left uninitialised.
 
 The body of the combinator is a record that defines the process.
 The @ins@ field defines the set of input streams, and the @outs@ field defines the set of output streams.
-The @heap@ field gives the initial values of each of the local variables.
+The @heap@ field gives the initial values of each of the local variables; variables without an explicit initial value are given some arbitrary value.
 The @instrs@ field contains a set of labelled instructions that define the program, while the @label@ field gives the label of the initial instruction.
-In this form, the output stream is defined via a parameter, rather than being the result of the combinator.
+In this form, the output stream (@sOut@) is defined via a parameter, rather than being the result of the combinator.
 
-\def\lstiproc{\lstinline[language=process]}
 The initial instruction (\lstiproc!pull sIn v F1[] else F2[]!) pulls the next element from the stream @sIn@, writes it into the heap variable @v@, then proceeds to the instruction at label @F1@.
 The empty list @[]@ after the target label @F1@ can be used to update heap variables, but as we do not need to update anything yet we leave it empty. 
 If the input stream is finished, trying to pull the next element fails, and execution proceeds to the instruction at label @F2@ instead.
 
-After successfully pulling a new element from the input stream, the instruction \lstiproc!drop sIn F0[s = k s v]! signals that the current element that was pulled from stream @sIn@ is no longer required, and updates the fold state by applying the konstruktor function (@k@).
-The process then proceeds back to the pull instruction at label @F0@.
+After successfully pulling a new element from the input stream, the instruction at label @F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream @sIn@ is no longer required, before updating the fold state (@s@) by applying the fold update function (@k@).
+Execution then proceeds back to the pull instruction at label @F0@.
+In \REF{kpn/drop-synchronisation} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
-When the input stream is finished, the instruction \lstiproc!push sOut s F3[]! pushes the final fold state, stored in the variable @s@, to the output stream @sOut@, and proceeds to the instruction at label @F3@.
+When pulling fails because the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
+Execution then proceeds to the instruction at label @F3@.
 
-Next, the instruction \lstiproc!close sOut F4[]! signals that the output stream @sOut@ is finished, and any other processes
+Next, the instruction (\lstiproc!close sOut F4[]!) signals that the output stream @sOut@ is finished, and then proceeds to the instruction at label @F4@.
+
+Finally, the instruction (\lstiproc!exit!) signals that the process is finished, and has no further work to do.
+The process terminates.
+
+\subsection{Map combinator}
 
 \begin{figure}
 \begin{process}
 map 
-  = \ (f : a -> b) (sIn: Stream a) (sOut: Stream b). 
-    / (v : a) (M0..M4: Label).
+  = \ (f  : a -> b)
+      (sIn: Stream a) (sOut: Stream b). 
+    / (v  : a)        (M0..M4: Label).
     process
      { ins:    { sIn  }
      , outs:   { sOut }
@@ -126,6 +138,8 @@ map
      , instrs: { M0 = pull  sIn     v  M1[] else M3[]
                , M1 = push  sOut (f v) M2[]
                , M2 = drop  sIn        M0[]
+
+               -- sIn closed
                , M3 = close sOut       M4[]
                , M4 = exit } }
 \end{process}
@@ -133,6 +147,14 @@ map
 \label{figs/procs/impl/map}
 \end{figure}
 
+The definition of the @map@ combinator, which applies a worker function to every element in the input stream, is given in \autoref{figs/procs/impl/map}.
+The combinator is parameterised by the worker function (@f@), and takes one input stream (@sIn@) and produces one output stream (@sOut@).
+The heap variable (@v@) is used to store the last value read from the input stream.
+The process starts by pulling from the input stream, storing the element in the heap variable (@v@).
+It then pushes the transformed element (@f v@) into the output stream, drops the element from the input stream, and pulls again.
+When the input stream finishes, the process closes the output stream and terminates.
+
+\subsection{Join combinator}
 
 \begin{figure}
 \begin{process}
@@ -145,30 +167,66 @@ join
      { ins:    { sA, sB }
      , outs:   { sOut }
      , heap:   { va, vb, c }
-     , label:  J0
-     , instrs: { IN0 = pull sa va IN1 DB0
-               , IN1 = pull sb vb GO0 DA1
-               , GO0 = jump GO1 [ c = cmp va vb ]
-               , GO1 = case (c == EQ) EQ0 NE0
-               , EQ0 = push sout (a,b) EQ1
-               , EQ1 = drop sa EQ2
-               , EQ2 = drop sb IN0
-               , NE0 = case (c == LT) LT0 GT0
-               , LT0 = drop sa LT1
-               , LT1 = pull sa va GO0 DB1
-               , GT0 = drop sb GT1
-               , GT1 = pull sb vb GO0 DA1
-               , DA0 = pull sa DA1 EX0
-               , DA1 = drop sa DA0
-               , DB0 = pull sb DB1 EX0
-               , DB1 = drop sb DB0
-               , EX0 = close sOut EX1
+     , label:  IN0
+     , instrs: { IN0 = pull  sA va      IN1[] else DB0[]
+               , IN1 = pull  sB vb      IN2[] else DA1[]
+               , IN2 = jump             IN3[ c = cmp va vb ]
+               , IN3 = case  (c == EQ)  EQ0[] else NE0[]
+
+               -- cmp va vb $=$ EQ
+               , EQ0 = push  sOut (a,b) EQ1[]
+               , EQ1 = drop  sA         EQ2[]
+               , EQ2 = drop  sB         IN0[]
+
+               -- cmp va vb $\not=$ EQ
+               , NE0 = case  (c == LT)  LT0[] else GT0[]
+
+               -- cmp va vb $=$ LT
+               , LT0 = drop  sA         LT1[]
+               , LT1 = pull  sA va      IN2[] else DB1[]
+
+               -- cmp va vb $=$ GT
+               , GT0 = drop  sB         GT1[]
+               , GT1 = pull  sB vb      IN2[] else DA1[]
+
+               -- sB closed; drain sA
+               , DA0 = pull  sA         DA1[] else EX0[]
+               , DA1 = drop  sA         DA0[]
+
+               -- sA closed; drain sB
+               , DB0 = pull  sB         DB1[] else EX0[]
+               , DB1 = drop  sB         DB0[]
+
+               -- sA and sB closed
+               , EX0 = close sOut       EX1[]
                , EX1 = exit } }
 \end{process}
 \caption{Process implementation of join}
 \label{figs/procs/impl/join}
 \end{figure}
 
+The last combinator we need for the @priceAnalyses@ process network is the @join@ combinator, which pairs together the elements of two sorted input streams.
+The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
+The process reads from two input streams (@sA@ and @sB@), and produces one output stream (@sOut@).
+Two heap variables are used to store the most recent input elements (@va@ and @vb@), and another is used to store the key comparison (@c@).
+
+In the first group of instructions, the instructions at labels @IN0@ and @IN1@ pull an element from each input stream.
+If both pulls are successful, the instruction at label @IN2@ compares the input values using the key comparison function (@cmp va vb@).
+Next, the instruction at label @IN3@ checks whether the keys are equal: if so, execution proceeds to the instruction at label @EQ0@; otherwise, instruction proceeds to the instruction at label @NE0@.
+
+The group of instructions at label @EQ0@ execute when the element keys are equal, and pushes the pair of elements to the output stream, before dropping both input streams.
+Execution then proceeds back to the instruction at label @IN0@ to pull from the inputs.
+
+The instruction at label @NE0@ executes when the element keys are not equal, and proceeds to the instruction at label @LT0@ if the first element is lesser, or to the instruction at label @GT0@ if the first element is greater.
+These two groups of instructions drop the input stream with the lesser key and pull a new value from the same input stream, before returning back to the instruction at label @IN2@ to compare the elements.
+
+The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
+As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must \emph{drain} the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
+Without draining, the producer of the unfinished input stream would continue pushing, potentially requiring an unbounded buffer; we shall look at draining in more detail in \REF{kpn/draining}.
+
+The group of instructions at label @DB0@ executes when the @sA@ input stream is finished, and drain the unfinished @sB@ input stream.
+
+Finally, the group of instructions at @EX0@ close the output stream and terminate the process.
 
 \section{Process definition}
 

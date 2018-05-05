@@ -108,14 +108,15 @@ In this form, the output stream (@sOut@) is defined via a parameter, rather than
 
 The initial instruction (\lstiproc!pull sIn v F1[] else F2[]!) pulls the next element from the stream @sIn@, writes it into the heap variable @v@, then proceeds to the instruction at label @F1@.
 The empty list @[]@ after the target label @F1@ can be used to update heap variables, but as we do not need to update anything yet we leave it empty. 
-If the input stream is finished, trying to pull the next element fails, and execution proceeds to the instruction at label @F2@ instead.
+If the input stream is finished, there are no more elements to pull; execution proceeds to the instruction at label @F2@ instead.
 
 After successfully pulling a new element from the input stream, the instruction at label @F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream @sIn@ is no longer required, before updating the fold state (@s@) by applying the fold update function (@k@).
 Execution then proceeds back to the pull instruction at label @F0@.
 In \REF{kpn/drop-synchronisation} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
-When pulling fails because the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
+When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
 Execution then proceeds to the instruction at label @F3@.
+The comment above the instruction highlights the change in state of the input stream.
 
 Next, the instruction (\lstiproc!close sOut F4[]!) signals that the output stream @sOut@ is finished, and then proceeds to the instruction at label @F4@.
 
@@ -153,6 +154,101 @@ The heap variable (@v@) is used to store the last value read from the input stre
 The process starts by pulling from the input stream, storing the element in the heap variable (@v@).
 It then pushes the transformed element (@f v@) into the output stream, drops the element from the input stream, and pulls again.
 When the input stream finishes, the process closes the output stream and terminates.
+
+\subsection{A network of processes}
+The @map@ and @foldl@ combinators are sufficient to express the @priceOverTime@ example, which takes a single input stream and computes the correlation and regression.
+Here is the list implementation of @priceOverTime@ again:
+
+\begin{haskell}
+priceOverTime :: [Record] -> (Line, Double)
+priceOverTime stock =
+  let timeprices = map (\r -> (daysSinceEpoch (time r), price r)) stock
+  in (regression timeprices, correlation timeprices)
+\end{haskell}
+
+We can express @priceOverTime@ as a process network by instantiating the above process templates and connecting them together.
+
+\begin{process}
+priceOverTime =
+  \ (stock : Stream Record)
+    (reg_out : Stream Line) (cor_out : Stream Double).
+  / (timeprices : Stream (Double,Double)).
+    network
+     { map    tp_f             stock      timeprices
+     , foldl reg_k reg_z reg_j timeprices reg_out
+     , foldl cor_k cor_z cor_j timeprices cor_out }
+\end{process}
+
+As with the process templates, the network is parameterised by the output streams, which are in this case the output of @regression@ and @correlation@.
+We use the nu-binder syntax to instantiate a fresh name for the @timeprices@ internal stream, which is the output of the @map@ combinator.
+We implement @regression@ and @correlation@ as folds with eject functions.
+The details of the worker functions given to @map@ and @foldl@ are irrelevant for fusion, and are defined externally.
+
+\subsection{Fusing processes together}
+
+\begin{figure}
+\begin{process}
+process -- map tp\_f stock timeprices
+ { ins:    { stock  }
+ , outs:   { timeprices }
+ , heap:   { map_v }
+ , label:  M0
+ , instrs: { M0 = pull  stock       map_v     M1[] else M3[]
+           , M1 = push  timeprices (timeprices_f map_v) M2[]
+           , M2 = drop  stock                           M0[]
+
+           -- stock closed
+           , M3 = close timeprices                      M4[]
+           , M4 = exit } }
+\end{process}
+\caption{Instantiated process for map (timeprices)}
+\end{figure}
+
+\begin{figure}
+\begin{process}
+process -- foldl reg\_k reg\_z reg\_j timeprices reg\_out
+ { ins:    { timeprices  }
+ , outs:   { reg_out }
+ , heap:   { reg_s = reg_z, reg_v }
+ , label:    F0
+ , instrs: { F0 = pull  timeprices reg_v  F1[] else F2[]
+           , F1 = drop  timeprices        F0[reg_s = reg_k reg_s reg_v]
+
+           -- timeprices closed
+           , F2 = push  reg_out (reg_j reg_s) F3[]
+           , F3 = close reg_out       F4[]
+           , F4 = exit } }
+\end{process}
+\caption{Instantiated process for fold (regression)}
+\end{figure}
+
+
+\begin{process}
+process -- map tp\_f stock timeprices / foldl reg\_k reg\_z reg\_j timeprices reg\_out
+ { ins:    { stock  }
+ , outs:   { timeprices
+           , reg_out }
+ , heap:   { map_v
+           , reg_s = reg_z, reg_v
+           , chan_tp }
+ , label:  M0_F0
+
+ , instrs: { M0_F0        = pull stock map_v M1_F0[] else M3_F0[] -- M0 (LocalPull)
+           , M1_F0        = push timeprices (tp_f map_v) M2_F0_pending[chan_tp = (tp_f map_v)]
+           -- M1 (SharedPush)
+           , M2_F0_pending= jump M2_F1_have[reg_v = chan_tp] -- F0 (SharedPullPending)
+           , M2_F1_have   = drop stock M0_F1_have[] -- M2 (LocalDrop)
+           , M0_F1_have   = jump M0_F0[reg_s = reg_k reg_s reg_v]
+           -- F1 (ConnectedDrop)
+
+           -- stock closed
+           , M3_F0        = close timeprices M4_F0_closed[] -- M3 (SharedClose)
+           , M4_F0_closed = jump M4_F2_closed[] -- F0 (SharedPullClosed)
+           , M4_F2_closed = push reg_out (reg_j reg_s) M4_F3_closed -- F2 (LocalPush)
+           , M4_F3_closed = close reg_out M4_F4_closed[] -- F3 (LocalClose)
+           , M4_F4_closed = exit } }
+\end{process}
+
 
 \subsection{Join combinator}
 
@@ -221,8 +317,8 @@ The instruction at label @NE0@ executes when the element keys are not equal, and
 These two groups of instructions drop the input stream with the lesser key and pull a new value from the same input stream, before returning back to the instruction at label @IN2@ to compare the elements.
 
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
-As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must \emph{drain} the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
-Without draining, the producer of the unfinished input stream would continue pushing, potentially requiring an unbounded buffer; we shall look at draining in more detail in \REF{kpn/draining}.
+As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
+Without draining, the producer of the unfinished input stream would continue pushing, potentially requiring an unbounded buffer; we look at draining in more detail in \REF{kpn/draining}.
 
 The group of instructions at label @DB0@ executes when the @sA@ input stream is finished, and drain the unfinished @sB@ input stream.
 

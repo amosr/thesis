@@ -65,7 +65,7 @@ The process language is an intermediate representation we use when fusing the ov
 When describing the fusion transform we describe the control flow of the process as a state machine.
 
 A \emph{combinator} is a template for a process which parameterises it over the particular input and output streams, as well as values of configuration parameters such as the worker function used in a @map@ process.
-Each process implements a logical \emph{operator} --- so we use ``operator'' when describing the values being computed, but ``process'' and ``machine'' when referring to the implementation.
+Each process implements a logical \emph{operator} --- so we use ``operator'' when describing the values being computed, but ``process'' when referring to the implementation.
 
 
 \subsection{Fold combinator}
@@ -186,6 +186,11 @@ The details of the worker functions given to @map@ and @foldl@ are irrelevant fo
 
 \subsection{Fusing processes together}
 
+Our fusion algorithm takes two processes and produces a new one that computes the output of both.
+We fuse a pair of processes in the @priceOverTime@ network; to distinguish between the two @foldl@ processes in this network, we refer to them as the @regression@ and @correlation@ processes.
+As an example, we fuse the @map@ process with the @regression@ process.
+The result process computes the result of both processes as if they were executed concurrently, where the output stream of the @map@ process is used as the input stream of the @regression@ process.
+
 \begin{figure}
 \begin{process}
 process -- map tp\_f stock timeprices
@@ -201,7 +206,29 @@ process -- map tp\_f stock timeprices
            , M3 = close timeprices              M4[]
            , M4 = exit } }
 \end{process}
-\caption{Instantiated process for map (timeprices)}
+\vspace{1em}
+\begin{dot2tex}[dot,scale=0.8]
+digraph G {
+node[shape=none,texmode="raw"];
+  I[shape=point];
+edge[style="procFstD,thick"];
+  M0 [label="\CbF{pull stock tp\_v} (M0)"];
+  M1 [label="\CbF{push timeprices (tp\_f tp\_v)} (M1)"];
+  M2 [label="\CbF{drop stock} (M2)"];
+  M3 [label="\CbF{close timeprices} (M3)"];
+  M4 [label="\CbF{exit} (M4)"];
+
+  I -> M0;
+
+  M0 -> M1 [label="have stock "];
+  M1 -> M2;
+  M2 -> M0;
+
+  M0 -> M3 [label="closed stock "];
+  M3 -> M4;
+}
+\end{dot2tex}
+\caption{Instantiated process for map with control flow graph}
 \label{figs/procs/instance/pot-timeprices}
 \end{figure}
 
@@ -220,108 +247,78 @@ process -- foldl reg\_k reg\_z reg\_j timeprices reg\_out
            , F3 = close reg_out       F4[]
            , F4 = exit } }
 \end{process}
-\caption{Instantiated process for fold (regression)}
+\vspace{1em}
+\begin{dot2tex}[dot,scale=0.8]
+digraph G {
+node[shape=none];
+  node[texmode="raw"];
+edge[style="procSndD,thick"];
+  I[shape=point];
+  F0 [label="\CbS{pull timeprices reg\_v} (F0)"];
+  F1 [label="\CbS{drop timeprices [reg\_s = reg\_k reg\_s reg\_v]} (F1)"];
+  F2 [label="\CbS{push reg\_out (reg\_j reg\_s)} (F2)"];
+  F3 [label="\CbS{close reg\_out} (F3)"];
+  F4 [label="\CbS{exit} (F4)"];
+
+  I -> F0;
+
+  F0 -> F1 [label="have timeprices"];
+  F1 -> F0;
+
+  F0 -> F2 [label="closed timeprices"];
+  F2 -> F3;
+  F3 -> F4;
+}
+\end{dot2tex}
+\caption{Instantiated process for fold (regression) with control flow graph}
 \label{figs/procs/instance/pot-regression}
 \end{figure}
-
-Our fusion algorithm takes two processes and produces a new one that computes the output of both.
-We fuse a pair of processes in the @priceOverTime@ network; to distinguish between the two @foldl@ processes in this network, we refer to them as the @regression@ and @correlation@ processes.
-As an example, we fuse the @map@ process with the @regression@ process.
-The result process computes the result of both processes as if they were executed concurrently, where the output stream of the @map@ process is used as the input stream of the @regression@ process.
 
 \autoref{figs/procs/instance/pot-timeprices} shows the result of instantiating the @map@ process in the @priceOverTime@ process network.
 The combinator parameters have the corresponding argument value substituted in, and the variables and labels are given fresh names as necessary.
 We rename the variable name @v@ to @tp_v@, to avoid conflict with variables named @v@ in other processes.
+The figure also shows the control flow graph of the process.
 \autoref{figs/procs/instance/pot-regression} likewise shows the result of instantiating the @regression@ process.
+The instructions and edges in each control flow graph are coloured differently; the same colours will be used to highlight the provenance of each instruction in our informal description of the fusion algorithm.
+
+
 
 \subsubsection{Fusing Pulls}
 \label{s:Fusion:FusingPulls}
 
 The algorithm proceeds by considering pairs of labels and instructions: one from each of the source processes to be fused.
 First, we consider the initial labels of each process and their corresponding instructions.
+This situation is shown in \autoref{figs/fsm/fuse-pulls}; instructions from the two source processes are shown side-by-side and the instruction of the fused process is below.
 The @map@ process pulls from the @stock@ stream, while the @regression@ process pulls from the @timeprices@ stream.
 As the @timeprices@ stream is produced by the @map@ process, the @regression@ process must wait until the @map@ process pushes a value.
 If we were to execute the two processes concurrently at this stage, only the @map@ process could make progress, by pulling from the @stock@ input stream.
 The corresponding instruction for the fused process pulls from the @stock@ input stream, allowing the @map@ process to execute while the @regression@ process waits.
 
-\newcommand\FuTiReLa[3] { ((#1,\{\}),(#2,\{timeprices=#3\}))}
-
-Next, the @map@ process pushes into
-
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-node[shape=none];
-  I[shape=point];
-  M0 [label="pull stock tp_v (M0)"];
-  M1 [label="push timeprices (tp_f tp_v) (M1)"];
-  M2 [label="drop stock (M2)"];
-  M3 [label="close timeprices (M3)"];
-  M4 [label="exit (M4)"];
-
-  I -> M0;
-
-  M0 -> M1 [label="have[tp_v = ...]"];
-  M1 -> M2;
-  M2 -> M0;
-
-  M0 -> M3[label="closed"];
-  M3 -> M4;
-}
-\end{dot2tex}
-\caption{State machine for map.}
-\label{figs/procs/fsm/map}
-\end{figure}
-
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-node[shape=none];
-  I[shape=point];
-  F0 [label="pull timeprices reg_v (F0)"];
-  F1 [label="drop timeprices (F1)"];
-  F2 [label="push reg_out (reg_j reg_s) (F2)"];
-  F3 [label="close reg_out (F3)"];
-  F4 [label="exit (F4)"];
-
-  I -> F0;
-
-  F0 -> F1 [label="have[reg_v = ...]"];
-  F1 -> F0 [label="[reg_s = reg_k reg_s reg_v]"];
-
-  F0 -> F2[label="closed"];
-  F2 -> F3;
-  F3 -> F4;
-}
-\end{dot2tex}
-\caption{State machine for foldl.}
-\label{figs/procs/fsm/foldl}
-\end{figure}
 
 \begin{figure}
 \center
 \begin{tabular}{ll||rr}
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  M0 [label="pull stock tp_v (M0)"];
+node[shape=none,texmode="raw"];
+edge[style="procFstD,thick"];
+  M0 [label="\CbF{pull stock tp\_v} (M0)"];
   M1 [label="... (M1)"];
   M3 [label="... (M3)"];
-  M0 -> M1 [label="have[tp_v = ...]"];
-  M0 -> M3[label="closed"];
+  M0 -> M1 [label="have stock"];
+  M0 -> M3 [label="closed stock"];
 }
 \end{dot2tex}
 & \quad & \quad &
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  F0 [label="pull timeprices reg_v (F0)"];
+node[shape=none,texmode="raw"];
+edge[style="procSndD,thick"];
+  F0 [label="\CbS{pull timeprices reg\_v} (F0)"];
   F1 [label="... (F1)"];
   F2 [label="... (F2)"];
-  F0 -> F1 [label="have[reg_v = ...]"];
-  F0 -> F2[label="closed"];
+  F0 -> F1 [label="have timeprices"];
+  F0 -> F2 [label="closed timeprices"];
 }
 \end{dot2tex}
 \end{tabular}
@@ -329,25 +326,43 @@ node[shape=none];
 \center
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  M0F0 [label="pull stock tp_v ((M0,{}),(F0,{timeprices=none}))"];
-  M1F0 [label="... ((M1,{}),(F0,{timeprices=none}))"];
-  M3F0 [label="... ((M3,{}),(F0,{timeprices=none}))"];
-  M0F0 -> M1F0 [label="have[tp_v = ...]"];
-  M0F0 -> M3F0[label="closed"];
+node[shape=none,texmode="raw"];
+  M0F0 [label="\CbF{pull stock tp\_v} \FuTiReLa{M0}{F0}{none}"];
+  M1F0 [label="... \FuTiReLa{M1}{F0}{none}"];
+  M3F0 [label="... \FuTiReLa{M3}{F0}{none}"];
+  M0F0 -> M1F0 [label="have stock",style="procFstD,thick"];
+  M0F0 -> M3F0 [label="closed stock",style="procFstD,thick"];
 }
 \end{dot2tex}
-\caption{Fusing pull instructions; the first process is pulling from a local stream, while the second process is trying to pull from a connected stream produced by the first.}
+\caption{Fusing pull instructions; the left process can pull from an unshared stream, while the right process must wait for the first to produce a value.}
 \label{figs/fsm/fuse-pulls}
 \end{figure}
+
+Each of the joint result labels represents a combination of two source labels, one from each of the source machines.
+For example, the first joint label \FuTiReLa{M0}{F0}{none} represents a combination of the @map@ process being in its initial state @M0@ and the @regression@ process being in its own initial state @F0@. 
+We also associate each of the joint labels with the \emph{input state}: a description of whether the @regression@ process has a value available to read from the shared @timeprices@ stream.
+There is no value available, so the input state for @timeprices@ is set to @none@.
+This extra information only applies to shared input streams; as such, the input state of the @map@ process is the empty map.
+
+Next, \autoref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
+
+From the result state @F0@, both of the source machines then need to pull from stream @sIn1@, the @group@ process storing the value in a variable @v@ and the @merge@ process storing it in @x1@.
+In the result process this is managed by first storing the pulled value in a fresh, shared buffer variable @b1@, and then using later instructions to copy the value into the original variables @v@ and @x1@.
+To perform the copies we attach updates to a @jump@ instruction, which otherwise transitions between states without affecting any of the input or output streams.
+
+Finally, note that in the result states @F0@ through @F3@, the state of the input streams transitions from `none', to `pending' then to `have'.
+The `none' state means that we have not yet pulled a value from the associated stream.
+The `pending' state means we have pulled a value into the stream buffer variable (@b1@ in this case). The `have' state means that we have copied the pulled value from the stream buffer variable into the local variable used by each process. 
+
 
 \begin{figure}
 \center
 \begin{tabular}{ll||rr}
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  M1 [texlbl="\colorbox{procFst}{push timeprices (tp\_f tp\_v)} (M1)"];
+node[shape=none,texmode="raw"];
+edge[style="procFstD,thick"];
+  M1 [label="\CbF{push timeprices (tp\_f tp\_v)} (M1)"];
   M2 [label="... (M2)"];
   M1 -> M2;
 }
@@ -355,12 +370,13 @@ node[shape=none];
 & \quad & \quad &
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  F0 [texlbl="\colorbox{procSnd}{pull timeprices reg\_v} (F0)"];
+node[shape=none,texmode="raw"];
+edge[style="procSndD,thick"];
+  F0 [label="\CbS{pull timeprices reg\_v} (F0)"];
   F1 [label="... (F1)"];
   F2 [label="... (F2)"];
-  F0 -> F1 [label="have[reg_v = ...]"];
-  F0 -> F2[label="closed"];
+  F0 -> F1[label="have timeprices"];
+  F0 -> F2[label="closed timeprices"];
 }
 \end{dot2tex}
 \end{tabular}
@@ -368,35 +384,18 @@ node[shape=none];
 \center
 \begin{dot2tex}[dot]
 digraph G {
-node[shape=none];
-  M1F0 [texlbl="\colorbox{procFst}{push timeprices (tp\_f tp\_v)[chan\_v=tp\_f tp\_v]} \FuTiReLa{M1}{F0}{none}"];
-  M2F0 [texlbl="\colorbox{procSnd}{jump [reg\_v=chan\_v]} \FuTiReLa{M2}{F0}{pending}"];
-  M2F1 [label="... ((M2,{}),(F1,{timeprices=have}))"];
-  M1F0 -> M2F0 [label="[chan_v = tp_f tp_v]"];
-  M2F0 -> M2F1 [label="[reg_v = chan_tp]"];
+node[shape=none,texmode="raw"];
+  M1F0 [label="\CbF{push timeprices (tp\_f tp\_v)[chan\_v=tp\_f tp\_v]} \FuTiReLa{M1}{F0}{none}"];
+  M2F0 [label="\CbS{jump [reg\_v=chan\_v]} \FuTiReLa{M2}{F0}{pending}"];
+  M2F1 [label="... \FuTiReLa{M2}{F1}{have}"];
+  M1F0 -> M2F0 [style="procFstD,thick"];
+  M2F0 -> M2F1 [style="procSndD,thick"];
 }
 \end{dot2tex}
-\caption{Fusing a push with a pull}
-\label{figs/fsm/fuse-pulls}
+\caption{Fusing push with pull; the left process produces a value, which the right process consumes.}
+\label{figs/fsm/fuse-pushpull}
 \end{figure}
 
-
-
-
-Both the @timeprices@ and @regression@ processes pull from the same stream as their initial instruction, so we have the situation shown in the top of Figure~\ref{fig:Fusion:Pulls}.
-The @group@ machine needs to transition from label @A0@ to label @A1@, and the @merge@ machine from @B0@ to @B1@.
-In the result machine we produce three new instructions that transition between four joint result states, @F0@ to @F3@.
-Each of the joint result states represents a combination of two source states, one from each of the source machines.
-For example, the first result state @F0@ represents a combination of the @group@ machine being in its initial state @A0@ and the @merge@ machine being in its own initial state @B0@. 
-
-We also associate each of the joint result states with a description of whether each source machine has already pulled a value from each of its input streams.
-For the @F0@ case at the top of Figure~\ref{fig:Fusion:Pulls} we have ((A0, \{sIn1 = none\}), (B0, \{sIn1 = none, sIn2 = none\})).
-The result state @F0@ represents a combination of the two source states @A0@ and @B0@.
-As both @A0@ and @B0@ are the initial states of their respective machines, those machines have not yet pulled any values from their two input streams, so both `sIn1' and `sIn2' map to `none'.
-
-From the result state @F0@, both of the source machines then need to pull from stream @sIn1@, the @group@ machine storing the value in a variable @v@ and the @merge@ machine storing it in @x1@. In the result machine this is managed by first storing the pulled value in a fresh, shared buffer variable @b1@, and then using later instructions to copy the value into the original variables @v@ and @x1@. To perform the copies we attach updates to a @jump@ instruction, which otherwise transitions between states without affecting any of the input or output streams.
-
-Finally, note that in the result states @F0@ through @F3@, the state of the input streams transitions from `none', to `pending' then to `have'. The `none' state means that we have not yet pulled a value from the associated stream. The `pending' state means we have pulled a value into the stream buffer variable (@b1@ in this case). The `have' state means that we have copied the pulled value from the stream buffer variable into the local variable used by each machine. 
 
 \subsubsection{Fusion result}
 

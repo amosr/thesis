@@ -284,6 +284,7 @@ Larger intermediate programs generally take longer to compile, so some heuristic
 
 
 \subsection{Jump contraction}
+\label{section:implementation:jump-contraction}
 Between fusing each pair of processes in a process network, we want to simplify the fused process a bit.
 The fusion algorithm introduces some extra jump instructions in the fused process, and we can often make the process smaller by removing the jump instructions.
 Because the fusion algorithm is already hard to prove correct, we do not wish to make it more complex; instead we remove the jump instructions in a separate step after fusion.

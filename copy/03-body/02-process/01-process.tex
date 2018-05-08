@@ -112,7 +112,7 @@ If the input stream is finished, there are no more elements to pull; execution p
 
 After successfully pulling a new element from the input stream, the instruction at label @F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream @sIn@ is no longer required, before updating the fold state (@s@) by applying the fold update function (@k@).
 Execution then proceeds back to the pull instruction at label @F0@.
-In \REF{kpn/drop-synchronisation} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
+In \autoref{s:Drop:in:synchrony} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
 When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
 Execution then proceeds to the instruction at label @F3@.
@@ -167,13 +167,13 @@ priceOverTime stock =
 \end{haskell}
 
 We can express @priceOverTime@ as a process network by instantiating the above process templates and connecting them together.
+A process network is a set of processes that are able to communicate with each other.
 
 \begin{process}
 priceOverTime =
   \ (stock : Stream Record)
     (reg_out : Stream Line) (cor_out : Stream Double).
   / (timeprices : Stream (Double,Double)).
-    network
      { map    tp_f             stock      timeprices
      , foldl reg_k reg_z reg_j timeprices reg_out
      , foldl cor_k cor_z cor_j timeprices cor_out }
@@ -185,6 +185,7 @@ We implement @regression@ and @correlation@ as folds with eject functions.
 The details of the worker functions given to @map@ and @foldl@ are irrelevant for fusion, and are defined externally.
 
 \subsection{Fusing processes together}
+\label{s:FusingProcesses}
 
 Our fusion algorithm takes two processes and produces a new one that computes the output of both.
 We fuse a pair of processes in the @priceOverTime@ network; to distinguish between the two @foldl@ processes in this network, we refer to them as the @regression@ and @correlation@ processes.
@@ -344,16 +345,19 @@ We also associate each of the joint labels with the \emph{input state}: a descri
 There is no value available, so the input state for @timeprices@ is set to @none@.
 This extra information only applies to shared input streams; as such, the input state of the @map@ process is the empty map.
 
-Next, \autoref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
+\subsubsection{Fusing Push with Pull}
+\label{s:Fusion:FusingPushPull}
 
-From the result state @F0@, both of the source machines then need to pull from stream @sIn1@, the @group@ process storing the value in a variable @v@ and the @merge@ process storing it in @x1@.
-In the result process this is managed by first storing the pulled value in a fresh, shared buffer variable @b1@, and then using later instructions to copy the value into the original variables @v@ and @x1@.
-To perform the copies we attach updates to a @jump@ instruction, which otherwise transitions between states without affecting any of the input or output streams.
+Next, \autoref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream after pulling a value from the @stock@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
+After the @map@ process pushes a value, this value becomes available for the @regression@ process.
+In the fused process, this situation results in two steps.
+First, the @map@ process pushes the value (@tp_f tp_v@), and stores this value in the new local variable (@chan_tp@), so it is available for the @regression@ process.
+The input state for the @regression@ process is updated to (@pending@), to signal that there is a value ready to be pulled in the (@chan_tp@) variable.
+Next, the @regression@ process reads the @pending@ value, copying from the (@chan_tp@) variable into the (@reg_v@) variable.
+The input state for the @regression@ process is updated to (@have@), to signal that the @regression@ process has copied the pulled value and is using it.
 
-Finally, note that in the result states @F0@ through @F3@, the state of the input streams transitions from `none', to `pending' then to `have'.
-The `none' state means that we have not yet pulled a value from the associated stream.
-The `pending' state means we have pulled a value into the stream buffer variable (@b1@ in this case). The `have' state means that we have copied the pulled value from the stream buffer variable into the local variable used by each process. 
-
+In the original process network before fusion, the @timeprices@ stream has two consumers: the @regression@ and @correlation@ processes.
+Since the fused process implements both @map@ and @regression@ processes, the fused process still pushes to the @timeprices@ stream to allow the @correlation@ process to consume it.
 
 \begin{figure}
 \center
@@ -385,8 +389,8 @@ edge[style="procSndD,thick"];
 \begin{dot2tex}[dot]
 digraph G {
 node[shape=none,texmode="raw"];
-  M1F0 [label="\CbF{push timeprices (tp\_f tp\_v)[chan\_v=tp\_f tp\_v]} \FuTiReLa{M1}{F0}{none}"];
-  M2F0 [label="\CbS{jump [reg\_v=chan\_v]} \FuTiReLa{M2}{F0}{pending}"];
+  M1F0 [label="\CbF{push timeprices (tp\_f tp\_v)[chan\_tp=tp\_f tp\_v]} \FuTiReLa{M1}{F0}{none}"];
+  M2F0 [label="\CbS{jump [reg\_v=chan\_tp]} \FuTiReLa{M2}{F0}{pending}"];
   M2F1 [label="... \FuTiReLa{M2}{F1}{have}"];
   M1F0 -> M2F0 [style="procFstD,thick"];
   M2F0 -> M2F1 [style="procSndD,thick"];
@@ -398,6 +402,13 @@ node[shape=none,texmode="raw"];
 
 
 \subsubsection{Fusion result}
+\autoref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
+There are similar rules for handling the other combinations of instructions, but we defer the details to \autoref{s:Fusion}.
+The result process has one input stream, @stock@, and two output streams: @timeprices@ from @map@, and @reg_out@ from @regression@.
+
+To complete the implementation of @priceOverTime@, we would now fuse this result process with the @correlation@ process.
+Note that although the result process has a single shared heap, the heap bindings from each fused process are guaranteed not to interfere, as when we instantiate combinators to create source processes we introduce fresh names. 
+
 
 
 \begin{figure}
@@ -517,7 +528,7 @@ join
 \label{figs/procs/impl/join}
 \end{figure}
 
-The last combinator we need for the @priceAnalyses@ process network is the @join@ combinator, which pairs together the elements of two sorted input streams.
+To implement the whole @priceAnalyses@ process network, we also need the @join@ combinator, which pairs together the elements of two sorted input streams.
 The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
 The process reads from two input streams (@sA@ and @sB@), and produces one output stream (@sOut@).
 Two heap variables are used to store the most recent input elements (@va@ and @vb@), and another is used to store the key comparison (@c@).
@@ -534,9 +545,15 @@ These two groups of instructions drop the input stream with the lesser key and p
 
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
 As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
-Without draining, the producer of the unfinished input stream would continue pushing, potentially requiring an unbounded buffer; we look at draining in more detail in \REF{kpn/draining}.
+This draining is required because each consumer has a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
+Without draining, the producer would be blocked indefinitely, and any other consumers of the stream would be unable to receive input values.
 
-The group of instructions at label @DB0@ executes when the @sA@ input stream is finished, and drain the unfinished @sB@ input stream.
+% In the @priceAnalyses@ example, the @stock@ input stream is used by two consumers, the @join@ in @priceOverMarket@, and the @map@ in @priceOverTime@.
+% When a stream has multiple consumers, all consumers must agree when to read the next value, otherwise execution might require an unbounded buffer.
+% This draining ensures that a producer will not 
+% Without draining, the producer of the unfinished input stream would continue pushing to , potentially requiring an unbounded buffer; we look at draining in more detail in \REF{kpn/draining}.
+
+The group of instructions at label @DB0@ executes when the @sA@ input stream is finished, and drains the unfinished @sB@ input stream.
 
 Finally, the group of instructions at @EX0@ close the output stream and terminate the process.
 
@@ -556,7 +573,6 @@ We use the same record when specifying both the definition of a particular proce
 When specifying a process the @label@ field gives the entry-point to the process code, though during evaluation it is the label of the instruction currently being executed.
 Likewise, when specifying a process we usually only list channel names in the @ins@ field, though during evaluation they are also paired with their current $\InputState$.
 If an $\InputState$ is not specified we assume it is `none'.
-A network is a set of processes that are able to communicate with each other.
 
 In the grammar of \autoref{fig:Process:Def} the $\InputState$ has four options: @none@, which means no value is currently stored in the associated stream buffer variable; $(@pending@~\Value)$, which gives the current value in the stream buffer variable and indicates that it has not yet been copied into a process-local variable; @have@, which means the pending value has been copied into a process-local variable; and @closed@, which means the producer has signalled that the channel is finished and will not receive any more values.
 The $\Value$ attached to the @pending@ state is used when specifying the evaluation semantics of processes.
@@ -765,7 +781,7 @@ Our core fusion algorithm constructs a static execution schedule for a single pa
 % If the static $\InputStateF$ is $@pending@_F$, there is a value waiting to be pulled, do not know the actual value.
 
 We also extend the existing $\Var$ grammar with a (@chan@ $c$) form which represents the buffer variable associated with \mbox{channel @c@}. We only need one buffer variable for each channel, and naming them like this saves us from inventing fresh names in the definition of the fusion rules.
-We used a fresh name back in \autoref{s:Fusion:FusingPulls} to avoid introducing a new mechanism at that point in the discussion.
+We used the name (@chan_tp@) back in \autoref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion.
 
 Still in \autoref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes. Type @in2@ indicates that the two processes @pull@ from the same channel, so these actions must be coordinated. Type @in1@ indicates that only a single process pulls from the channel. Type @in1out1@ indicates that one process pushes to the channel and the other pulls. Type @out1@ indicates that the channel is pushed to by a single process. Each output channel is uniquely owned and cannot be pushed to by more than one process.
 

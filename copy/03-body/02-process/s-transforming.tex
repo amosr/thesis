@@ -1,4 +1,5 @@
 \section{Transforming process networks}
+\label{s:Optimisation}
 
 The fusion algorithm described in \REFTODO{processes and fusion} describes fusion for a pair of processes.
 To generate code we need to fuse process networks, which can contain many processes.
@@ -580,5 +581,6 @@ After fusing all three we can remove the now-redundant stream @b@, and replace a
 
 % When the two processes are able to accept the next variable from the stream at the same time, there is no need for the separate stream buffer variable. This is the case in \autoref{fig:Process:Fused}, and we can perform a copy-propagation optimisation, replacing all occurrences of @v@ and @x1@ with the single variable @b1@. To increase the chance that we can perform copy-propagation, we need both processess to want to pull from the same stream at the same time. Moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early.
 % To increase the chance that we can perform this above copy-propagation, we need both processess to want to pull from the same stream at the same time. In the definition of a particular process, moving the @drop@ instruction for a particular stream as late as possible prevents a @pull@ instruction from a second process being scheduled in too early. In general, the @drop@ for a particlar stream should be placed just before a @pull@ from the same stream. 
+
 
 

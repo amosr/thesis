@@ -1,6 +1,8 @@
 \chapter{Processes and networks}
 \label{chapter:process:processes}
 
+\TODO{paragraph thread}
+
 \section{Gold panning with processes}
 In \autoref{taxonomy} we introduced the @priceAnalyses@ example, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
 \autoref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
@@ -356,7 +358,7 @@ The input state for the @regression@ process is updated to (@pending@), to signa
 Next, the @regression@ process reads the @pending@ value, copying from the (@chan_tp@) variable into the (@reg_v@) variable.
 The input state for the @regression@ process is updated to (@have@), to signal that the @regression@ process has copied the pulled value and is using it.
 
-In the original process network before fusion, the @timeprices@ stream has two consumers: the @regression@ and @correlation@ processes.
+In the original process network, before any fusion, the @timeprices@ stream has two consumers: the @regression@ and @correlation@ processes.
 Since the fused process implements both @map@ and @regression@ processes, the fused process still pushes to the @timeprices@ stream to allow the @correlation@ process to consume it.
 
 \begin{figure}
@@ -546,7 +548,12 @@ These two groups of instructions drop the input stream with the lesser key and p
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
 As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
 This draining is required because each consumer has a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
-Without draining, the producer would be blocked indefinitely, and any other consumers of the stream would be unable to receive input values.
+Without draining, the producer would be blocked indefinitely on a terminated process, and any other consumers of the stream would be unable to receive input values.
+
+As an alternative to draining, we could extend the process network semantics to include a ``disconnect'' instruction, which indicates that a process is no longer interested in consuming a particular input stream.
+Here, we use the simpler process semantics without disconnection, at the expense of having to explicitly drain streams.
+It may be tempting to instead modify the network semantics so that producers do not push to terminated processes, effectively disconnecting from all inputs upon termination.
+However, a fused process, which performs the job of two input processes, only terminates once both processes are terminated; as such, the fused process would only disconnect once both input processes have terminated.
 
 % In the @priceAnalyses@ example, the @stock@ input stream is used by two consumers, the @join@ in @priceOverMarket@, and the @map@ in @priceOverTime@.
 % When a stream has multiple consumers, all consumers must agree when to read the next value, otherwise execution might require an unbounded buffer.

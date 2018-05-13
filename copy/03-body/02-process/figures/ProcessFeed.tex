@@ -3,8 +3,7 @@
 \begin{figure}
 
 \newcommand\vs {\ti{vs}}
-\newcommand\accs {\ti{accs}}
-\newcommand\network {\ti{ps}}
+\newcommand\ps {\ti{ps}}
 
 $$
   \boxed{
@@ -16,76 +15,20 @@ $$
   }
 $$
 
-% $$
-% \ruleIN{
-%   \forall c \in \accs.~
-%   \accs~c~=~[]
-% }{
-%   \ProcsFeed
-%     {\accs}
-%     {\network}
-%     {\accs}
-%     {\network}
-% }{FeedStart}
-% $$
-
-% $$
-% \ruleIN{
-%   \ProcsFeed
-%     {\accs}
-%     {\network}
-%     {\accs'}
-%     {\network'}
-% \quad
-%   \ProcsShake
-%     {\network'}
-%     {\tau}
-%     {\network''}
-% }{
-%   \ProcsFeed
-%     {\accs}
-%     {\network}
-%     {\accs'}
-%     {\network''}
-% }{FeedInternal}
-% $$
-
-
-
-% $$
-% \ruleIN{
-%   \ProcsFeed
-%     {\accs}
-%     {\network}
-%     {\accs'}
-%     {\network'}
-% \quad
-%   \ProcsShake
-%     {\network'}
-%     {\Push~c~v}
-%     {\network''}
-% }{
-%   \ProcsFeed
-%     {\accs}
-%     {\network}
-%     {c=\accs'~c \listappend [v], \accs'}
-%     {\network''}
-% }{FeedPush}
-% $$
-
-
 $$
 \ruleIN{
   \ProcsShake
     {ps}
     {\cdot}
     {ps'}
+\qquad
+  \ProcsFeed{i}{ps'}{o}{ps''}
 }{
   \ProcsFeed
-    {cvs}
+    {i}
     {ps}
-    {cvs}
-    {ps'}
+    {o}
+    {ps''}
 }{FeedInternal}
 $$
 
@@ -95,24 +38,41 @@ $$
     {ps}
     {\Push~c~v}
     {ps'}
+\qquad
+  \ProcsFeed
+    {i}
+    {ps'}
+    {o}
+    {ps''}
+\qquad
+  (c \mapsto \vs) \in o
 }{
   \ProcsFeed
-    {cvs}
+    {i}
     {ps}
-    {cvs[c \mapsto (cvs[c] \listappend v)]}
-    {ps'}
+    {o[c \mapsto ([v] \listappend \vs)]}
+    {ps''}
 }{FeedPush}
+$$
+
+$$
 \ruleIN{
   \ProcsShake
     {ps}
     {\Close~c}
     {ps'}
+\qquad
+  \ProcsFeed
+    {i}
+    {ps'}
+    {o}
+    {ps''}
 }{
   \ProcsFeed
-    {cvs}
+    {i}
     {ps}
-    {cvs}
-    {ps'}
+    {o[c \mapsto []]}
+    {ps''}
 }{FeedClose}
 $$
 
@@ -122,35 +82,47 @@ $$
 
 $$
 \ruleIN{
-  (\forall p \in \network.~c \not\in p[@outs@])
-\qquad
+%   (\forall p \in \ps.~c \not\in p[@outs@])
+% \qquad
   \ProcsInject
     {ps}
     {(\Push~c~v)}
     {ps'}
+\qquad
+  \ProcsFeed
+    {i[c \mapsto \vs]}
+    {ps'}
+    {o}
+    {ps''}
 }{
   \ProcsFeed
-    {cvs[c \mapsto ([v] \listappend vs)]}
+    {i[c \mapsto ([v] \listappend vs)]}
     {ps}
-    {cvs[c \mapsto vs~]}
-    {ps'}
+    {o}
+    {ps''}
 }{FeedExternalPush}
 $$
 
 $$
 \ruleIN{
-  (\forall p \in \network.~c \not\in p[@outs@])
-\qquad
+%  (\forall p \in \ps.~c \not\in p[@outs@])
+%\qquad
   \ProcsInject
     {ps}
     {(\Close~c)}
     {ps'}
+\qquad
+  \ProcsFeed
+    {i}
+    {ps'}
+    {o}
+    {ps''}
 }{
   \ProcsFeed
-    {cvs[c \mapsto [] ]}
+    {i[c \mapsto [] ]}
     {ps}
-    {cvs}
-    {ps'}
+    {o}
+    {ps''}
 }{FeedExternalClose}
 $$
 

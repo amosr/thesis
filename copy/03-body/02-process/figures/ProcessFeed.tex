@@ -11,7 +11,6 @@ $$
       {(\Chan \mapsto \overline{Value})~}
       {\sgl{\Proc}}
       {(\Chan \mapsto \overline{Value})~}
-      {\sgl{\Proc}}
   }
 $$
 
@@ -23,10 +22,9 @@ $$
 %   \forall (c \mapsto v) \in i.~ v = []
 }{
   \ProcsFeed
-    {i}
-    {ps}
     {\emptyset}
     {ps}
+    {\emptyset}
 }{FeedExit}
 \ruleIN{
   \ProcsShake
@@ -34,13 +32,12 @@ $$
     {\cdot}
     {ps'}
 \quad
-  \ProcsFeed{i}{ps'}{o}{ps''}
+  \ProcsFeed{i}{ps'}{o}
 }{
   \ProcsFeed
     {i}
     {ps}
     {o}
-    {ps''}
 }{FeedInternal}
 $$
 
@@ -55,13 +52,11 @@ $$
     {i}
     {ps'}
     {o}
-    {ps''}
 }{
   \ProcsFeed
     {i}
     {ps}
     {o[c \mapsto ([v] \listappend o[c])]}
-    {ps''}
 }{FeedPush}
 \ruleIN{
   \ProcsShake
@@ -73,13 +68,11 @@ $$
     {i}
     {ps'}
     {o}
-    {ps''}
 }{
   \ProcsFeed
     {i}
     {ps}
     {o[c \mapsto []]}
-    {ps''}
 }{FeedClose}
 $$
 
@@ -100,13 +93,11 @@ $$
     {i[c \mapsto \vs]}
     {ps'}
     {o}
-    {ps''}
 }{
   \ProcsFeed
     {i[c \mapsto ([v] \listappend vs)]}
     {ps}
     {o}
-    {ps''}
 }{FeedEnvPush}
 $$
 
@@ -123,13 +114,11 @@ $$
     {(i\setminus\sgl{c})}
     {ps'}
     {o}
-    {ps''}
 }{
   \ProcsFeed
     {i[c \mapsto [] ]}
     {ps}
     {o}
-    {ps''}
 }{FeedEnvClose}
 $$
 

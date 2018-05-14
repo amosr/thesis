@@ -17,11 +17,23 @@ $$
 
 $$
 \ruleIN{
+  \forall p \in ps.~
+  p[@instrs@][p[@label@]] = @exit@
+% \quad
+%   \forall (c \mapsto v) \in i.~ v = []
+}{
+  \ProcsFeed
+    {i}
+    {ps}
+    {\emptyset}
+    {ps}
+}{FeedExit}
+\ruleIN{
   \ProcsShake
     {ps}
     {\cdot}
     {ps'}
-\qquad
+\quad
   \ProcsFeed{i}{ps'}{o}{ps''}
 }{
   \ProcsFeed
@@ -38,30 +50,25 @@ $$
     {ps}
     {\Push~c~v}
     {ps'}
-\qquad
+\quad
   \ProcsFeed
     {i}
     {ps'}
     {o}
     {ps''}
-\qquad
-  (c \mapsto \vs) \in o
 }{
   \ProcsFeed
     {i}
     {ps}
-    {o[c \mapsto ([v] \listappend \vs)]}
+    {o[c \mapsto ([v] \listappend o[c])]}
     {ps''}
 }{FeedPush}
-$$
-
-$$
 \ruleIN{
   \ProcsShake
     {ps}
     {\Close~c}
     {ps'}
-\qquad
+\quad
   \ProcsFeed
     {i}
     {ps'}
@@ -83,12 +90,12 @@ $$
 $$
 \ruleIN{
 %   (\forall p \in \ps.~c \not\in p[@outs@])
-% \qquad
+% \quad
   \ProcsInject
     {ps}
     {(\Push~c~v)}
     {ps'}
-\qquad
+\quad
   \ProcsFeed
     {i[c \mapsto \vs]}
     {ps'}
@@ -100,20 +107,20 @@ $$
     {ps}
     {o}
     {ps''}
-}{FeedExternalPush}
+}{FeedEnvPush}
 $$
 
 $$
 \ruleIN{
-%  (\forall p \in \ps.~c \not\in p[@outs@])
-%\qquad
+%   (\forall p \in \ps.~c \not\in p[@outs@])
+% \quad
   \ProcsInject
     {ps}
     {(\Close~c)}
     {ps'}
-\qquad
+\quad
   \ProcsFeed
-    {i}
+    {(i\setminus\sgl{c})}
     {ps'}
     {o}
     {ps''}
@@ -123,7 +130,7 @@ $$
     {ps}
     {o}
     {ps''}
-}{FeedExternalClose}
+}{FeedEnvClose}
 $$
 
 

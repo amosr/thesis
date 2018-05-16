@@ -569,7 +569,8 @@ Finally, the group of instructions at @EX0@ close the output stream and terminat
 \section{Fusion}
 \label{s:Fusion}
 
-Our core fusion algorithm constructs a static execution schedule for a single pair of processes. To fuse a whole process network we fuse successive pairs of processes until only one remains.
+Our core fusion algorithm constructs a static execution schedule for a single pair of processes.
+In \autoref{ss:Fusing:a:network} we fuse a whole process network by fusing successive pairs of processes until only one remains.
 
 \autoref{fig:Fusion:Types} defines some auxiliary grammar used during fusion. We extend the $\Label$ grammar with a new alternative, $\LabelF \times \LabelF$ for the labels in a fused result process. Each $\LabelF$ consists of a $\Label$ from a source process, paired with a map from $\Chan$ to the statically known part of that channel's current $\InputState$. When fusing a whole network, as we fuse pairs of individual processes the labels in the result collect more and more information. Each label of the final, completely fused process encodes the joint state that all the original source processes would be in at that point.
 
@@ -579,9 +580,14 @@ Our core fusion algorithm constructs a static execution schedule for a single pa
 % If the static $\InputStateF$ is $@pending@_F$, there is a value waiting to be pulled, do not know the actual value.
 
 We also extend the existing $\Var$ grammar with a (@chan@ $c$) form which represents the buffer variable associated with \mbox{channel @c@}. We only need one buffer variable for each channel, and naming them like this saves us from inventing fresh names in the definition of the fusion rules.
-We used the name (@chan_tp@) back in \autoref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion.
+We used the name (@chan_tp@) back in \autoref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion, when in fact the fused process would use a buffer variable called (@chan timeprices@).
 
-Still in \autoref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes. Type @in2@ indicates that the two processes @pull@ from the same channel, so these actions must be coordinated. Type @in1@ indicates that only a single process pulls from the channel. Type @in1out1@ indicates that one process pushes to the channel and the other pulls. Type @out1@ indicates that the channel is pushed to by a single process. Each output channel is uniquely owned and cannot be pushed to by more than one process.
+Still in \autoref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes.
+Type @in2@ indicates that both processes @pull@ from the same channel, so these actions must be coordinated.
+Type @in1@ indicates that only a single process pulls from the channel.
+Type @in1out1@ indicates that one process pushes to the channel and the other pulls.
+Type @out1@ indicates that the channel is pushed to by a single process.
+Each output channel is uniquely owned and cannot be pushed to by more than one process.
 
 \input{copy/03-body/02-process/figures/Fusion-types.tex}
 \input{copy/03-body/02-process/figures/Fusion-fusePair.tex}
@@ -596,8 +602,8 @@ Still in \autoref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are 
 % -------------------------------------
 \autoref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which process to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
 
-Clauses (DeferExit1) and (DeferExit2) prioritise processes that can execute an instruction over finished processes that are ready to @exit@.
-This ensures that the fused process will only finish once both processes are finished; if either has remaining work, the fused process will continue.
+Clauses (DeferExit1) and (DeferExit2) ensure that the fused process only terminates once both processes are ready to terminate; if either has remaining work, the process with remaining work will execute.
+The clauses achieve this by checking if either process is at an @exit@ instruction, and if so, choosing the other process.
 The instruction for the second process was computed by calling \ti{tryStep} with the label arguments swapped, so in (DeferExit2) we need to swap the labels back with $\ti{swaplabels}$ (from \autoref{fig:Fusion:Utils}).
 
 Clauses (PreferJump1) and (PreferJump2) prioritise processes that can perform a @jump@.
@@ -636,7 +642,8 @@ Still in \autoref{fig:Fusion:Def:Step}, clause (LocalPull) applies when the left
 
 Clause (SharedPullPending) applies when the left process wants to pull from a shared channel that the other process either pulls from or pushes to.
 We know that there is already a value in the stream buffer variable, because the state for that channel is $@pending@_F$.
-The result instruction copies the value from the stream buffer variable into a variable specific to the left source process, and the corresponding $@have@_F$ channel state in the result label records that it has done so.
+The result instruction copies the value from the stream buffer variable into a variable specific to the left source process.
+The corresponding $@have@_F$ channel state in the result label records that the value has been successfully pulled.
 
 Clause (SharedPullClosed) applies when the left process wants to pull from a shared channel that the other process either pulls from or pushes to, and the channel is closed.
 The result instruction jumps to the close output label.
@@ -661,10 +668,11 @@ Clause (LocalExit) applies when the left process wants to finish execution, whic
 Clause (Blocked) returns @Nothing@ when no other clauses apply, meaning that this process is waiting for the other process to advance.
 
 
+\smallskip
+
 % -------------------------------------
 \input{copy/03-body/02-process/figures/FusionUtils.tex}
 
-\smallskip
 \autoref{fig:Fusion:Utils} contains definitions of some utility functions which we have already mentioned.
 Function \ti{channels} computes the $\ChanType_2$ map for a pair of processes.
 Function \ti{outlabels} gets the set of output labels for an instruction, which is used when computing the fixpoint of reachable states.
@@ -672,7 +680,7 @@ Function \ti{swaplabels} flips the order of the compound labels in an instructio
 
 
 
-\input{copy/03-body/02-process/s-fusibility.tex}
+% \input{copy/03-body/02-process/s-fusibility.tex}
 
 \input{copy/03-body/02-process/s-drop.tex}
 \input{copy/03-body/02-process/s-transforming.tex}

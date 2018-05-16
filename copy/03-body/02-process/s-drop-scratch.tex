@@ -1,0 +1,130 @@
+\begin{lstlisting}
+map2par = $$(fuse $ do
+  a <- source [||sourceOfFile "in.txt"||]
+  b <- map    [|| f ||] a
+  c <- map    [|| g ||] a
+  sink b      [||sinkToFile   "b.txt"||]
+  sink c      [||sinkToFile   "c.txt"||])
+\end{lstlisting}
+
+This function is represented by the following process network.
+
+\begin{lstlisting}[linebackgroundcolor={
+  \hilineFst{9}
+  \hilineFst{10}
+  \hilineFst{11}
+  \hilineFst{12}
+  \hilineFst{13}
+  \hilineSnd{18}
+  \hilineSnd{19}
+  \hilineSnd{20}
+  \hilineSnd{21}
+  \hilineSnd{22}
+  }]
+Process network:
+  Sources: a = sourceOfFile "in.txt"
+  Sinks:   b = sinkToFile   "b.txt"
+           c = sinkToFile   "c.txt"
+  Processes:
+    Process "map f a":
+      Inputs:  a; Outputs: b; Initial: b0
+      Instructions:
+        b0   = Pull  a b1 b3
+        b1 e = Push  b (f e) b2
+        b2   = Drop  a b0
+        b3   = Close b b4        
+        b4   = Done
+
+    Process "map g a":
+      Inputs:  a; Outputs: c; Initial: c0
+      Instructions:
+        c0   = Pull  a c1 c3      
+        c1 e = Push  c (g e) c2     
+        c2   = Drop  a c0
+        c3   = Close c c4         
+        c4   = Done
+\end{lstlisting}
+
+
+\begin{figure}
+\center
+\begin{sequencediagram}
+\newthreadGAP{a}{@a@}{0.2}
+\newthreadGAP{mapf}{@map f@}{1.5}
+\newthreadGAP{b}{@b@}{1.5}
+\newthreadGAP{mapg}{@map g@}{1.5}
+\newthreadGAP{c}{@c@}{1.5}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 1}{mapg}
+}
+
+\parallelseq{
+  \mess{mapf}{Pull 1}{mapf}
+  \mess{mapf}{Push (f 1)}{b}
+  \mess{mapf}{Drop}{mapf}
+}{
+  \mess{mapg}{Pull 1}{mapg}
+  \mess{mapg}{Push (g 1)}{c}
+  \mess{mapg}{Drop}{mapg}
+}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 2}{mapg}
+}
+
+\parallelseq{
+  \mess{mapf}{Pull 2}{mapf}
+  \mess{mapf}{Push (f 2)}{b}
+  \mess{mapf}{Drop}{mapf}
+}{
+  \mess{mapg}{Pull 2}{mapg}
+  \mess{mapg}{Push (g 2)}{c}
+  \mess{mapg}{Drop}{mapg}
+}
+\end{sequencediagram}
+\caption[Concurrent sequence diagram for parallel maps]{sequence diagram for concurrent execution of @map2par@. }
+\label{figs/swim/map2par}
+\end{figure}
+
+\begin{figure}
+\center
+\begin{sequencediagram}
+\newthreadGAP{a}{@a@}{0.2}
+\newthreadGAP{mapf}{@map f@}{1.5}
+\newthreadGAP{b}{@b@}{1.5}
+\newthreadGAP{mapg}{@map g@}{1.5}
+\newthreadGAP{c}{@c@}{1.5}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 1}{mapg}
+}
+
+\mess{mapf}{Pull 1}{mapf}
+
+\mess{mapg}{Pull 1}{mapg}
+
+\parallelseq{
+  \mess{a}{}{mapf}
+}{
+  \mess{a}{Push 2}{mapg}
+}
+
+\mess{mapf}{Push (f 1)}{b}
+\mess{mapf}{Pull 2}{mapf}
+\mess{mapf}{Push (f 2)}{b}
+
+\mess{mapg}{Push (g 1)}{c}
+\mess{mapg}{Pull 2}{mapg}
+\mess{mapg}{Push (g 2)}{c}
+\end{sequencediagram}
+\caption[Hypothetical sequence diagram for parallel maps without drop synchronisation]{sequence diagram for parallel execution of two map processes, using a hypothetical execution semantics without drop synchronisation.}
+\label{figs/swim/map2par-no-sync}
+\end{figure}
+

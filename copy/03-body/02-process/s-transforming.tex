@@ -1,14 +1,13 @@
 \section{Transforming process networks}
 \label{s:Optimisation}
 
-The fusion algorithm described in \REFTODO{processes and fusion} describes fusion for a pair of processes.
-To generate code we need to fuse process networks, which can contain many processes.
-Rather than coming up with an algorithm to fuse multiple processes at once, we fuse process networks by repeatedly fusing pairs of processes.
+The fusion algorithm described in \autoref{s:Fusion} operates on a pair of processes.
+For process networks, which can contain many processes, we repeatedly fuse pairs of processes in the network together, until only one process remains.
 
-The fused process tends to have more states than the input processes, because the fused process has to do the work of both input processes.
-The larger the input processes, the larger the fused process.
-When we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
-As the fused process becomes larger, fusing in the next process will take longer, and code generation will take longer.
+When fusing a pair of processes, the fused process tends to have more states than each input process individually, because the fused process has to do the work of both input processes.
+In general, the larger the input processes, the larger the fused process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
+If the fused process becomes too large such that the process does not fit in memory, then fusing in the next process will take longer, and code generation will take longer.
+When repeatedly fusing the pairs of processes in a network, we perform some simplifications between each fusion step, to remove unnecessary states and simplify the input for the next fusion step.
 
 % The fusion algorithm also introduces some spurious states.
 % It is designed for simplicity of the fusion algorithm, at the expense of simplicity of the output.
@@ -17,13 +16,64 @@ As the fused process becomes larger, fusing in the next process will take longer
 % What started as a couple can become dozens, then hundreds, then thousands.
 % As with compound interest on a loan, it is best to pay back early and often.
 
-At every fusion step, we perform some simplifications to remove unnecessary states and make the job of the next fusion step a bit easier.
-By making the input to fusion smaller we can produce smaller programs to begin with.
-It is better to simplify as we go rather than relying on a monolithic simplification at the end.
 
 \subsection{Fusing a network}
 \label{ss:Fusing:a:network}
-To fuse a whole network, we repeatedly fuse pairs of processes together, but the order in which we fuse pairs can affect whether fusion succeeds.
+
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock; index;
+
+  stock -> pom_join;
+  index -> pom_join;
+  stock -> pot_tps;
+
+  graph [style="rounded corners,filled"];
+
+  subgraph cluster_z {
+    graph [bgcolor="0.0 0.0 0.9"];
+    subgraph cluster_priceAgainstMarket {
+      graph [bgcolor="0.0 0.0 0.8"];
+      pom_join [label="join"];
+      subgraph cluster_x {
+        graph [bgcolor="0.0 0.0 0.7"];
+        subgraph cluster_x {
+          graph [bgcolor="0.0 0.0 0.6"];
+          pom_price [label="map"];
+          pom_cor [label="correlation"];
+        };
+      pom_reg [label="regression"];
+      }
+      pom_join -> pom_price;
+      pom_price -> pom_cor;
+      pom_price -> pom_reg;
+    };
+
+    subgraph cluster_priceOverTime  {
+      graph [bgcolor="0.0 0.0 0.8"];
+      subgraph cluster_x1 {
+        graph [bgcolor="0.0 0.0 0.7"];
+        pot_tps [label="map"];
+        pot_cor [label="correlation"];
+      }
+      pot_reg [label="regression"];
+      pot_tps -> pot_cor;
+      pot_tps -> pot_reg;
+    };
+
+  }
+}
+\end{dot2tex}
+\caption{Pairwise fusion of the entire priceAnalyses network.}
+\label{figs/procs/priceAnalyses-fusing-whole}
+\end{figure}
+
+To fuse a whole network, we repeatedly fuse pairs of processes together.
+The order in which we fuse pairs can affect whether fusion succeeds.
+\autoref{figs/procs/priceAnalyses-fusing-whole} shows the fusion order for the @priceAnalyses@ example.
 
 
 There are many orders in which we could fuse the pairs.
@@ -59,12 +109,9 @@ These two streams @ba@ and @bc@, when paired together, will result in each eleme
 
 \autoref{figs/swim/append2zip} shows an example execution of @append2zip@.
 The execution is displayed as a sequence diagram.
-Each input stream and process is represented as a vertical line which communicates with other processes by arrows.
-The names of each stream and process are written above the line.
 To save space, the names of the @append@ processes are written using (@++@), the list-append operator.
 Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
 Input stream @b@ has multiple consumers, so when it pushes its elements it pushes to both its consumers at the same time.
-Time flows downwards.
 
 
 \begin{figure}

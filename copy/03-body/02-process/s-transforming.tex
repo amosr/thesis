@@ -1,8 +1,8 @@
 \section{Transforming process networks}
 \label{s:Optimisation}
 
-The fusion algorithm described in \autoref{s:Fusion} operates on a pair of processes.
-For process networks, which can contain many processes, we repeatedly fuse pairs of processes in the network together, until only one process remains.
+The fusion algorithm described in \autoref{s:Fusion} operates on a pair of input processes.
+For process networks which contain more than two processes, we repeatedly fuse pairs of processes in the network together until only one process remains.
 
 When fusing a pair of processes, the fused process tends to have more states than each input process individually, because the fused process has to do the work of both input processes.
 In general, the larger the input processes, the larger the fused process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
@@ -36,9 +36,12 @@ digraph G {
   subgraph cluster_z {
     graph [bgcolor="0.0 0.0 0.9"];
     subgraph cluster_priceAgainstMarket {
+      lblstyle="right";
+      label="priceOverMarket";
       graph [bgcolor="0.0 0.0 0.8"];
       pom_join [label="join"];
       subgraph cluster_x {
+        label="";
         graph [bgcolor="0.0 0.0 0.7"];
         subgraph cluster_x {
           graph [bgcolor="0.0 0.0 0.6"];
@@ -53,8 +56,11 @@ digraph G {
     };
 
     subgraph cluster_priceOverTime  {
+      lblstyle="left";
+      label="priceOverTime";
       graph [bgcolor="0.0 0.0 0.8"];
       subgraph cluster_x1 {
+        label="";
         graph [bgcolor="0.0 0.0 0.7"];
         pot_tps [label="map"];
         pot_cor [label="correlation"];
@@ -67,51 +73,61 @@ digraph G {
   }
 }
 \end{dot2tex}
-\caption{Pairwise fusion of the entire priceAnalyses network.}
+\caption{Pairwise fusion ordering of the priceAnalyses network.}
 \label{figs/procs/priceAnalyses-fusing-whole}
 \end{figure}
 
-To fuse a whole network, we repeatedly fuse pairs of processes together.
-The order in which we fuse pairs can affect whether fusion succeeds.
-\autoref{figs/procs/priceAnalyses-fusing-whole} shows the fusion order for the @priceAnalyses@ example.
+As we shall see, when we fuse pairs of processes in a network, the order in which we fuse pairs can determine whether fusion succeeds.
+Rather than trying all possible orders, of which there are many, we use a bottom-up heuristic to choose a fusion order.
+% This heuristic is not guaranteed to choose the, but it .
+\autoref{figs/procs/priceAnalyses-fusing-whole} shows the heuristically chosen fusion order for the @priceAnalyses@ example.
+The processes are nested inside boxes; each box denotes the result of fusing a pair of processes, and inner-most boxes are to be fused first.
+Each box is shaded to denote its nesting, and the more deeply nested a box is, the darker its shade.
+In @priceOverTime@, we start by fusing the @correlation@ process with its producer, @map@; we then fuse the resulting process with the @regression@ process.
+In @priceOverMarket@, we also start by fusing the @correlation@ process with @map@, then adding @regression@, and fusing in the @join@ process.
+Finally, we fuse the result process for @priceOverTime@ with the result process for @priceOverMarket@.
 
+% There are many orders in which we could fuse the pairs.
+% For $n$ processes, there are $n!$ different permutations and $(n-1)!$ different ways to nest the parentheses.
+% For $3$ processes there are $12$ orders; for $4$ processes there are $144$; for $5$ processes there are $2,880$.
+% It does not take many processes for there to become too many orders to try.
+% For $10$ processes, there are more than a trillion possibilities.
+% Even if we could fuse one process in a single instruction, at 3GHz it would take forty minutes to try all orders.
+% If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
 
-There are many orders in which we could fuse the pairs.
-For $n$ processes, there are $n!$ different permutations and $(n-1)!$ different ways to nest the parentheses.
-For $3$ processes there are $12$ orders; for $4$ processes there are $144$; for $5$ processes there are $2,880$.
-It does not take many processes for there to become too many orders to try.
-For $10$ processes, there are more than a trillion possibilities.
-Even if we could fuse one process in a single instruction, at 3GHz it would take forty minutes to try all orders.
-If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
+% We cannot try all the orders; we need some way to choose the order.
+% As we shall see in \autoref{s:extraction:future}, it is impossible to choose the right order by looking at the dependency graph alone; the correct order depends upon the implementation of each process.
+% As future work we shall propose a fusion algorithm which is commutative and associative, which means we can fuse processes in any order.
+% We shall start by explaining a heuristic which does not always choose the right order, but works for the benchmarks in \REFTODO{benchmarks}.
+% \TODO{Maybe the explanation of why it has to be a heuristic should come first, but it makes it unappealing to start with an example where the heuristic doesn't work. If I explain the future work, it seems like there's no reason to explain the heuristic. Reorganise later.}
 
-We cannot try all the orders; we need some way to choose the order.
-As we shall see in \autoref{s:extraction:future}, it is impossible to choose the right order by looking at the dependency graph alone; the correct order depends upon the implementation of each process.
-As future work we shall propose a fusion algorithm which is commutative and associative, which means we can fuse processes in any order.
-We shall start by explaining a heuristic which does not always choose the right order, but works for the benchmarks in \REFTODO{benchmarks}.
-\TODO{Maybe the explanation of why it has to be a heuristic should come first, but it makes it unappealing to start with an example where the heuristic doesn't work. If I explain the future work, it seems like there's no reason to explain the heuristic. Reorganise later.}
-
-The following example, @append2zip@, constructs a process network with three input streams.
-This example is a partial process network which could be part of a larger network; the particular endpoints for the input and output streams are not relevant here.
+To demonstrate how fusion order can affect whether fusion succeeds, consider the following list program, which takes three input lists, appends them, and zips the appended lists together.
 
 \begin{lstlisting}
+append2zip :: [a] -> [a] -> [a] -> [(a,a)]
 append2zip a b c =
-  ba <- append b a
-  bc <- append b c
-  z  <- zip ba bc
-  return z
+  let ba = b ++ a
+      bc = b ++ c
+      z  = zip ba bc
+  in  z
 \end{lstlisting}
 
-This process network appends the input streams, then pairs together the elements in both appended streams.
-The input streams are finite.
-The result of the two @append@ processes, @ba@ and @bc@, both start with a prefix of the elements from @b@ stream, followed by the elements of the second @append@ argument; stream @a@ or stream @c@ respectively.
-These two streams @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
+We use the more convenient syntax for list programs rather than the process network syntax introduced earlier, but in the discussion we interpret this program as a process network.
+In the process network interpretation, each list combinator corresponds to a process, and each list corresponds to a stream.
+The dependency graph for the corresponding process network is shown in \autoref{figs/specconstr/append2zip}.
 
 
-\autoref{figs/swim/append2zip} shows an example execution of @append2zip@.
-The execution is displayed as a sequence diagram.
-To save space, the names of the @append@ processes are written using (@++@), the list-append operator.
+\FigurePdf{figs/specconstr/append2zip}{Dependency graph for append2zip}{Dependency graph for append2zip}
+
+This example appends the input streams, then pairs together the elements in both appended streams.
+The result of the two append processes, @ba@ and @bc@, both contain the elements from @b@ stream, followed by the elements of the second append argument; stream @a@ or stream @c@ respectively.
+These two streams, @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
+
+
+\autoref{figs/swim/append2zip} shows an example execution of @append2zip@, displayed as a sequence diagram.
+In this diagram, we omit the @drop@ and @pull@ internal messages for all processes, and focus instead on the communication between processes.
 Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
-Input stream @b@ has multiple consumers, so when it pushes its elements it pushes to both its consumers at the same time.
+Input stream @b@ has multiple consumers, so when it pushes elements, it pushes to both its consumers at the same time.
 
 
 \begin{figure}
@@ -125,41 +141,47 @@ Input stream @b@ has multiple consumers, so when it pushes its elements it pushe
 \newthreadGAP{zip}{@zip@}{0.7}
 \newthreadGAP{z}{@z@}{0.7}
 
-\parallelseq{
-  \mess{b}{}{appba}
-}{
-  \mess{b}{Push 3}{appbc}
-}
+\messmessx{b}{push 3}{appba}{appbc}
 
-\mess{appba}{Push 3}{zip}
-\mess{appbc}{Push 3}{zip}
-\mess{zip}{Push (3,3)}{z}
+\mess{appba}{push 3}{zip}
+\mess{appbc}{push 3}{zip}
+\mess{zip}{push (3,3)}{z}
 
-\parallelseq{
-  \mess{b}{}{appba}
-}{
-  \mess{b}{Push 4}{appbc}
-}
+\messmessx{b}{push 4}{appba}{appbc}
 
-\mess{appba}{Push 4}{zip}
-\mess{appbc}{Push 4}{zip}
-\mess{zip}{Push (4,4)}{z}
+\mess{appba}{push 4}{zip}
+\mess{appbc}{push 4}{zip}
+\mess{zip}{push (4,4)}{z}
 
-\mess{a}{Push 1}{appba}
-\mess{appba}{Push 1}{zip}
+\messmessx{b}{close}{appba}{appbc}
 
-\mess{c}{Push 5}{appbc}
-\mess{appbc}{Push 5}{zip}
+\addtocounter{seqlevel}{3}
 
-\mess{zip}{Push (1,5)}{z}
+\mess{a}{push 1}{appba}
+\mess{appba}{push 1}{zip}
 
-\mess{a}{Push 2}{appba}
-\mess{appba}{Push 2}{zip}
+\mess{c}{push 5}{appbc}
+\mess{appbc}{push 5}{zip}
 
-\mess{c}{Push 6}{appbc}
-\mess{appbc}{Push 6}{zip}
+\mess{zip}{push (1,5)}{z}
 
-\mess{zip}{Push (2,6)}{z}
+\mess{a}{push 2}{appba}
+\mess{appba}{push 2}{zip}
+
+\mess{c}{push 6}{appbc}
+\mess{appbc}{push 6}{zip}
+
+\mess{zip}{push (2,6)}{z}
+
+\addtocounter{seqlevel}{3}
+
+\mess{a}{close}{appba}
+\mess{appba}{close}{zip}
+
+\mess{c}{close}{appbc}
+\mess{appbc}{close}{zip}
+
+\mess{zip}{close}{z}
 
 \end{sequencediagram}
 \caption[Concurrent sequence diagram for two `append2zip']{sequence diagram for execution of @append2zip@. }
@@ -167,54 +189,47 @@ Input stream @b@ has multiple consumers, so when it pushes its elements it pushe
 \end{figure}
 
 
-The execution has two sections.
-In the first section, all the values from the @b@ stream are pushed to both @append@ processes, then paired together.
+The execution has three sections.
+In the first section, all the values from the @b@ stream are pushed to both append processes, then paired together.
 In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
-The consumer process, @zip@, alternates between pulling from each of the @append@ processes.
+In the third section, the streams are closed, which propagates down to the consumers.
+The bottom-most consumer process, @zip@, executes by alternately pulling from each of the append processes.
 The order in which a process pulls from its inputs is called its \emph{access pattern}.
-Each @append@ process can only push when the @zip@ process' buffer for that channel is empty: @append@ must wait for @zip@ to read the most recent element before pushing a new element.
-When each @append@ process is waiting, its producer---the input stream---must also wait before pushing the next element.
-This waiting propagates the @zip@ process' access pattern upwards through the @append@ processes and to the input streams.
+Each append process can only push when the @zip@ process' buffer for that channel is empty: append must wait for @zip@ to read the most recent element before pushing a new element.
+When each append process is waiting, its producer---the input stream---must also wait before pushing the next element.
+This waiting propagates the @zip@ process' access pattern upwards through the append processes and to the input streams.
 
 This example contains three processes.
 We could perform fusion in twelve different orders.
-Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the @append@ processes with each other, or start by fusing the @zip@ process with one of the @append@ processes.
-% The first category, we fuse the two @append@ processes together, then fuse with the @zip@ process.
-% In the second category, we fuse the @zip@ process with one of the @append@ processes, then fuse with the other @append@ process.
+Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the append processes with each other, or start by fusing the @zip@ process with one of the append processes.
+% The first category, we fuse the two append processes together, then fuse with the @zip@ process.
+% In the second category, we fuse the @zip@ process with one of the append processes, then fuse with the other append process.
 
-If we fuse the two @append@ processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
+If we fuse the two append processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
 There are many ways to interleave the two processes; one possibility is that the fused process reads all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
 For the shared prefix, this interleaving alternates between pushing to streams @ba@ and @bc@.
 After the shared prefix, this interleaving pushes the rest of the stream @ba@, then pushes the rest of the stream @bc@.
-When we try to fuse the @zip@ process with the fused @append@ processes with this interleaving, we get stuck.
+When we try to fuse the @zip@ process with the fused append processes with this interleaving, we get stuck.
 The @zip@ process needs to alternate between its inputs, which works for the shared prefix, but not for the remainder.
-Fusing the two @append@ processes together caused us to prematurely commit to an interleaving that is locally correct for the two @append@ processes, but globally wrong.
+By fusing the two append processes together first, we risk choosing an interleaving that works for the two append processes on their own, but does not take into account the access pattern of the @zip@ process.
 
-Fusion succeeds in another order where we fuse the @zip@ process with one of the @append@ processes first, then fuse with the other @append@ process.
-The consumer, @zip@, must dictate the order in which the @append@ processes push; fusing the @zip@ process first gives it this control.
+Fusion does succeed if we fuse the @zip@ process with one of the append processes first, then fuse with the other append process.
+The consumer, @zip@, must dictate the order in which the append processes push; fusing the @zip@ process first gives it this control.
 We start from the consumer and fuse them upwards with their producers, because this allows the consumer to impose its access pattern on the producers.
 
-
-\FigurePdf{figs/specconstr/append2zip}{Process network for append2zip}{Process network for append2zip}
-
-To decide which order to fuse a whole network in, we treat the process network as a dependency graph.
-\autoref{figs/specconstr/append2zip} shows the process network for @append2zip@, with producers at the top and consumers at the bottom.
-The @zip@ depends on both @append@ processes, and each @append@ processes depends on its two input streams.
-
-In this case @zip@ is the only consumer at the bottom of the dataflow graph, and we fuse it with one of its parent @append@ processes, then fuse the result process with the other @append@ process.
-\TODO{Modify example to have Source/Sink so we can say we start at the sinks and work fuse upwards towards the sources.}
-
-To fuse an arbitrary process network we start at the sinks at the bottom of the dataflow graph, and find each process which produces only to the sinks, which are the \emph{terminal} processes.
-For each terminal process, we find its parents and fuse the terminal process with its parents.
-When the terminal process has multiple parents, we need to choose which parent to fuse with first.
-In our example we can fuse the @zip@ process with its @append@ parents in any order.
-In general one parent may consume the other parent's output; in which case we first fuse with the consumer parent.
+To fuse an arbitrary process network, we consider a restricted view of the dependency graph, ignoring the overall inputs and outputs of the network.
+We start at the bottom of the dependency graph, finding the \emph{sink} processes, or those with no output edges.
+These sink processes are the bottom-most consumers which, like @zip@ in our @append2zip@ example, dictate the access pattern on their inputs.
+For each sink process, we find its parents and fuse the sink process with its parents.
+When the sink process has multiple parents, we need to choose which parent to fuse with first.
+In the @append2zip@ example, we can fuse the @zip@ process with its append parents in any order.
+In general, one parent may consume the other parent's output; in which case we first fuse with the consumer parent.
 This order allows the consuming parent to impose its access pattern upon the producing parent.
-We repeatedly fuse each terminal process with its closest parent until there are no more parents.
+We repeatedly fuse each sink process with its closest parent until there are no more parents.
 
-After fusing each terminal process with all its ancestors, there may remain multiple processes.
+After fusing each sink process with all its ancestors, there may remain multiple processes.
 This only occurs if the remaining processes do not share ancestors.
-The remaining processes also cannot share descendents, since if they had descendents they would not be terminal.
+The remaining processes also cannot share descendents, since if they had descendents they would not be sink.
 This means the processes are completely separate and could be executed separately, in any order or even in parallel.
 Having unconnected processes in the same process network is a degenerate case, as it could be represented as multiple process networks.
 We err on the side of caution, telling the programmer about anything even slightly unexpected.
@@ -300,7 +315,7 @@ If we fused @ab@ and @ac@ together first, the fusion algorithm would make an arb
 The heuristic described will not necessarily choose the right order.
 
 Looking at the dependency graph alone, it is impossible to tell which is the right order for fusion.
-If we take the @append3@ example and replace the @append@ processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
+If we take the @append3@ example and replace the append processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
 \autoref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
 
 
@@ -331,250 +346,4 @@ Larger intermediate programs generally take longer to compile, so some heuristic
 % For a pair of labels, the variables is the union of variables in the original processes, as well as any \emph{new} channel buffers which need to be bound.
 % These are the ones which have an input state of \emph{have}.
 
-
-\subsection{Jump contraction}
-\label{section:implementation:jump-contraction}
-Between fusing each pair of processes in a process network, we want to simplify the fused process a bit.
-The fusion algorithm introduces some extra jump instructions in the fused process, and we can often make the process smaller by removing the jump instructions.
-Because the fusion algorithm is already hard to prove correct, we do not wish to make it more complex; instead we remove the jump instructions in a separate step after fusion.
-It is easier to write two simple transforms than one complex transform.
-
-We call this transform that removes jump instructions \emph{jump contraction}.
-We will look at a fused process in order to understand jump contraction.
-
-In the following example, @map2@, we take an input stream and transform it twice in a pipeline.
-
-\begin{lstlisting}
-map2 = $$(fuse $ do
-  a <- source [||sourceOfFile "in.txt"||]
-  b <- map    [|| f ||] a
-  c <- map    [|| g ||] b
-  sink c      [||sinkToFile  "out.txt"||])
-\end{lstlisting}
-
-This function is represented by the following process network, which has two processes; one for each @map@.
-
-\begin{lstlisting}[linebackgroundcolor={
-  \hilineFst{8}
-  \hilineFst{9}
-  \hilineFst{10}
-  \hilineFst{11}
-  \hilineFst{12}
-  \hilineSnd{17}
-  \hilineSnd{18}
-  \hilineSnd{19}
-  \hilineSnd{20}
-  \hilineSnd{21}
-  }]
-Process network:
-  Sources: a = sourceOfFile "in.txt"
-  Sinks:   c = sinkToFile  "out.txt"
-  Processes:
-    Process "map f a":
-      Inputs:  a; Outputs: b; Initial: b0
-      Instructions:
-        b0   = Pull  a b1 b3
-        b1 e = Push  b (f e) b2
-        b2   = Drop  a b0
-        b3   = Close b b4        
-        b4   = Done
-
-    Process "map g b":
-      Inputs:  b; Outputs: c; Initial: c0
-      Instructions:
-        c0   = Pull  b c1 c3      
-        c1 e = Push  c (g e) c2     
-        c2   = Drop  b c0
-        c3   = Close c c4         
-        c4   = Done
-\end{lstlisting}
-
-We fuse process (@map f a@) with process (@map f b@), to create a new process which pushes to outputs streams @b@ and @c@.
-The instructions of each input process are highlighted differently; the same highlighting is used in the fused process to illustrate which input process each instruction comes from.
-Each instruction in the fused process has a comment to the right describing the original process labels and the channel states.
-
-\begin{lstlisting}[linebackgroundcolor={
-  \hilineFst{8}
-  \hilineCom{9}
-  \hilineFst{10}
-  \hilineSnd{11}
-  \hilineSnd{12}
-  \hilineFst{13}
-  \hilineSnd{14}
-  \hilineFst{16}
-  \hilineSnd{17}
-  \hilineSnd{18}
-  \hilineCom{19}
-}]
-Process network:
-  Sources: a = sourceOfFile "in.txt"
-  Sinks:   c = sinkToFile  "out.txt"
-  Processes:
-    Process "map f a / map g b"
-      Inputs:  a                  Outputs: b c                Initial: l0
-      Instructions:
-        l0   = Pull  a       l1 l7            -- b0, \{\},       c0, \{\}
-        l1 w = Jump         (l2 (f w))        -- b1, \{\},       c0, \{\}
-        l2 x = Push  b x    (l3 x)            -- b1, \{have b\}, c0, \{have b\}
-        l3 y = Jump         (l4 y)            -- b2, \{\},       c0, \{have b\}
-        l4 z = Push  c (g z) l5               -- b2, \{\},       c1, \{\}
-        l5   = Drop  a       l6               -- b2, \{\},       c2, \{\}
-        l6   = Jump          l0               -- b0, \{\},       c2, \{\}
-
-        l7   = Close b       l8               -- b3, \{\},       c0, \{closed b\}
-        l8   = Jump          l9               -- b4, \{\},       c3, \{closed b\}
-        l9   = Close c       l10              -- b4, \{\},       c3, \{closed b\}
-        l10  = Done                           -- b4, \{\},       c4, \{closed b\}
-\end{lstlisting}
-
-The fused process (@map f a / map g b@) produces to both streams @b@ and @c@.
-The fused process keeps pushing to stream @b@, even though we have fused a producer with a consumer.
-In this case there are no other consumers of stream @b@, but in general a stream may have multiple consumers.
-When a stream has multiple consumers and we fuse the producer with one of the consumers, the fused process must keep producing for the sake of the other consumers.
-In \autoref{section:implementation:cull-outputs} we shall see how to remove streams that have become redundant.
-
-For the most part the fused process alternates between the two input processes, but there is some finer coordination between labels @l1@ to @l3@, where the (@map f a@) process is trying to push to the stream @b@ while the (@map g b@) process is trying to pull from the same.
-When pushing, the (@map f a@) process applies the function @f@ to the current element and pushes this value to the stream.
-The fused process also pushes the value to the stream, while keeping a copy to pass as a local variable to the other half of the fused process.
-We wish to compute the application of @f@ only once.
-The fused process has a jump instruction at label @l1@ which applies the function and passes it as an argument to the next instruction, where it can be shared between the two halves of the fused process.
-
-The fused process has eleven instructions, while the inputs each had five.
-The fused process has gotten bigger, and the four jump instructions comprise most of the growth.
-If we can remove these jump instructions, the result will only be a little larger than each input process.
-
-Looking at the jump instruction at label @l8@, we see that the close instruction at label @l7@ continues to @l8@, then follows the jump instruction to @l9@.
-We modify @l7@ to continue straight to @l9@ without the intermediate step, and remove the instruction at label @l8@ entirely.
-We can perform the same simplification at the jump instruction for label @l6@ by finding the occurence in the instruction for label @l5@ and replacing it with the jump's destination, @l0@.
-
-The jump instruction at label @l3@ is parameterised and is referred to in the instruction for label @l2@.
-For parameterised jumps we must substitute the parameter names for their arguments, and the call (@l3 x@) becomes (@l4 x@).
-
-Essentially, we are inlining each jump instruction into its use sites.
-This transform is more restricted than general inlining because the process language the destination continuations only allow applications of named labels.
-
-The jump instruction at label @l1@ is referred to in the pull instruction at label @l0@.
-The call to @l1@ is not applied to all its arguments, because the pull instruction fills in the last argument with the pulled value.
-We cannot inline an under-applied continuation into the call-site at label @l0@, because the syntactic form for continuations has no way to introduce local functions.
-We could instead look at the jump instruction and inline the definition of the push instruction at label @l2@, but this exposes two complications.
-
-First, the push instruction refers to its parameter, @x@, twice.
-If we inlined the push instruction, we would have to substitute both occurrences of parameter @x@ with the value (@f w@), which would duplicate work.
-To avoid duplicating work, we can only inline if each parameter is mentioned at most once or is substituted by a variable or value which can be duplicated.
-We cannot remove the jump instruction at label @l1@.
-
-The second complication is that by inlining an instruction into the jump instruction, we might duplicate the instruction.
-If there were two jump instructions which continued to the same push instruction and we inline the push instruction into both jumps, we have removed two simple instructions at the expense of duplicating the push instruction.
-To avoid duplicating instructions, we can only inline into the body of a jump if the next instruction's label is only mentioned once.
-The process representation our implementation uses means that counting mentions for a label is linear in the number of labels.
-There are surely better representations, but these would require extra bookkeeping when modifying the instruction during inlining.
-For now, our implementation only inlines references to jumps, and does not inline other instructions into jumps.
-
-After removing the jumps, we get the following process with eight states.
-
-\begin{lstlisting}[linebackgroundcolor={
-  \hilineFst{8}
-  \hilineCom{9}
-  \hilineFst{10}
-  \hilineSnd{11}
-  \hilineFst{12}
-  \hilineFst{14}
-  \hilineSnd{15}
-  \hilineCom{16}
-}]
-Process network:
-  Sources: a = sourceOfFile "in.txt"
-  Sinks:   c = sinkToFile  "out.txt"
-  Processes:
-    Process "map f a / map g b"
-      Inputs:  a                  Outputs: b c                Initial: l0
-      Instructions:
-        l0   = Pull  a       l1 l7
-        l1 w = Jump         (l2 (f w))
-        l2 x = Push  b x    (l4 x)
-        l4 z = Push  c (g z) l5
-        l5   = Drop  a       l0
-
-        l7   = Close b       l9
-        l9   = Close c       l10
-        l10  = Done
-\end{lstlisting}
-
-We must be careful to ensure the transform terminates.
-If we have a jump instruction which jumps to itself, we cannot inline it recursively, because we would end up in an infinite loop.
-The implementation must keep track of which labels have been inlined, and avoid doing the same thing multiple times.
-% we construct a new process by starting from the initial label and exploring outwards.
-% At each step 
-% when inlining an instruction we keep a set of labels that we have inlined.
-% If we encounter the same label twice, it is time to stop unfolding the definition.
-
-
-\subsection{Cull outputs}
-\label{section:implementation:cull-outputs}
-
-When one process in the network pushes to an output stream but no other processes use the stream as an input, we can simplify the process network by removing the stream and replacing the instructions that mention the stream with jumps.
-This situation is unlikely to occur in the original process network because a programmer would not introduce a channel without using it, but it does happen often in the intermediate process network after some processes have been fused.
-
-Continuing with the same @map2@ example, we can remove the stream @b@ after the two processes have been fused together.
-The fused process has two instructions that refer to the stream @b@: the push instruction at label @l2@, and the close instruction at label @l7@.
-We replace each instruction with a jump to the original instruction's destination, as follows.
-
-\begin{lstlisting}[linebackgroundcolor={
-  \hilineFst{8}
-  \hilineCom{9}
-  \hilineFst{10}
-  \hilineSnd{11}
-  \hilineFst{12}
-  \hilineFst{14}
-  \hilineSnd{15}
-  \hilineCom{16}
-}]
-Process network:
-  Sources: a = sourceOfFile "in.txt"
-  Sinks:   c = sinkToFile  "out.txt"
-  Processes:
-    Process "map f a / map g b"
-      Inputs:  a                  Outputs: b c                Initial: l0
-      Instructions:
-        l0   = Pull  a       l1 l7
-        l1 w = Jump         (l2 (f w))
-        l2 x = Jump         (l4 x)
-        l4 z = Push  c (g z) l5
-        l5   = Drop  a       l0
-
-        l7   = Jump          l9
-        l9   = Close c       l10
-        l10  = Done
-\end{lstlisting}
-
-By replacing each instruction with jumps, we have exposed more opportunities for jump contraction to remove states.
-For exposition we performed jump contraction before culling outputs, but in our implementation we perform cull outputs first.
-If we perform jump contraction again, we have the following result with six states.
-There is only one superfluous instruction: the jump instruction at label @l1@.
-We could remove this jump if we inlined the push instruction at label @l4@ into the jump, but this is not implemented yet.
-This is still a significant improvement over the original fused process, which had eleven states.
-
-\begin{lstlisting}[linebackgroundcolor={
-  \hilineFst{8}
-  \hilineCom{9}
-  \hilineFst{10}
-  \hilineFst{11}
-  \hilineSnd{13}
-  \hilineCom{14}
-}]
-Process network:
-  Sources: a = sourceOfFile "in.txt"
-  Sinks:   c = sinkToFile  "out.txt"
-  Processes:
-    Process "map f a / map g b"
-      Inputs:  a                  Outputs: b c                Initial: l0
-      Instructions:
-        l0   = Pull  a       l1 l9
-        l1 w = Jump         (l4 (f w))
-        l4 z = Push  c (g z) l5
-        l5   = Drop  a       l0
-
-        l9   = Close c       l10
-        l10  = Done
-\end{lstlisting}
 

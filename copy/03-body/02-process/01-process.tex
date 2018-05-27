@@ -1,7 +1,11 @@
 \chapter{Processes and networks}
 \label{chapter:process:processes}
 
-\TODO{paragraph thread}
+This chapter introduces a language for describing processes in a Kahn process network.
+These process networks execute concurrently and communicate via fixed-size bounded buffers between channels.
+Each buffer is restricted to a single element.
+The processes in a process network are then fused together to form a single process which computes the whole process, without the need for communication.
+
 
 \section{Gold panning with processes}
 In \autoref{taxonomy} we introduced the @priceAnalyses@ example, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
@@ -718,7 +722,7 @@ Performing this desugaring makes the low level lemmas easier to prove, but we fi
 This causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
 This is a fairly minor difference.
 
-Secondly, the formalisation only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process groups.
+Secondly, the formalisation only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process networks.
 Instead, we sequentially evaluate each source processes independently, and compare the output values to the ones produced by sequential evaluation of the fused result process.
 This is sufficient for our purposes because we are mainly interested in the value correctness of the fused program, rather than making a statement about the possible execution orders of the source processes when run concurrently.
 
@@ -730,6 +734,6 @@ With these two conditions satisfied, we can show that all evaluations respect th
 
 % To prove soundness of fusion, we assert the invariant that defines how evaluation of the fused program relates to evaluation of the two original programs. 
 % For the fused process, the precondition is that, when the fused process evaluates to a particular evaluation state, then each original process must
-\TODO{example evaluation, show how evaluation relation works with @pending@ values}
-
-\TODO{also mention that formalisation is infinite streams, rather than finite}
+% \TODO{example evaluation, show how evaluation relation works with @pending@ values}
+% 
+% \TODO{also mention that formalisation is infinite streams, rather than finite}

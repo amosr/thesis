@@ -236,34 +236,22 @@ We err on the side of caution, telling the programmer about anything even slight
 Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
 
 The fusion algorithm for pairs of processes fails and does not produce a result process when two processes have conflicting access patterns on their shared inputs.
-As the access patterns are determined statically, apparent conflicts may in fact never occur at runtime; we must approximate.
-If at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
+As the access patterns are determined statically, apparent conflicts may never occur at runtime; we instead make a pessimistic approximation.
+In the implementation, if at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
 
-\subsubsection{Future work}
-\label{s:extraction:future}
-\TODO{This likely belongs elsewhere}
+Unfortunately, this heuristic cannot always choose the correct fusion ordering.
+It is not possible, in general, to choose the correct ordering based on the dependency graph alone.
+Consider the following list program, @append3@, which appends three input lists in various orders, producing three output lists.
+As with the @append2zip@ example, we present the example as a list program for syntactic convenience, while we interpret it as a process network.
 
-Regardless of the order the processes are fused in, if fusion succeeds, the result process has the same meaning.
-This makes the heuristic described above \emph{sound}, in that it will never produce a wrong program.
-
-The corrolary to soundness is \emph{completeness}, which is that it will always produce a right program.
-That is, if there exists any order in which fusion succeeds, then the order described above also succeeds.
-This heuristic is not complete, but it does works for all the examples in \REFTODO{benchmarks}.
-% For large process networks, there are many orders we could fuse the processes.
-% There are factorially many permutations of the set of processes, and on top of that, the fusion operation can be nested arbitrarily.
-% This factorial number of possibilities is because the fusion algorithm is non-associative and non-commutative.
-The order described above is a heuristic to avoid trying all possible orders, but it does not always work.
-
-The following example, @append3@, is very similar to @append2zip@ except it returns three output streams constructed by appending the three input streams in different orders.
-
-\begin{lstlisting}
+\begin{haskell}
+append3 :: [a] -> [a] -> [a] -> ([a],[a],[a])
 append3 a b c =
-  ab <- append a b
-  ac <- append a c
-  bc <- append b c
-  return (ab, ac, bc)
-\end{lstlisting}
-
+  let ab = a ++ b
+      ac = a ++ c
+      bc = b ++ c
+  in  (ab, ac, bc)
+\end{haskell}
 
 \begin{figure}
 \begin{minipage}[t]{0.5\textwidth}
@@ -307,6 +295,8 @@ digraph G {
 \end{figure}
 
 
+
+
 This process network can be executed with no buffering.
 First, read all of the @a@ input stream, then read the @b@ stream, then read the @c@ stream.
 There is no single consumer in this example which imposes its access pattern on its producers, so our heuristic fails.
@@ -320,7 +310,7 @@ If we take the @append3@ example and replace the append processes with @zip@ pro
 
 
 
-We propose to solve this in future work \REFTODO{future of fusion} by modifying the fusion algorithm to be commutative and associative.
+We propose to solve this in future work by modifying the fusion algorithm to be commutative and associative.
 These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
 
 The fusion algorithm is not commutative because when two processes are trying to execute instructions which could occur in either order, the algorithm must choose only one instruction.

@@ -8,9 +8,9 @@ On the other hand, typed Template Haskell enforces well-typedness of the generat
 We use untyped Template Haskell for code generation.
 Performing typed code generation is equivalent to proving that the result program is well-typed, whereas untyped code generation requires no such proof.
 This makes the untyped version easier to implement.
-While typed code generation is no doubt possible, it is an interesting research problem on its own \CITE{Accelerate}.
+While typed code generation is no doubt possible, it is an interesting research problem on its own.
 
-The problem with using untyped code generation is that if there are type errors they will not be found until quite late, once the generated code has been spliced into the main program.
+The problem with using untyped code generation is that if there are type errors, they will not be found until quite late, once the generated code has been spliced into the main program.
 This means that when the programmer sees the type error, the error location will be in the generated code.
 That is, the error is shown in code the program wrote, rather than code the programmer wrote.
 This complicates finding the underlying cause of the error and fixing the problem.
@@ -18,7 +18,6 @@ Type safety is a big problem when we wish to provide a library for other program
 Typed Template Haskell allows us to provide a type-safe interface to users of the library.
 
 \subsection{Untyped expressions}
-\TODO{find a better example. This is placeholder.}
 
 Template Haskell extends regular Haskell with two syntactic constructs: quasiquoting and splicing, for moving between runtime and compile-time stages.
 Quasiquoting converts a runtime expression to a compile-time value, while splicing performs the opposite conversion.
@@ -41,10 +40,10 @@ These fresh names ensure that newly bound names will not interfere with existing
 Now let us look at a concrete example of how to use Template Haskell.
 Suppose we wish to define a power function where the exponent is known at compile time, but the mantissa is not known until runtime.
 
-We define @power@ as a function with the type \lstinline/Int ->  Q Exp/.
+We define @power@ as a function with the type (\lstinline/Int -> Q Exp/).
 This means it takes an integer at compile-time, and produces a quoted expression in the quote monad.
-This result expression will, once spliced in, have type \lstinline/Int ->  Int/.
-Later we shall use typed Template Haskell to make this extra type information explicit, but for now we must perform typechecking in our heads.
+This result expression will, once spliced in, have type (\lstinline/Int -> Int/).
+Later, we shall use typed Template Haskell to make this extra type information explicit, but for now we must perform typechecking in our heads.
 
 \begin{lstlisting}
 power :: Int -> Q Exp
@@ -61,7 +60,7 @@ Finally, we multiply the one-smaller power of the mantissa by the mantissa itsel
 
 We can now define a specialised @power@ function to compute the square.
 We define this as a top-level binding which performs a splice, and inside that splice we call @power@ with the statically known argument @2@.
-The type inside the splice is \lstinline/Q Exp/, and once splicing is complete the result is an expression of type \lstinline/Int ->  Int/.
+The type inside the splice is \lstinline/Q Exp/, and once splicing is complete the result is an expression of type \lstinline/Int -> Int/.
 
 \begin{lstlisting}
 power2 :: Int -> Int
@@ -92,7 +91,7 @@ The top-level function @powerS@ introduces the lambda for the mantissa inside a 
 The exponent is a compile-time binding, while the mantissa is a runtime binding.
 When the helper function is called at compile-time, the exponent can be passed as-is, while the mantissa must be quasiquoted to wrap the runtime binding into a compile-time expression.
 
-The recursive helper function, @powerS'@, has type \lstinline/Int ->  Q Exp ->  Q Exp/.
+The recursive helper function, @powerS'@, has type \lstinline/Int -> Q Exp -> Q Exp/.
 
 \begin{lstlisting}
 powerS' :: Int -> Q Exp -> Q Exp
@@ -123,19 +122,20 @@ For more information on staging in general, \citet{rompf2010lightweight} takes t
 
 Typed Template Haskell extends the Template Haskell we have seen with typed expressions, typed splicing and typed quasiquoting.
 The type of typed expressions, @TExp@, is annotated with a meta-level (compile-time) type argument denoting the object-level type of the expression.
-Syntactically, typed quasiquotation uses two pipes, while typed splicing uses two dollar signs.
+Syntactically, typed quasiquotation uses two pipe symbols, where untyped quasiquotation uses one.
+Likewise, typed splicing uses two dollar signs.
 For example, using a typed quasiquote on a string will produce a @String@-typed expression: (\lstinline/[||"one"||] :: Q (TExp String)/).
 Similarly, typed splicing eliminates the @Q@ monad and the @TExp@ wrapper, leaving only the result type: (\lstinline/$$([||"one"||]) :: String/).
 
 Typed expressions are invaluable for providing a typesafe way to construct process networks.
 We need to construct process networks at compile-time to fuse them at compile-time, while keeping the information required to execute them at runtime.
-Consider the standard @filter@ function for lists, with type (\lstinline/(a ->  Bool) ->  [a] ->  [a]/).
-In order to implement a process network version of @filter@, the function argument of type (\lstinline/(a ->  Bool/) must be converted to an expression, as it will be evaluated and applied at runtime.
-Providing a process network @filter@ function which takes as an argument the typed expression (\lstinline/Q (TExp (a ->  Bool))/) instead of the untyped expression (\lstinline/Q Exp/) means that type errors can be caught early.
+Consider the standard @filter@ function for lists, with type (\lstinline/(a -> Bool) -> [a] -> [a]/).
+In order to implement a process network version of @filter@, the function argument of type (\lstinline/(a -> Bool/) must be converted to an expression, as it will be evaluated and applied at runtime.
+Providing a process network @filter@ function which takes as an argument the typed expression (\lstinline/Q (TExp (a -> Bool))/) instead of the untyped expression (\lstinline/Q Exp/) means that type errors can be caught early.
 
 We provide an untyped core for the processes and networks, then build on top of this to provide a typed interface for constructing networks.
 For this reason, we need to be able to convert from typed expressions to untyped expressions.
-We can convert from a typed expression to an untyped expression using the @unTypeQ@ function, which has type (\lstinline/Q (TExp a) ->  Q Exp/).
+We can convert from a typed expression to an untyped expression using the @unTypeQ@ function, which has type (\lstinline/Q (TExp a) -> Q Exp/).
 This does not affect the underlying expression, it just throws away the meta-level type information.
 The object-level type information remains, and once it is spliced in it will have the same type.
 

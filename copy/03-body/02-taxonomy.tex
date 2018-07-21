@@ -2,11 +2,11 @@
 \label{taxonomy}
 
 In this thesis we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
-Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and only need to store a limited number of elements at a time as local state.
+Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and need only store a limited number of elements at a time as local state.
 A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read a particular index.
-Because of these restrictions a streaming program cannot, for example, sort all the input data in a single pass, because that would require storing all the elements in memory.
+These restrictions mean that a streaming program cannot, for example, sort all the input data in a single pass, because single-pass sorting requires storing all the elements in memory.
 The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- regardless of how large the input stream is.
-In general input streams may be infinite; in this thesis we focus on finite streams.
+In general, input streams may be infinite; in this thesis we focus on finite streams.
 
 % With just this definition one could go and write a streaming program in more or less any language with input-output facilities.
 % This is how a C programmer may implement a streaming program.
@@ -15,20 +15,19 @@ In general input streams may be infinite; in this thesis we focus on finite stre
 % One might expect these four distinct concepts to be clearly distinct in the code, but because
 % Writing streaming programs in this manner can be error-prone and tedious however, as all aspects of the program must be interspersed.
 
-Streaming as described above is a rather general concept.
+Streaming, as described above, is a rather general concept.
 This definition tells us what a streaming program is, but it does not offer any guidance how to write streaming programs.
 In fact, there are many ways to write streaming programs; in this thesis we restrict our attention to streaming programs written in a \emph{functional style}.
 The functional style of writing streaming programs involves using small stream transformers that are connected together to create larger programs.
 The benefit of this style is that each stream transformer can be reasoned about and tested in isolation with no hidden dependencies between stream transformers.
 
 There are numerous \emph{streaming models} to choose from, and we must commit to a particular model before we can start writing programs.
-Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the amount of bookkeeping the programmer must perform to write their program.
-\TODO{bookkeeping be more precise. really I just want to say they don't look like list programs}
+Choosing a streaming model requires making a trade-off between the performance overhead, which operations are supported, and the amount of bookkeeping the programmer must perform to write their program, compared to a non-streaming implementation.
 % The streaming model determines which stream operations are supported including how streams can be connected together, and the overhead incurred when connecting streams together.
 % \ED{A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.}
 We must compare different streaming models to make an informed decision.
-We start our initial comparison by focussing on two low-overhead streaming models to illustrate their lack of expressivity and motivate the use of Kahn process networks as a streaming model.
-In \REF{related} we will compare against some more expressive but less efficient streaming models.
+We start our initial comparison by focussing on two low-overhead streaming models to illustrate how different streaming models support different operations, and to motivate the use of Kahn process networks as a streaming model.
+In \autoref{related} we will compare with some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 \label{taxonomy/gold-panning}
@@ -50,14 +49,18 @@ We wish to evaluate this stock to see whether it was, historically, a worthy inv
 One quality of a good investment is that its price increases over time, and we can quantify this by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
 It is very convenient to be able to summarise growth with one number, but stock prices rarely act as lines.
 While a line might be a good approximation for a stable stock with few dips and bumps, it is a poor approximation for an unstable stock.
-Fortunately, we can use the Pearson correlation coefficient to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
+Fortunately, we can use a statistical tool called the \emph{Pearson correlation coefficient} to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
+The Pearson correlation coefficient is defined as the covariance of both axes, divided by the product of the standard deviations of each axis separately.
+We can also define the Pearson correlation coefficient as the angle between the two regression lines: regression line of price over time, and the regression line of time over price.
+% The exact details are not relevant; it is sufficient to know that these analyses can be implemented as a single-pass online algorithm.
 
 \input{figs/stock.tex}
 
 \autoref{fig:stock:it:stock-over-time} shows the linear regression and correlation of the stock price over a year.
 The stock price is far from a perfect line, but does show a clear upwards trend.
 % The correlation coefficient is a scalar ranging from negative one to positive one.
-In this graph the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are and the straighter the relationship is.
+In this graph, the two linear regression lines represent .
+the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are and the straighter the relationship is.
 The angle here corresponds to a correlation of $0.94$, in a range from negative one to positive one.
 
 % We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.

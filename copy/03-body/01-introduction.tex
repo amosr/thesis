@@ -8,62 +8,56 @@ When querying datasets that do not fit in memory or disk, it can be hard to ensu
 One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\autoref{taxonomy}), which we can write by composing stream transformers together.
 Composing stream transformers together can add some performance overhead, which is usually removed by \emph{fusing} together multiple transformers into a single transformer.
 
-This thesis concerns low-overhead streaming models for executing multiple queries at a time.
-We focus on two streaming models: push streams (\autoref{taxonomy/push}), and Kahn process networks (\autoref{taxonomy/kpn}, \REF{kpn}).
+This thesis describes low-overhead streaming models for executing multiple queries at a time.
+We focus on two streaming models: push streams (\autoref{taxonomy/push}), and Kahn process networks (\autoref{taxonomy/kpn}, \autoref{chapter:process:processes}).
 
 Push streams can execute multiple queries at a time, but these queries can be unwieldy to write as they must be constructed ``back-to-front''.
 In \autoref{part:icicle} we introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar array-based semantics, while retaining the execution strategy of push streams.
-The typesystem of Icicle aims to ensure that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together.
-\TODO{talk about duplicate work in push streams as well, rather than focussing on fairly trivial syntax changes}
+The type system of Icicle aims to ensure that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together.
+% \TODO{talk about duplicate work in push streams as well, rather than focussing on fairly trivial syntax changes}
 % Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 
 However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams, and in some circumstances appending streams, as we shall see in \autoref{taxonomy/push}.
 Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant overhead.
-In \REF{kpn/fusion} we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
+In \autoref{s:Fusion} we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
 This fusion method generalises previous work on stream fusion \REF{kpn/generalises} and demonstrates the connection between fusion and synchronised product of processes \REF{kpn/synchronised-product}, which is generally used as a proof technique rather than an optimisation.
 
-[todo: mention fusion failure or deadlocks, as why else would we need Icicle?]
-[todo: clustering]
-
-\section{Outline}
 \section{Contributions}
 
-The contributions of this thesis are:
+This thesis makes the following contributions:
 
-\begin{itemize}
-\item
-  \autoref{part:icicle}:
-If, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
+\begin{description}
+\item[Modal types to ensure efficiency and correctness:]
+if, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
 The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, and that the stream query has the same semantics as if it were operating over arrays.
+Icicle is described in \autoref{part:icicle}.
 
-\item
-\REF{kpn}:
-A method for fusing stream combinators; the first that satisfies all three criteria: multiple inputs, multiple queries, and user-defined combinators.
+\item[A method for fusing stream combinators:]
+a method for fusing stream combinators; the first that satisfies all three criteria: multiple inputs, multiple queries, and user-defined combinators.
 This is achieved by treating each combinator as a sequential process, and the combinators together as a concurrent process network.
 Processes are then fused together using an extension of synchronised product.
+The fusion algorithm is described in \autoref{chapter:process:processes}.
 
-\item
-  \REF{kpn/proof}:
-A proof of correctness for the above-mentioned fusion system, mechanised in the proof assistant Coq.
+\item[Formal proof of correctness of fusion:]
+a proof of correctness for the above-mentioned fusion system, mechanised in the proof assistant Coq.
 The proof states that when two processes are fused together, the fused process computes the same result as the original processes.
-% (\refChapter{C:process-correct})
+The proof is described in \autoref{s:Proofs}.
 
-\item
-  \REF{clustering}:
-When we require multiple passes over the input, there may be multiple ways to divide the work.
-The decision of \emph{clustering} --- how to group the combinators together --- becomes important.
-Choosing a clustering that minimises a particular objective is NP-hard \cite{darte1999complexity}.
-\cite{megiddo1998optimal}'s clustering algorithm converts imperative loop nests to integer linear programs to find the optimal clustering according to some objective function.
-Here, as with many imperative loop fusion systems, loops can only be fused together if their loop bounds are identical.
-In such systems a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
-Many combinator-based fusion systems do support fusing a filter with its consumer.
-As such, clustering algorithms designed for imperative loop fusion ignore the opportunities for fusing filters together, and may assign more clusters than necessary.
-By working with high-level combinators rather than loop nests, we extend this clustering algorithm to recognise that filters can be fused with their consumer or their producer.
-[todo fix explain above]
-\end{itemize}
+\end{description}
 
+% \subsection{Extension of clustering algorithm to filters}
+%   \REF{clustering}:
+% When we require multiple passes over the input, there may be multiple ways to divide the work.
+% The decision of \emph{clustering} --- how to group the combinators together --- becomes important.
+% Choosing a clustering that minimises a particular objective is NP-hard \cite{darte1999complexity}.
+% \cite{megiddo1998optimal}'s clustering algorithm converts imperative loop nests to integer linear programs to find the optimal clustering according to some objective function.
+% Here, as with many imperative loop fusion systems, loops can only be fused together if their loop bounds are identical.
+% In such systems a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
+% Many combinator-based fusion systems do support fusing a filter with its consumer.
+% As such, clustering algorithms designed for imperative loop fusion ignore the opportunities for fusing filters together, and may assign more clusters than necessary.
+% By working with high-level combinators rather than loop nests, we extend this clustering algorithm to recognise that filters can be fused with their consumer or their producer.
 
 
 % All the data in the world won't tell you anything if you don't look at it.

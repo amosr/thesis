@@ -74,9 +74,9 @@ If we try to convert this computation to a single-pass streaming implementation,
 %% Review #1
 %% It’s not clear what’s meant by “In Icicle, queries that would require unbounded buffering cannot be written”.
 %% My understanding is that they can be written, but we would get a runtime error because the buffer would eventually become too big to fit the memory. Is this right?
-% change to "statically outlawed by the typesystem": I think that's unambiguous.
+% change to "statically outlawed by the type system": I think that's unambiguous.
 
-In Icicle, queries that would require unbounded buffering are statically outlawed by the typesystem, with one major caveat that we will discuss in a moment.
+In Icicle, queries that would require unbounded buffering are statically outlawed by the type system, with one major caveat that we will discuss in a moment.
 Because Icicle is based on push streams (\autoref{taxonomy/push}), the stream being processed (such as @xs@ above) is implicit in each query.
 Constructs such as @filter@ and @fold@ do not take the name of the stream as an argument, but instead operate on the stream defined in the context.
 Icicle language constructs describe \emph{how elements from the stream should be aggregated}, but the order in which those elements are aggregated is implicit, rather than being definable by the body of the query.

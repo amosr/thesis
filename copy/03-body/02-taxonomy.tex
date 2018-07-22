@@ -50,17 +50,15 @@ One quality of a good investment is that its price increases over time, and we c
 It is very convenient to be able to summarise growth with one number, but stock prices rarely act as lines.
 While a line might be a good approximation for a stable stock with few dips and bumps, it is a poor approximation for an unstable stock.
 Fortunately, we can use a statistical tool called the \emph{Pearson correlation coefficient} to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
-The Pearson correlation coefficient is defined as the covariance of both axes, divided by the product of the standard deviations of each axis separately.
-We can also define the Pearson correlation coefficient as the angle between the two regression lines: regression line of price over time, and the regression line of time over price.
-% The exact details are not relevant; it is sufficient to know that these analyses can be implemented as a single-pass online algorithm.
+The Pearson correlation coefficient is defined as the covariance of price with time, divided by the product of the standard deviation of price and the standard deviation of time.
+We can also define the Pearson correlation coefficient geometrically: it is the cosine of the angle between the regression line of price over time, and the regression line of time over price.
 
 \input{figs/stock.tex}
 
-\autoref{fig:stock:it:stock-over-time} shows the linear regression and correlation of the stock price over a year.
+\autoref{fig:stock:it:stock-over-time} shows the fluctuations of the example stock's price over a year, along with the regression line of price over time in red, and the regression line of time over price in blue.
 The stock price is far from a perfect line, but does show a clear upwards trend.
 % The correlation coefficient is a scalar ranging from negative one to positive one.
-In this graph, the two linear regression lines represent .
-the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are and the straighter the relationship is.
+In this graph, the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are, and the `straighter' the relationship is.
 The angle here corresponds to a correlation of $0.94$, in a range from negative one to positive one.
 
 % We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
@@ -112,11 +110,12 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
       stddevY = sqrt varianceY
   in covariance / (stddevX * stddevY)
 \end{haskell}
-\caption[One-pass correlation]{one-pass correlation \TODO{move to appendix, or maybe this can be an example in the Icicle chapter}}
+\caption{one-pass correlation implementation}
 \label{figs/impl/correlation}
 \end{figure}
 
-\autoref{figs/impl/correlation} shows the implementations of \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/ [sweep this under the rug or refer to appendix]; we can implement a function to compute the regression similarly.
+\autoref{figs/impl/correlation} contains the implementations of the fold worker functions \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
+We can implement a function to compute the regression similarly; we omit the definitions of the regression worker functions.
 
 \begin{haskell}
 regression :: [(Double,Double)] -> Line
@@ -179,7 +178,7 @@ The large boxes bisecting most of the nodes denote which nodes are defined insid
 This dependency graph is a directed acyclic graph: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
 Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.
 
-Although this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
+Although a sequential evaluation of this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
 Our choice of streaming model dictates how difficult this rewrite will be.
 
 \begin{figure}
@@ -251,9 +250,9 @@ map a_to_b (Pull pull_a) = Pull pull_b
 Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
 Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ and asks for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
 When the stream is not finished, we apply the transform function \Hs/a_to_b/ to the pulled element and return the transformed element.
-In pull streams, consumers asks producers for the next value, and control flow bubbles up from consumer to producer.
+In pull streams, consumers ask producers for the next value, and control flow bubbles up from consumer to producer.
 
-We can implement \Hs/foldl/ also.
+We can also implement \Hs/foldl/.
 Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/.
 
 \begin{haskell}
@@ -277,13 +276,14 @@ Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
 
 
-\autoref{figs/impl/pull/combinator} shows the type signatures of the remaining push stream combinators required for the examples.
-The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions; implementations are available in \REF{appendix/taxonomy}.
+\autoref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
+The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions.
 
 The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
 Both input streams are sorted by some key, which the comparison function extracts and compares.
 If the keys are equal, \Hs/join/ returns the pair.
-Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if one stream has a higher key than the other, it means the stream with the higher key does not have a corresponding value for the smaller key.
+% if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
 In our @priceOverMarket@ example the files are sorted by date and the comparison function compares the dates.
 We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
@@ -329,7 +329,8 @@ priceOverTime_pull_bad stock = do
 \end{haskell}
 
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
-By the time we go to compute the correlation and try to read the \Hs/timeprices/ stream again, it has already been read.
+After computing the regression, the program computes the correlation of the same input stream.
+When the correlation tries to read the \Hs/timeprices/ stream again, the stream has already been exhausted.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
 In fact, in \autoref{taxonomy/polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
 
@@ -338,8 +339,9 @@ When a stream is read multiple times, all the effects and all the work that went
 Rewinding would allow this program to compute the correct result, but the file would be read from disk again.
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
-In this program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
-This is a simple instance of a transform known as \emph{tupling}, and automated tupling transforms such as \cite{hu1997tupling} exist, but are quite limited.
+In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
+This is a simple instance of a transform known as \emph{tupling}.
+Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/, \Hs/zip/, or \Hs/append/.
 % We discuss tupling further in \REF{related/tupling}.
 
 \begin{haskell}
@@ -360,7 +362,7 @@ priceOverTime_pull stock = do
 
 This program computes the correct value.
 % The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
-In order to write this version we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
+To write this version we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
 This was relatively easy because both use-sites were folds.
 
 % If the input data is stored in a file, we have the option or re-reading the input file again, but this also requires performing any parsing again --- duplicating work.
@@ -386,7 +388,7 @@ Both were fairly simple folds.
 Doing the same for \Hs/priceAnalyses/ is more complicated: we would need to implement a special version of the \Hs/join/ inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
 
 It might appear that, since the \Hs/joined/ stream contains pairs from both \Hs/stock/ and \Hs/index/, we could use this to compute the correlation and regression of the the \Hs/stock/ component alone.
-Such a query would likely be easier to combine with \Hs/priceOverMarket/, but this query would compute a different result, since the \Hs/joined/ stream only contains elements from \Hs/stock/ for which corresponding days exist in the \Hs/index/ stream.
+Such a query would be easier to combine with \Hs/priceOverMarket/, but this query would compute a different result, since the \Hs/joined/ stream only contains elements from \Hs/stock/ for which corresponding days exist in the \Hs/index/ stream.
 
 Pull streams are not helping us execute multiple queries at a time.
 If we wish to execute multiple queries in a single-pass, we need to be able to mention streams multiple times.

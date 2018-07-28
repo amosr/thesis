@@ -3,14 +3,14 @@
 
 This chapter presents Icicle, a domain-specific language for writing queries as push streams.
 This work was first published as \citep{robinson2016icicle} and was performed during an internship at a machine-learning company called Ambiata.
-At Ambiata we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018 this was a lot of data.}
+At Ambiata, we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018 this was a lot of data.}
 For such applications we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
-Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion or incremental update then the cost of the computation would begin to exceed the salaries of the developers.
+Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion nor incremental update then the cost of the computation would begin to exceed the salaries of the developers.
 
-For example queries, we extend the daily stock price records from \autoref{taxonomy/gold-panning} to contain the open price and the close price for the day.
-As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle does not support the @priceOverMarket@ example, which required multiple input streams.
-We want to compute the number of days where the open price exceeded the close price, and vice versa.
+In the following example queries, we extend the daily stock price records from \autoref{taxonomy/gold-panning} to contain the open price and the close price for the day.
+As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle cannot express the @priceOverMarket@ example, which required multiple input streams.
+Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
 We also want the mean of the open price for days in which the open price exceeded the close price.
 In Icicle we write the three queries as follows:
 
@@ -52,7 +52,7 @@ In Icicle we remove this duplicate work by first converting queries to an interm
 This intermediate language decomposes the query into individual folds, exposing the opportunities for common subexpression elimination.
 
 If we were using an existing database implementation, we could convert all three queries to a single query in a back-end language like SQL, but doing so by hand is tedious and error prone.
-As the three queries use different filter predicates we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter.
+As the three queries use different filter predicates, we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter.
 We must instead lift each predicate to an expression-level conditional and compute the count by summing the conditional:
 
 \begin{sql}

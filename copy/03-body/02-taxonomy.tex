@@ -37,7 +37,7 @@ To avoid mixing up the details of streaming with the details of the example, we 
 
 Suppose we have a file containing the historical prices for a particular corporate stock.
 The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.
-The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype.
+The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype:
 
 \begin{haskell}
 data Record = Record
@@ -122,7 +122,7 @@ regression :: [(Double,Double)] -> Line
 regression = regression_x (foldl regression_k regression_z)
 \end{haskell}
 
-Now that we have functions to compute the linear regression and the correlation, we can combine them together with the following program.
+Now that we have functions to compute the linear regression and the correlation, we can combine them together with the following program:
 
 \begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
@@ -146,7 +146,7 @@ We want to compare each day's price for our stock against the average price for 
 \autoref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \autoref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
 We can see in the comparison of stock price to index price that the stock has grown faster than the index.
 
-We can compute the comparison of stock over market with the following program.
+We can compute the comparison of stock over market with the following program:
 
 \begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
@@ -317,7 +317,7 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
 \end{figure}
 
 We cannot naively translate the list version of \Hs/priceOverTime/ to use these streaming combinators, because the list version required multiple traversals.
-The following program will not compute the correct result because it uses the \Hs/timeprices/ stream twice.
+The following program will not compute the correct result because it uses the \Hs/timeprices/ stream twice:
 
 \begin{haskell}
 priceOverTime_pull_bad :: Pull Record -> IO (Line, Double)
@@ -339,10 +339,7 @@ When a stream is read multiple times, all the effects and all the work that went
 Rewinding would allow this program to compute the correct result, but the file would be read from disk again.
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
-In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time.
-This is a simple instance of a transform known as \emph{tupling}.
-Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/, \Hs/zip/, or \Hs/append/.
-% We discuss tupling further in \REF{related/tupling}.
+In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time:
 
 \begin{haskell}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
@@ -359,11 +356,14 @@ priceOverTime_pull stock = do
   regressionCorrelation_pull timeprices
 \end{haskell}
 
-
 This program computes the correct value.
 % The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
 To write this version we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
 This was relatively easy because both use-sites were folds.
+This process of combining two folds into one is a simple instance of a transform known as \emph{tupling}.
+Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/ or \Hs/append/.
+We discuss tupling further in \REF{related/tupling}.
+
 
 % If the input data is stored in a file, we have the option or re-reading the input file again, but this also requires performing any parsing again --- duplicating work.
 % We could also store the values in a buffer and traversing the buffer multiple times, but this requires knowing how large the stream will be.
@@ -385,7 +385,7 @@ We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMar
 When we implemented the pull version of \Hs/priceOverTime/, we had to look at the two occurences where the \Hs/timeprices/ stream had been used.
 We had to inline both places where the stream was used and manually write a new function to do the work of both.
 Both were fairly simple folds.
-Doing the same for \Hs/priceAnalyses/ is more complicated: we would need to implement a special version of the \Hs/join/ inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
+Doing the same for \Hs/priceAnalyses/ is more complicated: we would need to implement a special version of the \Hs/join/ combinator used inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
 
 It might appear that, since the \Hs/joined/ stream contains pairs from both \Hs/stock/ and \Hs/index/, we could use this to compute the correlation and regression of the the \Hs/stock/ component alone.
 Such a query would be easier to combine with \Hs/priceOverMarket/, but this query would compute a different result, since the \Hs/joined/ stream only contains elements from \Hs/stock/ for which corresponding days exist in the \Hs/index/ stream.
@@ -399,7 +399,7 @@ To execute these shared streams, each time we read from a shared stream, we need
 
 This pull stream representation can incur some streaming overhead because of the allocated @Maybe@ values.
 For simple combinators such as map, however, the overhead can be optimised away.
-Consider the following function, which applies two functions to the elements in a stream.
+Consider the following function, which applies two functions to the elements in a stream:
 
 \begin{haskell}
 map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
@@ -412,7 +412,7 @@ map2 f g stream_a
 We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
 Fortunately, after some optimisation, both programs incur the same amount of overhead.
 To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
-After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function.
+After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function:
 
 \begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
@@ -482,6 +482,7 @@ A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs
 This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
 However, this representation provides no direct way to retrieve a result from a consumer: for example, the return value of our correlation or regression.
 This is a common enough use-case that it justifies a departure from the conceptual clarity of using the exact dual.
+We instead use the following representation:
 
 \begin{haskell}
 data Push a r = Push
@@ -506,8 +507,8 @@ When the stream is finished we call \Hs/done/ to retrieve the result.
 In this representation, it is the consumers that are values of type (\Hs/Push a r/): they are sinks into which we can push values of type \Hs/a/, and eventually get an \Hs/r/ back.
 This inversion of pull streams results in a fundamental difference in how we program with push streams, and what we can express with push streams.
 
-We cannot map a function over the elements in push streams in the way we would lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
-Instead, we implement contravariant-map, or \Hs/contramap/, like so.
+We cannot map a function over the elements in push streams in the way that we would with lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
+Instead, we implement contravariant-map, or \Hs/contramap/, like so:
 
 \begin{haskell}
 contramap :: (a -> b) -> Push b r -> Push a r
@@ -522,7 +523,7 @@ When a producer tries to push an input value into the returned stream, the @push
 Unlike with pull streams, a push consumer has no way of choosing among multiple inputs.
 The producer is in control while the consumer passively waits for its next input value.
 
-We \emph{do} in fact have a regular (covariant) map function for push streams, but this transforms the stream result rather than the input elements.
+We \emph{do} in fact have a regular (covariant) map function for push streams, but this transforms the stream result rather than the input elements:
 
 \begin{haskell}
 map_result :: (r -> r') -> Push a r -> Push a r'
@@ -874,7 +875,7 @@ priceAnalyses_ii stock index = do
 \label{figs/impl/polar/priceOverTime-priceOverMarket}
 \end{figure}
 
-Assigning polarities is a \emph{global analysis}: we need to inspect the dependency graph containing all queries, rather than looking at each query or each combinator in isolation.
+Assigning polarities is a global analysis, in that we need to inspect the dependency graph containing all queries, rather than looking at each query or each combinator in isolation.
 If we add a new query to \Hs/priceAnalyses/, we need to consider the existing polarities when assigning polarities to the new query.
 Suppose we have an \emph{industry index} which, like the market index, contains average prices of representative subset of stocks.
 For lists, we can reuse the @priceOverMarket@ query to compute how closely our stock follows the industry.
@@ -1004,19 +1005,20 @@ Instead we must hand-optimise the program, combining the duplicate, maps and zip
 \section{Kahn process networks}
 \label{taxonomy/kpn}
 
-The difference between pull, push and polarised streams is where the computation is controlled.
-In pull streams the consumer controls the computation.
-In push streams the producer controls the computation.
-In polarised streams the active combinator, which may be a pull consumer and a push producer, controls the computation.
+The three streaming models we have seen --- pull, push, and polarised streams --- differ in where the computation is controlled.
+In pull streams, the consumer controls the computation.
+In push streams, the producer controls the computation.
+In polarised streams, the active combinator, which may be a pull consumer and a push producer, controls the computation.
 All these systems have one place controlling the computation.
 When we have multiple queries to execute, it can be hard to choose just one combinator to control the entire computation.
 
-Another way to execute multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}, a kind of concurrent process network.
+An alternative streaming model, which allows executing multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}.
+A Kahn process network is a concurrent process network with restrictions to ensure deterministic execution.
 Each combinator inside each query becomes a communicating process in the network.
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
 Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
 
-Concurrent programs can be hard to write and debug because the \emph{schedule}, how processes are interleaved during execution, depends on the environment.
+Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies how processes are interleaved during execution, depends on the environment.
 Because the environment is not controlled by the processes, we say the schedule is chosen \emph{non-deterministically}.
 Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
 Kahn process networks are a restricted form of static process network that ensures processes compute the same result across different schedules \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
@@ -1061,7 +1063,7 @@ execute :: Network (Result a) -> IO a
 \end{figure}
 
 \autoref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
-We leave discussion of the implementation for \REF{kpn}, and for now focus solely on this simplified version of the interface.
+We leave discussion of the implementation for \autoref{chapter:process:processes}, and for now focus solely on this simplified version of the interface.
 The @Channel@ type denotes a communication channel between processes.
 The @Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
 The @map@ and @join@ combinators have type signatures similar to the list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
@@ -1109,7 +1111,7 @@ There are some differences from the list version: the process network is constru
 The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
-In \autoref{taxonomy/pull/streaming-overhead} we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
+In \autoref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
 Communication between processes requires more overhead than allocating @Maybe@ values, and is not removed by general purpose optimisations.
 To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
 Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
@@ -1154,7 +1156,7 @@ Often, a well-optimised sequential implementation of a program will consume sign
 % In fact, the contrary is often true.
 % \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
 
-\section{Discussion}
+\section{Summary}
 We have seen the relative advantages of various streaming models.
 Pull streams support multiple inputs, and can take advantage of an optimising compiler to reduce overhead.
 Push streams support multiple queries, and are written back-to-front with explicit duplication for sharing streams.
@@ -1162,7 +1164,7 @@ Polarised streams support multiple inputs and multiple queries, require polarity
 Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
 
 In the next chapter we will see Icicle, a language for specifying push stream queries (\autoref{part:icicle}).
-Icicle queries are written front-to-back and streams can be shared without requiring explicit duplication.
+Icicle queries are written front-to-back, and streams can be shared without requiring explicit duplication.
 Queries are compiled to folds over push streams which can be executed concurrently.
 After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together \REF{kpn}.
 

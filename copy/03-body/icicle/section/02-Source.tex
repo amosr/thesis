@@ -42,7 +42,7 @@ Note that the types of pure values such as constants are automatically promoted 
 \subsection{Finite Streams and Synchronous Data Flow}
 In contrast to synchronous data flow languages such as {\sc Lustre}~\cite{halbwachs1991synchronous}, the streams processed by Icicle are conceptually finite in length.
 Icicle is fundamentally a query language, which queries finite tables of data held in a non-volatile store, but does so in a streaming manner.
-Lustre operates on conceptually infinite streams, such as those found in real-time control systems (like to fly airplanes).
+Lustre operates on conceptually infinite streams, such as those found in real-time control systems (like to fly aeroplanes).
 In Icicle, the ``last'' element in a stream is the last one that appears in the table on disk.
 In Lustre, the ``last'' element in a stream is the one that was most recently received.
 If the unstreamable query from \autoref{icicle:s:ElementsAndAggregates} was converted to Lustre syntax then it would execute, but the filter predicate would compare the last key with the most recent key from the stream, which is the key itself.

@@ -113,7 +113,7 @@ partitions inputs =
 
 \FigurePdf{figs/combinators/filter-even-odd}{Pairing even/odd: combinator diagram}{Combinator diagram for pairing even/odd.}
 
-\autoref{figs/combinators/filter-even-odd} shows the combinator diagram for partitions.
+\Cref{figs/combinators/filter-even-odd} shows the combinator diagram for partitions.
 This operation inherently requires a buffer, as the entire stream must be read in order to compute the aboves, and the append must wait until the end of aboves before it can read from belows.
 This operation can be fused together by using an intermediate buffer to store belows in, as values are read from inputs.
 
@@ -170,13 +170,13 @@ In this discussion I will use separate names for all three merges: value-depende
 
 Value-dependent merge operates over streams of values, and intersperses them, choosing the smallest value from each stream at every step.
 This operation is the core of merge-sort.
-\autoref{figs/combinators/value-merge} shows an example of value-dependent merge with two sorted input streams, producing the sorted concatenation of the two.
+\Cref{figs/combinators/value-merge} shows an example of value-dependent merge with two sorted input streams, producing the sorted concatenation of the two.
 Value-dependent merge is deterministic and can be encoded as a Kahn process.
 
 \FigurePdf{figs/combinators/time-merge}{Time merge with example values}{Time merge: upper values (blue) and lower values (red) are merged according to the time they arrive. This operation requires non-blocking reads and cannot be implemented as a Kahn process.}
 
 Time-dependent merge operates over two streams with inherent time, and merges according to the absolute time.
-\autoref{figs/combinators/time-merge} shows an example of time-dependent merge, where upper values (blue) and lower values (red) are shown with time along the x axis.
+\Cref{figs/combinators/time-merge} shows an example of time-dependent merge, where upper values (blue) and lower values (red) are shown with time along the x axis.
 Time-dependent merge can be implemented using a non-blocking read.
 By using a non-blocking read, the process itself is deterministic, but when placed inside a process network it is able to observe the \emph{external} non-determinism in scheduling.
 This operation is sometimes known as a non-deterministic merge in terms of process networks~\citep{brock1981scenarios}, while in streaming languages it can be known as deterministic merge or default~\citep{amagbegnon1995implementation}.
@@ -185,7 +185,7 @@ While this cannot be implemented as a Kahn process, in some cases it is possible
 \FigurePdf{figs/combinators/amb-merge}{Ambiguous merge with example values}{Ambiguous merge: upper values (blue) and lower values (red) are merged according to the order, choosing non-deterministically when two values arrive at the same time.}
 
 Ambiguous merge is fully non-deterministic, and is similar to time-dependent merge, except when values arrive at the same point in time, it chooses non-deterministically between the two.
-\autoref{figs/combinators/amb-merge} shows an example of ambiguous merge, where both streams are defined at `3'.
+\Cref{figs/combinators/amb-merge} shows an example of ambiguous merge, where both streams are defined at `3'.
 This operation cannot be implemented as a Kahn process.
 
 While only value-dependent merge is able to be expressed as a Kahn process network, it is important to compare which systems support time-dependent and ambiguous merges.
@@ -299,7 +299,7 @@ Machine/process
 \label{03-body/02-process/01-background/comparison/table}
 \end{table}
 
-\autoref{03-body/02-process/01-background/comparison/table} shows the comparison between polarized data flow fusion (PDFF), pull fusion systems such as stream fusion (Pull), push fusion systems (Push), data flow fusion (DFF) and the process fusion system presented here (MPF).
+\Cref{03-body/02-process/01-background/comparison/table} shows the comparison between polarized data flow fusion (PDFF), pull fusion systems such as stream fusion (Pull), push fusion systems (Push), data flow fusion (DFF) and the process fusion system presented here (MPF).
 
 [talk about tupling: \cite{hu1996deriving,hu1996cheap,hu1996extension,hu1997tupling,hu2005program,bransen2014exploiting,chiba2010program,launchbury1995warm}]
 

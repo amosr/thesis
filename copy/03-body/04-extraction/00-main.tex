@@ -1,7 +1,7 @@
 \chapter{Implementation and code generation}
 \label{chapter:process:implementation}
 
-Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of the fusion algorithm described in the previous chapter (\autoref{chapter:process:processes}).
+Folderol\footnote{\url{https://github.com/amosr/folderol}} is a Haskell implementation of the fusion algorithm described in the previous chapter (\cref{chapter:process:processes}).
 This fusion system uses the topology of the entire process network to perform fusion.
 When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
 This coordination between all consumers means the fusion algorithm requires global knowledge of the process network.

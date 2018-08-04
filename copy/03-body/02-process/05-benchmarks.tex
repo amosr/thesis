@@ -6,7 +6,7 @@ This chapter shows benchmark results for fused programs and the result size of f
 
 \section{Benchmarks}
 
-For the benchmarks, I use the Folderol Template Haskell implementation described in \autoref{chapter:process:implementation}.
+For the benchmarks, I use the Folderol Template Haskell implementation described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
 I present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
 The benchmarks are comparing with the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
@@ -50,7 +50,7 @@ It can also collect statistics on allocations, which is sometimes (but not alway
 
 There are many implementations of the benchmark programs, but for the most part they all follow the same structure.
 Showing five different implementations of the same program is not that interesting.
-I just show the Folderol versions, but the other versions are available in \autoref{app:Benchmarks}.
+I just show the Folderol versions, but the other versions are available in \cref{app:Benchmarks}.
 
 \subsection{Quickhull}
 
@@ -74,9 +74,9 @@ filterMaxFolderol l ps = do
   return (fst maxim, above)
 \end{lstlisting}
 
-\autoref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
+\Cref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
 The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
-As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to remove the need to dynamically grow the vector (\autoref{s:implementation:sizehints}).
+As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to remove the need to dynamically grow the vector (\cref{s:implementation:sizehints}).
 The Template Haskell splice calls @fuse@ to convert the process network into executable code.
 The process network starts by converting the input vector @pts@ to a stream @ins@.
 We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
@@ -101,12 +101,12 @@ filterMaxVectorShare l ps
    in return (point, above)
 \end{lstlisting}
 
-The shared distances implementation is shown in \autoref{l:bench:filterMaxVectorShare}.
+The shared distances implementation is shown in \cref{l:bench:filterMaxVectorShare}.
 First, compute the distance between each point and the line, and store this in a vector called @annot@.
 Then @point@ computes the maximum with @maximumBy@, comparing each distance.
 Next, @above@ filters each point.
 
-The recomputed distances implementation is available in \autoref{app:Benchmarks}, \autoref{l:a:bench:filterMaxVectorRecompute}.
+The recomputed distances implementation is available in \cref{app:Benchmarks}, \cref{l:a:bench:filterMaxVectorRecompute}.
 To recompute the vectors, we start from the shared version and duplicate the @annot@ vector to @annot1@ and @annot2@. The maximum now uses @annot1@, and filter uses @annot2@.
 This way, both maps to compute the distance can be fused into their consumers.
 
@@ -150,7 +150,7 @@ Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 \label{table:bench:quickhull}
 \end{table}
 
-\autoref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
+\Cref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
 Different sizes of data produce similar results.
 The hand-fused version is the fastest, followed by Folderol.
 The Vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
@@ -199,7 +199,7 @@ compressor vecIns = do
      in  min 1.0 root / root
 \end{lstlisting}
 
-The Folderol version is shown in \autoref{l:bench:compressorFolderol}.
+The Folderol version is shown in \cref{l:bench:compressorFolderol}.
 To implement this in Folderol, we start by creating a sink for our output vector, calling the sink @snkOut@ and the vector @vecOut@.
 This will be the same size as the input vector, so we use @vectorSize@.
 We take the input array @vecIns@ and convert it to a stream @ins@.
@@ -214,7 +214,7 @@ Finally, we zip the original stream with the multiplier, and multiply them toget
 The Vector version is very similar to the Folderol version, except without the Template Haskell boilerplate.
 The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
 
-\autoref{table:bench:compressor} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
+\Cref{table:bench:compressor} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
 The difference between the hand-fused version and the Folderol version are very slight, and may be due to operating system scheduling overhead. 
 The Vector version is slower because its generated loop indexes the input array twice.
 
@@ -252,7 +252,7 @@ compressorLop vecIns = do
   return vecOut
 \end{lstlisting}
 
-The code for compressor with a low-pass is shown in \autoref{l:bench:compressorLopFolderol}.
+The code for compressor with a low-pass is shown in \cref{l:bench:compressorLopFolderol}.
 Here we again use @postscanl@ to create another low-pass filter, calling the result @lopped@.
 Then @lopped@ is used as the input to both @squares@ and @out@.
 
@@ -271,7 +271,7 @@ Vector &            & 2.21s &   190\% & 1.6e9 & 200\%\\
 \label{table:bench:compressorlop}
 \end{table}
 
-\autoref{table:bench:compressorlop} shows the results for compressor with low-pass.
+\Cref{table:bench:compressorlop} shows the results for compressor with low-pass.
 For the Vector implementation, in the previous example the two occurrences of @ins@ just meant that the input array was indexed twice.
 However, in the modified version it is not an input vector being used twice, but the result of @postscanl@.
 This means that the result vector for @lopped@ must be reified into a manifest vector, before it can be reused.
@@ -322,7 +322,7 @@ part2 fpIn1 fpOut1 fpOut2 = do
 
 The first file benchmark simply appends two files while counting the lines.
 In Pipes and Conduit, counting the lines is implemented as a pipe which counts each line before passing it along.
-\autoref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
+\Cref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
 
 
 
@@ -346,7 +346,7 @@ The second file benchmark takes a file and partitions it into two files: one wit
 The output lines are also counted.
 Even with partial hand-fusion because of the multiple outputs, the Pipes and Conduit programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
 The `Streaming' library allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
-\autoref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
+\Cref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
 
 \begin{table}
 \begin{center}
@@ -380,7 +380,7 @@ partitionAppendFailure xs = do
   return ys
 \end{lstlisting}
 
-If we try to compile the code in \autoref{l:bench:partitionAppendFail}, we get a compilation error:
+If we try to compile the code in \cref{l:bench:partitionAppendFail}, we get a compilation error:
 \begin{code}
 Maximum process count exceeded:
  after fusion there are 2 processes, but maximum is 1
@@ -392,7 +392,7 @@ But this means that when reading from the stream, if we see an odd-valued elemen
 In this case, the input stream is not really a stream, but is backed by a real vector.
 So we can actually implement it without introducing an unbounded buffer: we already have the buffer.
 To execute the program, we \emph{explicitly} introduce another source to read from the vector. 
-See \autoref{l:bench:partitionAppend2Source}.
+See \cref{l:bench:partitionAppend2Source}.
 The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
 All of @as@ can be read by @append@, independently of @bs@.
 
@@ -413,7 +413,7 @@ But we can actually implement it another way, if we are willing to introduce two
 In this version we introduce two loops.
 In the first loop, we partition the input into two intermediate arrays.
 Then in the second loop, we append the two intermediate arrays.
-See \autoref{l:bench:partitionAppend2Loop}.
+See \cref{l:bench:partitionAppend2Loop}.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Loop,caption=Partition / append with two loops]
 partitionAppend2Loop xs = do
@@ -448,7 +448,7 @@ Vector   & 2-loop   & 0.15s &    88\% & 1.6e8 &  67\% \\
 \label{table:bench:part2app2}
 \end{table}
 
-\autoref{table:bench:part2app2} shows the runtimes for partitioning and appending a file of size \TODO{number of rows}.
+\Cref{table:bench:part2app2} shows the runtimes for partitioning and appending a file of size \TODO{number of rows}.
 
 The Vector implementations follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
 Note that the 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
@@ -471,7 +471,7 @@ The author can be confident that if it compiles, it will have the desired stream
 \TODO{Update with Folderol sizes}
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
-\autoref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
+\Cref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
 To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @merge@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
 The @merge@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @merge@ at the start.
 The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a @map@ and a @filter@ processing the same input stream.
@@ -479,7 +479,7 @@ In both cases the number of states in the result process grows linearly with the
 
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
-On the other hand, \autoref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N merge processes, N+1 input streams, and a single output stream. The output of each merge process is the input of the next, forming a chain of merges. In source notation the network for N = 3 is @sOut = merge sIn1 (merge sIn2 (merge sIn3 sIn4))@.
+On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N merge processes, N+1 input streams, and a single output stream. The output of each merge process is the input of the next, forming a chain of merges. In source notation the network for N = 3 is @sOut = merge sIn1 (merge sIn2 (merge sIn3 sIn4))@.
 
 When fusing two processes the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the @instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
 

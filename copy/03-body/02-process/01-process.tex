@@ -1,15 +1,15 @@
 \chapter{Processes and networks}
 \label{chapter:process:processes}
 
-This chapter introduces a language for describing processes in a Kahn process network.
-These process networks execute concurrently and communicate via fixed-size bounded buffers between channels.
-Each buffer is restricted to a single element.
+This chapter presents a language for expressing a collection of queries, each with potentially many input streams, as a Kahn process network.
+The processes in these process networks execute concurrently and communicate via fixed-size bounded buffers between channels.
+Each buffer is restricted to contain at most a single element.
 The processes in a process network are then fused together to form a single process which computes the whole process, without the need for communication.
 
 
 \section{Gold panning with processes}
-In \autoref{taxonomy} we introduced the @priceAnalyses@ example, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
-\autoref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
+Recall the @priceAnalyses@ example from \cref{taxonomy/gold-panning}, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
+\Cref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
 
 \begin{figure}
 \center
@@ -51,8 +51,8 @@ digraph G {
 \label{figs/procs/priceAnalyses-again}
 \end{figure}
 
-Recall that we cannot execute this example using the pull streams from \autoref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
-Similarly, we cannot execute this example using the push streams from \autoref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
+As discussed earlier, we cannot execute this example using the pull streams from \cref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
+Similarly, we cannot execute this example using the push streams from \cref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
 Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing at the same time, in a way that supports multiple consumers and multiple producers.
 Kahn process networks \citep{kahn1976coroutines} are a flexible, expressive way of writing streaming computations, where a network is composed of communicating processes.
 Executing communicating processes introduces runtime overhead, as stream elements must be passed between processes.
@@ -98,7 +98,7 @@ foldl
 \label{figs/procs/impl/foldl}
 \end{figure}
 
-The definition of the @foldl@ combinator, used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \autoref{figs/procs/impl/foldl}.
+The definition of the @foldl@ combinator, used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \cref{figs/procs/impl/foldl}.
 The combinator is parameterised by the fold state update function (@k@) and the fold state initialisation (@z@).
 In @correlation@ and @regression@, the result must be extracted from the fold state; we extend the standard presentation of @foldl@ with an eject function (@j@) to perform this extraction.
 The process reads from an input stream and, at the end of the input stream, produces a single-element output stream containing the fold result.
@@ -118,7 +118,7 @@ If the input stream is finished, there are no more elements to pull; execution p
 
 After successfully pulling a new element from the input stream, the instruction at label @F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream @sIn@ is no longer required, before updating the fold state (@s@) by applying the fold update function (@k@).
 Execution then proceeds back to the pull instruction at label @F0@.
-In \autoref{s:Drop:in:synchrony} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
+In \cref{s:Drop:in:synchrony} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
 When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
 Execution then proceeds to the instruction at label @F3@.
@@ -154,7 +154,7 @@ map
 \label{figs/procs/impl/map}
 \end{figure}
 
-The definition of the @map@ combinator, which applies a worker function to every element in the input stream, is given in \autoref{figs/procs/impl/map}.
+The definition of the @map@ combinator, which applies a worker function to every element in the input stream, is given in \cref{figs/procs/impl/map}.
 The combinator is parameterised by the worker function (@f@), and takes one input stream (@sIn@) and produces one output stream (@sOut@).
 The heap variable (@v@) is used to store the last value read from the input stream.
 The process starts by pulling from the input stream, storing the element in the heap variable (@v@).
@@ -281,11 +281,11 @@ edge[style="procSndD,thick"];
 \label{figs/procs/instance/pot-regression}
 \end{figure}
 
-\autoref{figs/procs/instance/pot-timeprices} shows the result of instantiating the @map@ process in the @priceOverTime@ process network.
+\Cref{figs/procs/instance/pot-timeprices} shows the result of instantiating the @map@ process in the @priceOverTime@ process network.
 The combinator parameters have the corresponding argument value substituted in, and the variables and labels are given fresh names as necessary.
 We rename the variable name @v@ to @tp_v@, to avoid conflict with variables named @v@ in other processes.
 The figure also shows the control flow graph of the process.
-\autoref{figs/procs/instance/pot-regression} likewise shows the result of instantiating the @regression@ process.
+\Cref{figs/procs/instance/pot-regression} likewise shows the result of instantiating the @regression@ process.
 The instructions and edges in each control flow graph are coloured differently; the same colours will be used to highlight the provenance of each instruction in our informal description of the fusion algorithm.
 
 
@@ -295,7 +295,7 @@ The instructions and edges in each control flow graph are coloured differently; 
 
 The algorithm proceeds by considering pairs of labels and instructions: one from each of the source processes to be fused.
 First, we consider the initial labels of each process and their corresponding instructions.
-This situation is shown in \autoref{figs/fsm/fuse-pulls}; instructions from the two source processes are shown side-by-side and the instruction of the fused process is below.
+This situation is shown in \cref{figs/fsm/fuse-pulls}; instructions from the two source processes are shown side-by-side and the instruction of the fused process is below.
 The @map@ process pulls from the @stock@ stream, while the @regression@ process pulls from the @timeprices@ stream.
 As the @timeprices@ stream is produced by the @map@ process, the @regression@ process must wait until the @map@ process pushes a value.
 If we were to execute the two processes concurrently at this stage, only the @map@ process could make progress, by pulling from the @stock@ input stream.
@@ -354,7 +354,7 @@ This extra information only applies to shared input streams; as such, the input 
 \subsubsection{Fusing Push with Pull}
 \label{s:Fusion:FusingPushPull}
 
-Next, \autoref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream after pulling a value from the @stock@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
+Next, \cref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream after pulling a value from the @stock@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
 After the @map@ process pushes a value, this value becomes available for the @regression@ process.
 In the fused process, this situation results in two steps.
 First, the @map@ process pushes the value (@tp_f tp_v@), and stores this value in the new local variable (@chan_tp@), so it is available for the @regression@ process.
@@ -408,8 +408,8 @@ node[shape=none,texmode="raw"];
 
 
 \subsubsection{Fusion result}
-\autoref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
-There are similar rules for handling the other combinations of instructions, but we defer the details to \autoref{s:Fusion}.
+\Cref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
+There are similar rules for handling the other combinations of instructions, but we defer the details to \cref{s:Fusion}.
 The result process has one input stream, @stock@, and two output streams: @timeprices@ from @map@, and @reg_out@ from @regression@.
 
 To complete the implementation of @priceOverTime@, we would now fuse this result process with the @correlation@ process.
@@ -550,7 +550,7 @@ The instruction at label @NE0@ executes when the element keys are not equal, and
 These two groups of instructions drop the input stream with the lesser key and pull a new value from the same input stream, before returning back to the instruction at label @IN2@ to compare the elements.
 
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
-As with the polarised stream implementation of @join_iii@ in \autoref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
+As with the polarised stream implementation of @join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
 This draining is required because each consumer has a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
 Without draining, the producer would be blocked indefinitely on a terminated process, and any other consumers of the stream would be unable to receive input values.
 
@@ -574,9 +574,9 @@ Finally, the group of instructions at @EX0@ close the output stream and terminat
 \label{s:Fusion}
 
 Our core fusion algorithm constructs a static execution schedule for a single pair of processes.
-In \autoref{ss:Fusing:a:network} we fuse a whole process network by fusing successive pairs of processes until only one remains.
+In \cref{ss:Fusing:a:network} we fuse a whole process network by fusing successive pairs of processes until only one remains.
 
-\autoref{fig:Fusion:Types} defines some auxiliary grammar used during fusion. We extend the $\Label$ grammar with a new alternative, $\LabelF \times \LabelF$ for the labels in a fused result process. Each $\LabelF$ consists of a $\Label$ from a source process, paired with a map from $\Chan$ to the statically known part of that channel's current $\InputState$. When fusing a whole network, as we fuse pairs of individual processes the labels in the result collect more and more information. Each label of the final, completely fused process encodes the joint state that all the original source processes would be in at that point.
+\Cref{fig:Fusion:Types} defines some auxiliary grammar used during fusion. We extend the $\Label$ grammar with a new alternative, $\LabelF \times \LabelF$ for the labels in a fused result process. Each $\LabelF$ consists of a $\Label$ from a source process, paired with a map from $\Chan$ to the statically known part of that channel's current $\InputState$. When fusing a whole network, as we fuse pairs of individual processes the labels in the result collect more and more information. Each label of the final, completely fused process encodes the joint state that all the original source processes would be in at that point.
 
 % The definition of $\Label$ is now recursive.
 % These new labels $LabelF$ consist of a pair of source labels, as well as the static part of the $\InputState$ of each input channel.
@@ -584,9 +584,9 @@ In \autoref{ss:Fusing:a:network} we fuse a whole process network by fusing succe
 % If the static $\InputStateF$ is $@pending@_F$, there is a value waiting to be pulled, do not know the actual value.
 
 We also extend the existing $\Var$ grammar with a (@chan@ $c$) form which represents the buffer variable associated with \mbox{channel @c@}. We only need one buffer variable for each channel, and naming them like this saves us from inventing fresh names in the definition of the fusion rules.
-We used the name (@chan_tp@) back in \autoref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion, when in fact the fused process would use a buffer variable called (@chan timeprices@).
+We used the name (@chan_tp@) back in \cref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion, when in fact the fused process would use a buffer variable called (@chan timeprices@).
 
-Still in \autoref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes.
+Still in \cref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes.
 Type @in2@ indicates that both processes @pull@ from the same channel, so these actions must be coordinated.
 Type @in1@ indicates that only a single process pulls from the channel.
 Type @in1out1@ indicates that one process pushes to the channel and the other pulls.
@@ -599,19 +599,19 @@ Each output channel is uniquely owned and cannot be pushed to by more than one p
 
 \smallskip
 % -------------------------------------
-\autoref{fig:Fusion:Def:Top} defines function \ti{fusePair} that fuses a pair of processes, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from \autoref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states we add them to a map $bs$ of joint label to the corresponding instruction, and repeat the process to a fixpoint where no new states can be discovered.
+\Cref{fig:Fusion:Def:Top} defines function \ti{fusePair} that fuses a pair of processes, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from \cref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states we add them to a map $bs$ of joint label to the corresponding instruction, and repeat the process to a fixpoint where no new states can be discovered.
 
 \input{copy/03-body/02-process/figures/Fusion-tryStepPair.tex}
 
 % -------------------------------------
-\autoref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which process to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
+\Cref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which process to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
 
 Clauses (DeferExit1) and (DeferExit2) ensure that the fused process only terminates once both processes are ready to terminate; if either has remaining work, the process with remaining work will execute.
 The clauses achieve this by checking if either process is at an @exit@ instruction, and if so, choosing the other process.
-The instruction for the second process was computed by calling \ti{tryStep} with the label arguments swapped, so in (DeferExit2) we need to swap the labels back with $\ti{swaplabels}$ (from \autoref{fig:Fusion:Utils}).
+The instruction for the second process was computed by calling \ti{tryStep} with the label arguments swapped, so in (DeferExit2) we need to swap the labels back with $\ti{swaplabels}$ (from \cref{fig:Fusion:Utils}).
 
 Clauses (PreferJump1) and (PreferJump2) prioritise processes that can perform a @jump@.
-This helps collect @jump@ instructions together so they are easier for post-fusion optimisation to handle (\autoref{s:Optimisation}).
+This helps collect @jump@ instructions together so they are easier for post-fusion optimisation to handle (\cref{s:Optimisation}).
 
 Similarly, clauses (DeferPull1) and (DeferPull2) defer @pull@ instructions: if one of the instructions is a @pull@, we advance the other one. We do this because @pull@ instructions may block, while other instructions are more likely to produce immediate results.
 
@@ -625,11 +625,11 @@ Clause (Deadlock) applies when neither process can advance, in which case the pr
 
 % -------------------------------------
 \smallskip
-\autoref{fig:Fusion:Def:Step} defines function \ti{tryStep} which schedules a single instruction. This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
+\Cref{fig:Fusion:Def:Step} defines function \ti{tryStep} which schedules a single instruction. This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
 
 Clause (LocalJump) applies when the left process wants to jump.
 In this case, the result instruction simply performs the corresponding jump, leaving the right process where it is.
-This clause corresponds to a static version of the rule (Jump) for advancing processes during execution (\autoref{s:Process:Eval}).
+This clause corresponds to a static version of the rule (Jump) for advancing processes during execution (\cref{s:Process:Eval}).
 
 Clause (LocalCase) is similar, except there are two $\Next$ labels.
 
@@ -642,7 +642,7 @@ We encode this constraint by requiring the static input state of the downstream 
 When this constraint is satisfied, the result instruction stores the pushed value in the stream buffer variable $(@chan@~c)$ and sets the static input state to $@pending@_F$, which indicates that the new value is now available.
 This clause corresponds to a static version of the rule (Push) for advancing the left process, combined with the rule (InjectPush) for injecting the push action into the right process.
 
-Still in \autoref{fig:Fusion:Def:Step}, clause (LocalPull) applies when the left process wants to pull from a local channel, which requires no coordination.
+Still in \cref{fig:Fusion:Def:Step}, clause (LocalPull) applies when the left process wants to pull from a local channel, which requires no coordination.
 
 Clause (SharedPullPending) applies when the left process wants to pull from a shared channel that the other process either pulls from or pushes to.
 We know that there is already a value in the stream buffer variable, because the state for that channel is $@pending@_F$.
@@ -677,7 +677,7 @@ Clause (Blocked) returns @Nothing@ when no other clauses apply, meaning that thi
 % -------------------------------------
 \input{copy/03-body/02-process/figures/FusionUtils.tex}
 
-\autoref{fig:Fusion:Utils} contains definitions of some utility functions which we have already mentioned.
+\Cref{fig:Fusion:Utils} contains definitions of some utility functions which we have already mentioned.
 Function \ti{channels} computes the $\ChanType_2$ map for a pair of processes.
 Function \ti{outlabels} gets the set of output labels for an instruction, which is used when computing the fixpoint of reachable states.
 Function \ti{swaplabels} flips the order of the compound labels in an instruction.
@@ -697,7 +697,7 @@ Function \ti{swaplabels} flips the order of the compound labels in an instructio
 
 Our fusion system is formalised in Coq\footnote{\url{https://github.com/amosr/papers/tree/master/2017mergingmerges/proof}}, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels then the two source processes may also produce that same sequence. Note that due to non-determinism of process execution the converse is not true in practice: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders.
 
-% Note that the converse is not necessarily true: just because two processes can evaluate to a particular output does not mean the fused program will evaluate to that. This is because, as explained in~\autoref{s:EvaluationOrder}, evaluation of a process network is non-deterministic, and fusion commits to a particular evaluation order.
+% Note that the converse is not necessarily true: just because two processes can evaluate to a particular output does not mean the fused program will evaluate to that. This is because, as explained in~\cref{s:EvaluationOrder}, evaluation of a process network is non-deterministic, and fusion commits to a particular evaluation order.
 
 \begin{coq}
 Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
@@ -710,7 +710,7 @@ Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
 \end{coq}
 
 The @Soundness@ theorem uses @EvalBs@ to evaluate the fused program, and @EvalOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
-The @Streams@ type corresponds to the channel value map used to accumulate stream elements while feeding a process network (\autoref{fig:Process:Eval:Feed}), and the @Heap@ type corresponds to the value store used while advancing a single process (\autoref{fig:Process:Eval:Shake}).
+The @Streams@ type corresponds to the channel value map used to accumulate stream elements while feeding a process network (\cref{fig:Process:Eval:Feed}), and the @Heap@ type corresponds to the value store used while advancing a single process (\cref{fig:Process:Eval:Shake}).
 
 % Care must be taken to remove stream values that the other process has pulled but this one has not yet.
 %%% AR: Really would like to say something about this but no room to explain properly

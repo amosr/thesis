@@ -2,7 +2,7 @@
 
 \input{copy/03-body/02-process/figures/ProcessDef.tex}
 
-The formal grammar for process definitions is given in \autoref{fig:Process:Def}.
+The formal grammar for process definitions is given in \cref{fig:Process:Def}.
 Variables, Channels and Labels are specified by unique names.
 We refer to the \emph{endpoint} of a stream as a channel.
 A particular stream may flow into the input channels of several different processes, but can only be produced by a single output channel.
@@ -17,10 +17,10 @@ The @label@ field gives the entry-point in the process definition, though during
 Likewise, we usually only list channel names in the @ins@ field in the process definition, though during evaluation they are also paired with their current $\InputState$.
 If an $\InputState$ is not specified we assume it is `none'.
 
-In the grammar of \autoref{fig:Process:Def}, the $\InputState$ has four options: @none@, which means no value is currently stored in the associated stream buffer variable; $(@pending@~\Value)$, which gives the current value in the stream buffer variable and indicates that it has not yet been copied into a process-local variable; @have@, which means the pending value has been copied into a process-local variable; and @closed@, which means the producer has signalled that the channel is finished and will not receive any more values.
+In the grammar of \cref{fig:Process:Def}, the $\InputState$ has four options: @none@, which means no value is currently stored in the associated stream buffer variable; $(@pending@~\Value)$, which gives the current value in the stream buffer variable and indicates that it has not yet been copied into a process-local variable; @have@, which means the pending value has been copied into a process-local variable; and @closed@, which means the producer has signalled that the channel is finished and will not receive any more values.
 The $\Value$ attached to the @pending@ state is used when specifying the evaluation semantics of processes.
 When performing the fusion transform, the $\Value$ itself will not be known, but we can still reason statically that a process must be in the @pending@ state.
-When defining the fusion transform in \autoref{s:Fusion}, we will use a version of $\InputState$ with only this statically known information.
+When defining the fusion transform in \cref{s:Fusion}, we will use a version of $\InputState$ with only this statically known information.
 
 The @instrs@ field of the $\Proc$ maps labels to instructions.
 The possible instructions are: @pull@, which tries to pull the next value from a channel into a given heap variable, blocking until the producer pushes a value or closes the channel; @push@, which pushes the value of an expression to an output channel; @close@, which signals the end of an output channel; @drop@, which indicates that the current value pulled from a channel is no longer needed; @case@, which branches based on the result of a boolean expression; @jump@, which causes control to move to a new instruction; and @exit@, which signals that the process is finished.
@@ -28,9 +28,9 @@ The possible instructions are: @pull@, which tries to pull the next value from a
 Instructions include a $\Next$ field containing the label of the next instruction to execute, as well as a list of $\Var \times \Exp$ bindings used to update the heap.
 The list of update bindings is attached directly to instructions to make the fusion algorithm easier to specify, in contrast to a presentation with a separate @update@ instruction.
 
-% When lowering process code to a target language, as in \autoref{chapter:process:implementation}, we can safely convert @drop@ to plain @jump@ instructions.
+% When lowering process code to a target language, as in \cref{chapter:process:implementation}, we can safely convert @drop@ to plain @jump@ instructions.
 % The @drop@ instructions are used to control how processes should be synchronised, but do not affect the execution of a single process.
-% We discuss @drop@s further in \autoref{s:Drop:in:synchrony}.
+% We discuss @drop@s further in \cref{s:Drop:in:synchrony}.
 
 % This allows us to \emph{deliberately} introduce artificial deadlocks when a process network would require more than one element of buffering.
 %%% AR: added to highlight that this rules out networks that require unbounded buffers
@@ -70,7 +70,7 @@ Each consumer has a single element buffer, and pushing only succeeds when that b
 % and how the particular ordering chosen is decided upon.
 Importantly, it is the order in which values are \emph{pushed to each particular output channel} which is deterministic, whereas the order in which different processes execute their instructions is not.
 When we fuse two processes, we choose one particular instruction ordering that enables the network to advance without requiring unbounded buffering.
-The single ordering is chosen by heuristically deciding which pair of states to merge during fusion, and is discussed in \autoref{s:EvaluationOrder}.
+The single ordering is chosen by heuristically deciding which pair of states to merge during fusion, and is discussed in \cref{s:EvaluationOrder}.
 
 Each channel may be pushed to by a single process only, so in a sense each output channel is owned by a single process.
 The only intra-process communication is via channels and streams.
@@ -80,7 +80,7 @@ Our model is ``pure data flow'' as there are no side-channels between processes 
 \input{copy/03-body/02-process/figures/ProcessInject}
 % -----------------------------------------------------------------------------
 \subsubsection{Injection}
-\autoref{fig:Process:Eval:Inject} gives the rules for injecting values into processes.
+\Cref{fig:Process:Eval:Inject} gives the rules for injecting values into processes.
 Injection is a meta-level operation, in contrast to @pull@ and @push@, which are instructions in the object language.
 The statement $(\ProcInject{p}{a}{p'})$ reads ``given process $p$, injecting action $a$ yields an updated process $p'$''.
 An action $a$ is a message describing the state change that can occur to a channel, with three options: $(\cdot)$, the empty action, used when a process simply updates internal state; $(\Push~\Chan~\Value)$, which encodes the value a process pushes to one of its output channels; and $(\Close~\Chan)$, which denotes the end of the stream.
@@ -103,7 +103,7 @@ To inject a message into a process network, all the processes which do not ignor
 
 % -----------------------------------------------------------------------------
 \subsubsection{Advancing}
-\autoref{fig:Process:Eval:Shake} gives the rules for advancing a single process and process networks.
+\Cref{fig:Process:Eval:Shake} gives the rules for advancing a single process and process networks.
 The statement $(\ProcBlockShake{i}{is}{bs}{a}{l}{is'}{us'})$ reads ``instruction $i$, given channel states $is$ and the heap bindings $bs$, passes control to instruction at label $l$ and yields new channel states $is'$, heap update expressions $us'$, and performs an output action $a$.''
 
 Rule (PullPending) takes the @pending@ value $v$ from the channel state and produces a heap update to copy this value into the variable $x$ in the @pull@ instruction.
@@ -139,7 +139,7 @@ When any process in the network produces an output action, we take that as the a
 
 % -----------------------------------------------------------------------------
 \subsubsection{Feeding}
-\autoref{fig:Process:Eval:Feed} gives the rules for collecting output actions and feeding external input values to the network.
+\Cref{fig:Process:Eval:Feed} gives the rules for collecting output actions and feeding external input values to the network.
 These rules exchange input and output values with the environment in which the network runs.
 % The first set of rules concerns feeding values to other processes within the same network, while the second exchanges input and output values with the environment the network is running in.
 
@@ -178,7 +178,7 @@ When execution continues with the updated process network, the input stream is r
 \subsection{Non-deterministic Execution Order}
 \label{s:EvaluationOrder}
 
-The execution rules of \autoref{fig:Process:Eval:Shake} and \autoref{fig:Process:Eval:Feed} are non-deterministic in several ways.
+The execution rules of \cref{fig:Process:Eval:Shake} and \cref{fig:Process:Eval:Feed} are non-deterministic in several ways.
 Rule (AdvanceMany) allows any process to perform any action at any time, provided all other processes in the network are ready to accept the action; (FeedEnvPush) and (FeedEnvClose) also allow new values and close messages to be injected from the environment, provided all processes that use the channel are ready to accept the value or close message.
 
 In the semantics, allowing the execution order of processes to be non-deterministic is critical, as it defines a search space where we might find an order that does not require unbounded buffering.

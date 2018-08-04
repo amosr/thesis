@@ -518,7 +518,7 @@ In the previous example we inlined the pull function into its use-site; the anal
 
 This definition is harder to fuse. Recall that the definition of @pullMap@ was simple and non-recursive, which meant it could be easily inlined into its consumer.
 Recursive functions like this are much harder to inline.
-More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \autoref{sec:process:streams:coaxing}.
+More sophisticated stream representations go to great effort to remove the recursion from the stream `step' function, as we will see in \cref{sec:process:streams:coaxing}.
 However, the general problem remains: we have strict guarantees about the number of elements required in memory at any time, but we do not have any guarantees about the overhead introduced by streaming.
 
 One of the problems with the pull-streams was filtering.

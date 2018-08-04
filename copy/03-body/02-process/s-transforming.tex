@@ -1,7 +1,7 @@
 \section{Transforming process networks}
 \label{s:Optimisation}
 
-The fusion algorithm described in \autoref{s:Fusion} operates on a pair of input processes.
+The fusion algorithm described in \cref{s:Fusion} operates on a pair of input processes.
 For process networks which contain more than two processes, we repeatedly fuse pairs of processes in the network together until only one process remains.
 
 When fusing a pair of processes, the fused process tends to have more states than each input process individually, because the fused process has to do the work of both input processes.
@@ -80,7 +80,7 @@ digraph G {
 As we shall see, when we fuse pairs of processes in a network, the order in which we fuse pairs can determine whether fusion succeeds.
 Rather than trying all possible orders, of which there are many, we use a bottom-up heuristic to choose a fusion order.
 % This heuristic is not guaranteed to choose the, but it .
-\autoref{figs/procs/priceAnalyses-fusing-whole} shows the heuristically chosen fusion order for the @priceAnalyses@ example.
+\Cref{figs/procs/priceAnalyses-fusing-whole} shows the heuristically chosen fusion order for the @priceAnalyses@ example.
 The processes are nested inside boxes; each box denotes the result of fusing a pair of processes, and inner-most boxes are to be fused first.
 Each box is shaded to denote its nesting, and the more deeply nested a box is, the darker its shade.
 In @priceOverTime@, we start by fusing the @correlation@ process with its producer, @map@; we then fuse the resulting process with the @regression@ process.
@@ -96,7 +96,7 @@ Finally, we fuse the result process for @priceOverTime@ with the result process 
 % If the process network is fundamentally unfusable, it is unacceptable to force the user to wait forty minutes before telling them we cannot fuse it.
 
 % We cannot try all the orders; we need some way to choose the order.
-% As we shall see in \autoref{s:extraction:future}, it is impossible to choose the right order by looking at the dependency graph alone; the correct order depends upon the implementation of each process.
+% As we shall see in \cref{s:extraction:future}, it is impossible to choose the right order by looking at the dependency graph alone; the correct order depends upon the implementation of each process.
 % As future work we shall propose a fusion algorithm which is commutative and associative, which means we can fuse processes in any order.
 % We shall start by explaining a heuristic which does not always choose the right order, but works for the benchmarks in \REFTODO{benchmarks}.
 % \TODO{Maybe the explanation of why it has to be a heuristic should come first, but it makes it unappealing to start with an example where the heuristic doesn't work. If I explain the future work, it seems like there's no reason to explain the heuristic. Reorganise later.}
@@ -114,7 +114,7 @@ append2zip a b c =
 
 We use the more convenient syntax for list programs rather than the process network syntax introduced earlier, but in the discussion we interpret this program as a process network.
 In the process network interpretation, each list combinator corresponds to a process, and each list corresponds to a stream.
-The dependency graph for the corresponding process network is shown in \autoref{figs/specconstr/append2zip}.
+The dependency graph for the corresponding process network is shown in \cref{figs/specconstr/append2zip}.
 
 
 \FigurePdf{figs/specconstr/append2zip}{Dependency graph for append2zip}{Dependency graph for append2zip}
@@ -124,7 +124,7 @@ The result of the two append processes, @ba@ and @bc@, both contain the elements
 These two streams, @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
 
 
-\autoref{figs/swim/append2zip} shows an example execution of @append2zip@, displayed as a sequence diagram.
+\Cref{figs/swim/append2zip} shows an example execution of @append2zip@, displayed as a sequence diagram.
 In this diagram, we omit the @drop@ and @pull@ internal messages for all processes, and focus instead on the communication between processes.
 Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
 Input stream @b@ has multiple consumers, so when it pushes elements, it pushes to both its consumers at the same time.
@@ -306,7 +306,7 @@ The heuristic described will not necessarily choose the right order.
 
 Looking at the dependency graph alone, it is impossible to tell which is the right order for fusion.
 If we take the @append3@ example and replace the append processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
-\autoref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
+\Cref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
 
 
 

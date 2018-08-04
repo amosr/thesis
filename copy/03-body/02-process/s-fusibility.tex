@@ -14,7 +14,7 @@ alternates sInA sInB sInC
 \end{haskell}
 If we fuse the two @alt2@ processes together first, then try to fuse this result process with the downstream @zip@ process, the final fusion transform fails. This happens because the first fusion transform commits to a sequential instruction interleaving where two output values \emph{must} be pushed to stream @s1@ first, before pushing values to @s2@. On the other hand, @zip@ needs to pull a \emph{single} value from each of its inputs alternately.
 
-Dynamically, if we were to execute the first fused result process, and the downstream @zip@ process concurrently, then the execution would deadlock. Statically, when we try to fuse the result process with the downstream @zip@ process the deadlock is discovered and fusion fails. Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this manifests as the failure of the $tryStepPair$ function from \autoref{fig:Fusion:Def:StepPair}. The $tryStepPair$ function determines which instruction from either process to execute next, and when execution is deadlocked there are none. Fusibility is an under-approximation for \emph{deadlock freedom} of the network.
+Dynamically, if we were to execute the first fused result process, and the downstream @zip@ process concurrently, then the execution would deadlock. Statically, when we try to fuse the result process with the downstream @zip@ process the deadlock is discovered and fusion fails. Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this manifests as the failure of the $tryStepPair$ function from \cref{fig:Fusion:Def:StepPair}. The $tryStepPair$ function determines which instruction from either process to execute next, and when execution is deadlocked there are none. Fusibility is an under-approximation for \emph{deadlock freedom} of the network.
 
 % On the upside, fusion failure is easy to detect. It is also easy to provide a report to the client programmer that describes why two particular processes could not be fused.
 
@@ -35,7 +35,7 @@ When the dataflow network has a single output stream then we use the method of s
 % When we fuse a pair of processes we commit to a particular interleaving of instructions from each process.
 % When we have at least three processes to fuse, the choice of which two to handle first can determine whether this fused result can then be fused with the third process.
 % 
-% Consider the process network @append2zip@ in \autoref{l:bench:append2zip}.
+% Consider the process network @append2zip@ in \cref{l:bench:append2zip}.
 % We have three input streams of integers: @as@, @bs@ and @cs@.
 % We append @as@ and @cs@ together, as well as appending @bs@ and @cs@ together.
 % Then we zip the two appended streams together.
@@ -57,7 +57,7 @@ When the dataflow network has a single output stream then we use the method of s
 % 
 % Dynamically, if we were to try to execute the result process and the downstream @zip@ process concurrently, then the execution would deadlock.
 % Statically, when we try to fuse the result process with the downstream @zip@ process then the deadlock is discovered and fusion fails.
-% Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this will manifest as the failure of the $tryStepPair$ function from \autoref{fig:Fusion:Def:StepPair}.
+% Deadlock happens when neither process can advance to the next instruction, and in the fusion algorithm this will manifest as the failure of the $tryStepPair$ function from \cref{fig:Fusion:Def:StepPair}.
 % The $tryStepPair$ function determines which of the instructions from either process can be executed next, and when execution is deadlocked there are none.
 % 
 % On the upside, fusion failure is easy to detect.

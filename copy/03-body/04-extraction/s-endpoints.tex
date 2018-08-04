@@ -8,7 +8,7 @@ These sources and sinks are the pull and push streams we have seen before \REFTO
 Sources and sinks are conceptually duals of each other, and they share many similarities, so let us refer to them collectively as \emph{endpoints}.
 
 Endpoints need to encapsulate some internal state: for example writing to a file requires a filehandle, and perhaps a buffer to fill before writing, to amortise the cost of the system call.
-As explained previously (\autoref{ss:extraction:mutablerefs}), using mutable references for this internal state would lead to poor performance due to boxing.
+As explained previously (\cref{ss:extraction:mutablerefs}), using mutable references for this internal state would lead to poor performance due to boxing.
 We need to use the same approach of passing this state as function arguments so they can be unboxed by constructor specialisation.
 Passing the state as function arguments is more complicated than it sounds, because each endpoint requires a different type of state: reading from a file requires a filehandle, while reading from an in-memory array requires the array and the current index.
 This state type is an internal thing and should not be exposed to the user, which rules out adding it as a type parameter on the endpoint.

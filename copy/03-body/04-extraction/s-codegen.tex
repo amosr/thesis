@@ -1,5 +1,5 @@
 \section{Code generation}
-We are now ready to perform code generation on our @grepGood@ example (\autoref{s:extraction:grepGood}), which filters lines in a file.
+We are now ready to perform code generation on our @grepGood@ example (\cref{s:extraction:grepGood}), which filters lines in a file.
 The example has the following process network.
 
 \begin{lstlisting}
@@ -35,7 +35,7 @@ The instructions for labels @l1@ to @l3@ perform the filtering for each element,
 
 The original process formulation \REFTODO{processes} used a mutable heap.
 This would require a mutable reference for each variable in the heap.
-As explained in \autoref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references; we must generate code that can be transformed by constructor specialisation.
+As explained in \cref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references; we must generate code that can be transformed by constructor specialisation.
 Instead of a mutable heap, we treat each label as a parameterised continuation.
 Each label definition has a list of variable names which are the continuation parameters and can be used in the body of the instruction.
 Each call to a continuation, either as the initial state of a process or as the destination of an instruction, has a list of expressions which are the arguments.

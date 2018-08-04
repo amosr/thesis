@@ -22,7 +22,7 @@ The output of each combinator is stored in a manifest array called `above' for t
 \end{figure}
 
 
-\autoref{fig:combinators:filtermax} shows the combinator diagram for this example.
+\Cref{fig:combinators:filtermax} shows the combinator diagram for this example.
 The stored arrays and scalars (input, above and max) are shown as sharp-cornered rectangles to denote that they are `manifest': they are stored in memory.
 Combinators which perform operations (filter and maximum) are round-cornered rectangles.
 Edges in this graph denote the flow of data between nodes.
@@ -34,10 +34,10 @@ In many cases, combinators that produce scalar outputs (maximum, minimum, sum, m
 
 The definition above is small and neat, and computes the right value, but is it fast?
 A naive way of executing this program is to loop over the input array performing the filter, then start from the start again to compute the maximum.
-The combinator diagram in \autoref{fig:combinators:filtermax-stream} shows this \emph{clustering} where the filter and the maximum are computed in different loops.
+The combinator diagram in \cref{fig:combinators:filtermax-stream} shows this \emph{clustering} where the filter and the maximum are computed in different loops.
 
 However, if the array is large, this extra loop can take a lot of time.
-Ideally we would perform both computations in a single loop: the clustering in \autoref{fig:combinators:filtermax-fused}.
+Ideally we would perform both computations in a single loop: the clustering in \cref{fig:combinators:filtermax-fused}.
 There are two possible ways to run this program: by computing the filter and the maximum in separate loops, 
 How many loops are in this program? We don't know - it depends on whether the compiler is able to fuse these together.
 Furthermore, the only way to tell is by inspecting the compiler output.
@@ -81,7 +81,7 @@ filterMax (input : Array Int) : (Array Int, Int)
 
 The mapPairs function takes an array of pairs, and applies f to the first elements and g to the second elements.
 This can be written by unzipping the array of pairs into two arrays, then mapping both arrays, then zipping the arrays back together.
-However, stream fusion is unable to fuse this together and results in the clustering in \autoref{fig:combinators:mappairs-zip}.
+However, stream fusion is unable to fuse this together and results in the clustering in \cref{fig:combinators:mappairs-zip}.
 
 \begin{code}
 mapPairs (f : a -> c) (g : b -> d) (abs : Array (a,b)) : Array (c,d)
@@ -92,7 +92,7 @@ mapPairs (f : a -> c) (g : b -> d) (abs : Array (a,b)) : Array (c,d)
 \end{code}
 
 This can be rewritten as a single map with the arrow combinator @(f *** g)@, which applies f to the first element and g to the second.
-This single map is fused together by construction, and has the clustering in \autoref{fig:combinators:mappairs-arrow}.
+This single map is fused together by construction, and has the clustering in \cref{fig:combinators:mappairs-arrow}.
 
 \begin{code}
 mapPairs (f : a -> c) (g : b -> d) (abs : Array (a,b)) : Array (c,d)
@@ -175,7 +175,7 @@ Finally, the output channel is returned,
 
 The filterMax example becomes two processes: one for filter and maximum, while the input array is treated as a source that can be pulled from, and the outputs are sinks to push to.
 
-In \autoref{part:process-fusion}, I present process fusion: a fusion algorithm inspired by synchronous product for process calculi, but more flexible.
+In \cref{part:process-fusion}, I present process fusion: a fusion algorithm inspired by synchronous product for process calculi, but more flexible.
 
 \section{Clustering}
 Sometimes, all combinators cannot be fused into a single loop.
@@ -185,7 +185,7 @@ The problem of finding the best is called clustering.
 
 It is easy to find a clustering, but finding the optimal clustering is NP-hard.
 For example, suppose we have an input array, and we wish to find the elements above the mean, after incrementing the values.
-\autoref{figs/combinators/abovemean} shows the combinator diagram.
+\Cref{figs/combinators/abovemean} shows the combinator diagram.
 
 \begin{code}
 aboveMean (input : Array Int) : Array Int
@@ -203,10 +203,10 @@ This computation inherently requires two passes over the input, as the amount to
 \FigurePdf{figs/combinators/abovemean-cluster-good}{Above mean: good clustering}{Optimal clustering for aboveMean, where the mean is computed separately, followed by map and filter together.}
 
 Two possible clusterings are shown:
-the greedy clustering in \autoref{figs/combinators/abovemean-cluster-ok} computes mean and map together, while the optimal clustering in \autoref{figs/combinators/abovemean-cluster-good} first computes the mean, then fuses the map with the filter.
+the greedy clustering in \cref{figs/combinators/abovemean-cluster-ok} computes mean and map together, while the optimal clustering in \cref{figs/combinators/abovemean-cluster-good} first computes the mean, then fuses the map with the filter.
 The latter clustering is preferred as it only creates one manifest array -- the output -- while the greedy clustering also produces an intermediate array for the result of the map.
 
-In \autoref{part:clustering}, I present an algorithm using integer linear programming (ILP) to find the optimal clustering, based on \citet{megiddo1998optimal}.
+In \cref{part:clustering}, I present an algorithm using integer linear programming (ILP) to find the optimal clustering, based on \citet{megiddo1998optimal}.
 
 \section{Ensuring fusion}
 
@@ -216,5 +216,5 @@ However, this can cause confusion or program bugs where there are differences be
 
 Consider the aboveMean example above: if this program were executed in a streaming language, it \emph{would} run in a single-pass over the input, but has a different meaning: instead of filtering based on the mean of the whole input, it filters based on the running mean of the input seen so far.
 
-In \autoref{part:icicle}, I present a modal typesystem that ensures that the streaming semantics and the array semantics of a program agree, by inferring whether expressions are operating over streams or aggregates.
+In \cref{part:icicle}, I present a modal typesystem that ensures that the streaming semantics and the array semantics of a program agree, by inferring whether expressions are operating over streams or aggregates.
 

@@ -97,7 +97,7 @@ The fused process (@map f a / map g b@) produces to both streams @b@ and @c@.
 The fused process keeps pushing to stream @b@, even though we have fused a producer with a consumer.
 In this case there are no other consumers of stream @b@, but in general a stream may have multiple consumers.
 When a stream has multiple consumers and we fuse the producer with one of the consumers, the fused process must keep producing for the sake of the other consumers.
-In \autoref{section:implementation:cull-outputs} we shall see how to remove streams that have become redundant.
+In \cref{section:implementation:cull-outputs} we shall see how to remove streams that have become redundant.
 
 For the most part the fused process alternates between the two input processes, but there is some finer coordination between labels @l1@ to @l3@, where the (@map f a@) process is trying to push to the stream @b@ while the (@map g b@) process is trying to pull from the same.
 When pushing, the (@map f a@) process applies the function @f@ to the current element and pushes this value to the stream.

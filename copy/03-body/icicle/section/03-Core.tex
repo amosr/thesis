@@ -6,7 +6,7 @@ The Icicle intermediate language is similar to a physical query plan for a datab
 We convert each source level query to a query plan, then fuse together the plans for queries on the same table.
 Once we have the fused query plan we then perform standard optimisations such as common subexpression elimination and partial evaluation.
 
-The grammar for the Icicle intermediate language is given in \autoref{icicle:fig:core:grammar}.
+The grammar for the Icicle intermediate language is given in \cref{icicle:fig:core:grammar}.
 Expressions $PlanX$ include variables, values, applications of primitives and anonymous functions.
 Function definitions and uses are not allowed in expressions here, as their definitions are inlined before converting to query plans.
 Anonymous functions are only allowed as arguments to primitives: they cannot be applied or stored in variables.
@@ -163,7 +163,7 @@ queries = do
 \label{icicle:fig:core:push_query}
 \end{figure}
 
-To demonstrate the relative difficulty of removing the duplicate work in the general case, \autoref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
+To demonstrate the relative difficulty of removing the duplicate work in the general case, \cref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
 In this version, the @more_c@ and @mean_c@ references both hold the same value, but this fact is only evident with non-local reasoning about the program.
 The reference initialisations and updates are located in different parts of the program, with potentially interfering writes in-between.
 We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms are generally polynomial time.
@@ -171,7 +171,7 @@ With the intermediate representation of Icicle we can use a common subexpression
 
 \subsection{A more complicated example}
 
-The previous queries were simple to translate to the intermediate language; the query from \autoref{icicle:s:ElementsAndAggregates} is a bit more involved.
+The previous queries were simple to translate to the intermediate language; the query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
 We first define the @mean@ and @last@ functions used in the query.
 The @mean@ function then divides the @sum@ by the @count@.
 \begin{icicle}
@@ -192,7 +192,7 @@ function last (d : Element Date)
 % \end{icicle}
 
 
-Inlining the above functions into the query from \autoref{icicle:s:ElementsAndAggregates} yields the following:
+Inlining the above functions into the query from \cref{icicle:s:ElementsAndAggregates} yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
 \begin{icicle}
 query avg
@@ -237,7 +237,7 @@ Finally, the @ret@ binding from the original query is evaluated in the @after@ s
 
 
 We then combine the plans from each binding.
-This query plan is then fused with any other queries that process the same input; the fused query plan is then translated to an imperative loop nest in a similar way to prior work on flow fusion~\cite{lippmeier2013data}.
+This query plan is then fused with any other queries that process the same input; the fused query plan is then translated to an imperative loop nest in a similar way to our prior work on flow fusion~\cite{lippmeier2013data}.
 When translating folds nested inside @filter@s, the update statements are nested inside @if@ statements.
 When translating folds nested inside @group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
 As with @filter@s, @group@s with the same key can be merged together.

@@ -7,7 +7,7 @@
 % The modal types encode when computations are available, and disallows using the results of folds before they are finished.
 % \ben{the above paragraph doesn't add any new information}.
 
-In Icicle, as in the push streams from \autoref{taxonomy/push}, there is only one input stream, sourced from the input table, which is implicit in the bodies of queries.
+In Icicle, as in the push streams from \cref{taxonomy/push}, there is only one input stream, sourced from the input table, which is implicit in the bodies of queries.
 This approach is intentionally simpler than existing synchronous data flow languages such as Lucy~\cite{mandel2010lucy} and fusion techniques using synchronous data flow such as flow fusion~\cite{lippmeier2013data}.
 Synchronous data flow languages implement Kahn networks~\cite{vrba2009kahn} that are restricted to use bounded buffering~\cite{johnston2004advances} by clock typing and causal analysis~\cite{stephens1997survey}.
 In such languages, stream combinators with multiple inputs, such as @zip@, are assigned types that require their stream arguments to have the same clock --- meaning that elements always arrive in lockstep and the combinators themselves do not need to perform their own buffering.
@@ -36,7 +36,7 @@ Continuous Query Language (CQL)~\cite{arasu2002abstract,stream2003stream} again 
 Icicle addresses a computationally similar problem, except that our input data sets can only have new records added rather than deleted, which allows us to support general aggregations rather than just filter predicates.
 It is not obvious how arbitrary aggregate functions could be supported while also allowing deletion of records from the input data --- other than by recomputing the entire aggregation after each deletion.
 
-Next, in \REF{kpn}, we shall see how to use Kahn process networks to concurrently execute multiple queries with multiple input streams.
+Next, in \cref{chapter:process:processes}, we shall see how to use Kahn process networks to concurrently execute multiple queries with multiple input streams.
 
 
 % How to architect a query compiler~\cite{shaikhha2016architect}.

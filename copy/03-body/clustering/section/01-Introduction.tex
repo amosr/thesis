@@ -29,7 +29,7 @@ To see the effect of clustering, consider the following program:
     in (ys1, ys2)
 \end{code}
 
-The function @normalize2@ computes two sums, one of all the elements of @xs@, the other of only elements greater than zero. Since we need to fully evalute the sums to proceed with the maps, it is clear that we need at least two separate loops. These folds are examples of fusion-preventing dependencies, as fold cannot be fused with subsequent operations. \autoref{clustering:f:normalize2-clusterings} shows the data-flow graph of @normalize2@. In the leftmost diagram we can see the effect of applying stream fusion to the program: we end up with four loops (denoted by the dotted lines): only the filter operation is combined with the subsequent fold. The best existing ILP approach results in the rightmost graph: it combines the @sum1@ fold and @sum2@ filter in one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations. Our approach, in the middle, produces the optimal solution in this case: one loop for the sums, another for the maps.
+The function @normalize2@ computes two sums, one of all the elements of @xs@, the other of only elements greater than zero. Since we need to fully evalute the sums to proceed with the maps, it is clear that we need at least two separate loops. These folds are examples of fusion-preventing dependencies, as fold cannot be fused with subsequent operations. \Cref{clustering:f:normalize2-clusterings} shows the data-flow graph of @normalize2@. In the leftmost diagram we can see the effect of applying stream fusion to the program: we end up with four loops (denoted by the dotted lines): only the filter operation is combined with the subsequent fold. The best existing ILP approach results in the rightmost graph: it combines the @sum1@ fold and @sum2@ filter in one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations. Our approach, in the middle, produces the optimal solution in this case: one loop for the sums, another for the maps.
 
 % Data flow fusion~\cite{lippmeier2013data} is a technique to compile a specific class of data flow programs into single, efficient imperative loops. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators.
 
@@ -42,7 +42,7 @@ The function @normalize2@ computes two sums, one of all the elements of @xs@, th
 
 % If we wish to divide every element of an array by the sum of all elements, then it seems we are forever destined to compute the result using at least two loops: one to determine the sum, and one to divide the elements. The evaluation of @fold@ demands all elements of its source array, and we cannot produce any elements of the result array until we know the value of @sum@. 
 
-% However, many programs \emph{do} contain opportunities for fusion, if we only knew which opportunities to take. The following example offers \emph{several} unique, but mutually exclusive approaches to fusion. \autoref{clustering:f:normalize2-clusterings} on the next page shows some of the possibilities.
+% However, many programs \emph{do} contain opportunities for fusion, if we only knew which opportunities to take. The following example offers \emph{several} unique, but mutually exclusive approaches to fusion. \Cref{clustering:f:normalize2-clusterings} on the next page shows some of the possibilities.
 % \begin{code}
 %  normalize2 :: Array Int -> Array Int
 %  normalize2 xs
@@ -54,26 +54,26 @@ The function @normalize2@ computes two sums, one of all the elements of @xs@, th
 %     in (ys1, ys2)
 % \end{code}
 
-% In \autoref{clustering:f:normalize2-clusterings}, the dotted lines show possible clusterings of operators. Stream fusion implicitly choses the solution on the left as its compilation process cannot fuse a produced array into multiple consumers. The best existing ILP approach will chose the solution on the right as it cannot cluster operators that consume arrays of different sizes. Our system choses the solution in the middle, which is also optimal for this example. 
+% In \cref{clustering:f:normalize2-clusterings}, the dotted lines show possible clusterings of operators. Stream fusion implicitly choses the solution on the left as its compilation process cannot fuse a produced array into multiple consumers. The best existing ILP approach will chose the solution on the right as it cannot cluster operators that consume arrays of different sizes. Our system choses the solution in the middle, which is also optimal for this example. 
 
 % NOTE: This set of bullets needs to fit on the first page, without spilling to the second.
 Our contributions are as follows:
 \begin{itemize}
 \item   
 We extend prior work by Megiddo~\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}, with support for size changing operators.
-Size changing operators can be clustered with operations on both their source array and output array, and compiled naturally with data-flow fusion (\autoref{clustering:s:ILP}).
+Size changing operators can be clustered with operations on both their source array and output array, and compiled naturally with data-flow fusion (\cref{clustering:s:ILP}).
 
 \item
 We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:
-constraints between two nodes need not be generated if there is a fusion-preventing path between the two (\autoref{clustering:s:OptimisedConstraints}).
+constraints between two nodes need not be generated if there is a fusion-preventing path between the two (\cref{clustering:s:OptimisedConstraints}).
 
 \item
 Our constraint system encodes a total ordering on the cost of clusterings, expressed using weights on the integer linear program.
-For example, we encode that memory traffic is more expensive than loop overheads, so given a choice between the two, memory traffic will be reduced (\autoref{clustering:s:ObjectiveFunction}).
+For example, we encode that memory traffic is more expensive than loop overheads, so given a choice between the two, memory traffic will be reduced (\cref{clustering:s:ObjectiveFunction}).
 
 \item
 We present benchmarks of our algorithm applied to several common programming patterns.
-Our algorithm is complete and yields good results in practice, though an optimal solution is uncomputable in general (\autoref{clustering:s:Benchmarks}).
+Our algorithm is complete and yields good results in practice, though an optimal solution is uncomputable in general (\cref{clustering:s:Benchmarks}).
 \end{itemize}
 
 An implementation of our clustering algorithm is available at \url{https://github.com/amosr/clustering}.

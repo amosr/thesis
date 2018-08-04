@@ -27,7 +27,7 @@ Choosing a streaming model requires making a trade-off between the performance o
 % \ED{A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.}
 We must compare different streaming models to make an informed decision.
 We start our initial comparison by focussing on two low-overhead streaming models to illustrate how different streaming models support different operations, and to motivate the use of Kahn process networks as a streaming model.
-In \autoref{related} we will compare with some more expressive but less efficient streaming models.
+In \cref{related} we will compare with some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 \label{taxonomy/gold-panning}
@@ -55,7 +55,7 @@ We can also define the Pearson correlation coefficient geometrically: it is the 
 
 \input{figs/stock.tex}
 
-\autoref{fig:stock:it:stock-over-time} shows the fluctuations of the example stock's price over a year, along with the regression line of price over time in red, and the regression line of time over price in blue.
+\Cref{fig:stock:it:stock-over-time} shows the fluctuations of the example stock's price over a year, along with the regression line of price over time in red, and the regression line of time over price in blue.
 The stock price is far from a perfect line, but does show a clear upwards trend.
 % The correlation coefficient is a scalar ranging from negative one to positive one.
 In this graph, the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are, and the `straighter' the relationship is.
@@ -114,7 +114,7 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
 \label{figs/impl/correlation}
 \end{figure}
 
-\autoref{figs/impl/correlation} contains the implementations of the fold worker functions \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
+\Cref{figs/impl/correlation} contains the implementations of the fold worker functions \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
 We can implement a function to compute the regression similarly; we omit the definitions of the regression worker functions.
 
 \begin{haskell}
@@ -134,7 +134,7 @@ priceOverTime stock =
 Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
 Whether we think of this program as one query or two is inconsequential; the important part is that the program as we have written it requires two traversals over the \Hs/timeprices/ list.
-List programs can traverse the same list many times; in \autoref{taxonomy/pull} we shall see how this is a problem for streaming programs.
+List programs can traverse the same list many times; in \cref{taxonomy/pull} we shall see how this is a problem for streaming programs.
 
 Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
 Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
@@ -143,7 +143,7 @@ We are interested in comparing against the rest of the market as well.
 To compare against the rest of the market, we have another file of records containing the average price of a representative subset of stocks.
 This representative subset is called a \emph{market index}.
 We want to compare each day's price for our stock against the average price for the corresponding day in the index.
-\autoref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \autoref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
+\Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
 We can see in the comparison of stock price to index price that the stock has grown faster than the index.
 
 We can compute the comparison of stock over market with the following program:
@@ -171,7 +171,7 @@ priceAnalyses stock index =
   in (pot, pom)
 \end{haskell}
 
-\autoref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
+\Cref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
 The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
 The edges are dependencies from one value to another; \Hs/joined/ is computed by joining together the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to \Hs/joined/.
 The large boxes bisecting most of the nodes denote which nodes are defined inside the \Hs/priceOverTime/ function and which are defined in \Hs/priceOverMarket/.
@@ -276,7 +276,7 @@ Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
 
 
-\autoref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
+\Cref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
 The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions.
 
 The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
@@ -332,7 +332,7 @@ Computing the regression pulls all the values from the \Hs/timeprices/ stream an
 After computing the regression, the program computes the correlation of the same input stream.
 When the correlation tries to read the \Hs/timeprices/ stream again, the stream has already been exhausted.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
-In fact, in \autoref{taxonomy/polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
+In fact, in \cref{taxonomy/polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
 
 Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
 When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
@@ -554,7 +554,7 @@ As before, we can use this @foldl@ function to implement @correlation@ and @regr
 In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
 The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
-We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \autoref{taxonomy/polarised}.
+We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \cref{taxonomy/polarised}.
 
 \begin{haskell}
 dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
@@ -599,7 +599,7 @@ priceOverTime_push = do
 
 This program computes both correlation and regression in a streaming fashion.
 In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
-We shall see more examples of push programs in \autoref{part:icicle}.
+We shall see more examples of push programs in \cref{part:icicle}.
 
 We cannot implement \Hs/priceOverMarket/ with push streams alone, because it requires joining two input streams by date.
 Recall the \Hs/join/ combinator, which takes two input streams and retrieves a value from each.
@@ -742,7 +742,7 @@ join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
 
 
 We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
-Conceptually, this has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
+Conceptually, this combinator has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
 The definition for @join_ioo@ follows.
 The output push stream is given as an argument while the input push stream is the return value.
 
@@ -779,7 +779,7 @@ Other multiple-input combinators can be inverted similarly to support pull-push-
 
 We can implement the two @priceAnalyses@ queries, @priceOverTime@ and @priceOverMarket@, by mixing pull and push streams.
 We assign a polarity of push or pull to all streams in both queries, starting with the input streams.
-\autoref{figs/polar/priceOverTime-priceOverMarket} shows the dependency graph with polarised combinators and explicit duplications.
+\Cref{figs/polar/priceOverTime-priceOverMarket} shows the dependency graph with polarised combinators and explicit duplications.
 The polarity of each stream is depicted as a filled or unfilled circle.
 Filled circles $\bullet$ represent pull streams because they always contain the next value or the result.
 Unfilled circles $\circ$ represent push streams because they are a hole which values can be pushed into.
@@ -837,7 +837,7 @@ digraph G {
 \label{figs/polar/priceOverTime-priceOverMarket}
 \end{figure}
 
-\autoref{figs/impl/polar/priceOverTime-priceOverMarket} shows the implementation of this polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/.
+\Cref{figs/impl/polar/priceOverTime-priceOverMarket} shows the implementation of this polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/.
 This streaming single-pass implementation requires more complex control-flow than the list version.
 Stream elements flow ``backwards'' from function result to argument in the places where push streams are used, and flow ``forwards'' where pull streams are used.
 When a pull stream is duplicated into a push stream, the stream results for the push stream are nested inside the resulting pull stream; recovering these results requires pattern-matching on the nested tuple.
@@ -950,8 +950,8 @@ zip_ioo (Pull pull_a) push_ab = Push push_b done_b
 
 
 With polarised streams, we cannot execute @priceOverTime@ with the pair-of-lists version, although we can assign polarities.
-\autoref{figs/polar/correlation-zip} shows a polarised graph for a version of @priceOverTime@ that only computes the correlation and uses zip.
-The @zip_ioo@ combinator is implemented in \autoref{figs/polar/impl/zip_ioo} similarly to the @join_ioo@ combinator, with an input pull, an input push, and an output push.
+\Cref{figs/polar/correlation-zip} shows a polarised graph for a version of @priceOverTime@ that only computes the correlation and uses zip.
+The @zip_ioo@ combinator is implemented in \cref{figs/polar/impl/zip_ioo} similarly to the @join_ioo@ combinator, with an input pull, an input push, and an output push.
 When the input push stream receives a value, @zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
 
 Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
@@ -1012,7 +1012,7 @@ In polarised streams, the active combinator, which may be a pull consumer and a 
 All these systems have one place controlling the computation.
 When we have multiple queries to execute, it can be hard to choose just one combinator to control the entire computation.
 
-An alternative streaming model, which allows executing multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}.
+An alternate streaming model, which allows executing multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}.
 A Kahn process network is a concurrent process network with restrictions to ensure deterministic execution.
 Each combinator inside each query becomes a communicating process in the network.
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
@@ -1062,8 +1062,8 @@ execute :: Network (Result a) -> IO a
 \label{figs/kpn/combinators}
 \end{figure}
 
-\autoref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
-We leave discussion of the implementation for \autoref{chapter:process:processes}, and for now focus solely on this simplified version of the interface.
+\Cref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
+We leave discussion of the implementation for \cref{chapter:process:processes}, and for now focus solely on this simplified version of the interface.
 The @Channel@ type denotes a communication channel between processes.
 The @Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
 The @map@ and @join@ combinators have type signatures similar to the list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
@@ -1106,12 +1106,12 @@ priceAnalysis stock index = do
 \label{figs/kpn/impl/priceAnalyses}
 \end{figure}
 
-\autoref{figs/kpn/impl/priceAnalyses} shows the @priceAnalyses@ queries implemented as a Kahn process network.
+\Cref{figs/kpn/impl/priceAnalyses} shows the @priceAnalyses@ queries implemented as a Kahn process network.
 There are some differences from the list version: the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
 The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
-In \autoref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
+In \cref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
 Communication between processes requires more overhead than allocating @Maybe@ values, and is not removed by general purpose optimisations.
 To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
 Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
@@ -1163,8 +1163,8 @@ Push streams support multiple queries, and are written back-to-front with explic
 Polarised streams support multiple inputs and multiple queries, require polarity analysis of the entire dependency graph, and are written partially back-to-front and partially front-to-back.
 Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
 
-In the next chapter we will see Icicle, a language for specifying push stream queries (\autoref{part:icicle}).
+In the next chapter we will see Icicle, a language for specifying push stream queries (\cref{part:icicle}).
 Icicle queries are written front-to-back, and streams can be shared without requiring explicit duplication.
 Queries are compiled to folds over push streams which can be executed concurrently.
-After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together \REF{kpn}.
+After looking at Icicle, we shall see how Kahn process networks can be executed efficiently by fusing processes together (\cref{chapter:process:processes}).
 

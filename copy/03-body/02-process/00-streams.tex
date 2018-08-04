@@ -22,7 +22,7 @@ data Pull a
   { pull :: IO (Maybe a) }
 \end{code}
 
-More sophisticated representations are possible and will be discussed later in \autoref{sec:process:streams:coaxing}, and while these representations may have better runtime performance, the expressivity remains the same.
+More sophisticated representations are possible and will be discussed later in \cref{sec:process:streams:coaxing}, and while these representations may have better runtime performance, the expressivity remains the same.
 
 In order to convert a list to a stream, we need to construct a mutable reference for the list, then each request to pull a value will inspect and update the reference.
 If the reference contains an empty list, the stream is over and we return @Nothing@. If the reference contains a list cell, we update the reference to refer to the rest of the list, and return the current value.

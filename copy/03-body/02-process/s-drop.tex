@@ -30,7 +30,7 @@ digraph G {
 \end{figure}
 
 Recall the @priceOverTime@ example, which computes the correlation and regression of an input stream.
-The dependency graph for @priceOverTime@ is shown in \autoref{figs/procs/drop/priceOverTime}.
+The dependency graph for @priceOverTime@ is shown in \cref{figs/procs/drop/priceOverTime}.
 
 \begin{figure}
 \center
@@ -81,7 +81,7 @@ The dependency graph for @priceOverTime@ is shown in \autoref{figs/procs/drop/pr
 \label{figs/swim/drop/priceOverTime}
 \end{figure}
 
-\autoref{figs/swim/drop/priceOverTime} shows an example execution of the @correlation@ and @regression@ processes from @priceOverTime@, with an input stream containing two elements.
+\Cref{figs/swim/drop/priceOverTime} shows an example execution of the @correlation@ and @regression@ processes from @priceOverTime@, with an input stream containing two elements.
 Execution is displayed as a sequence diagram.
 Each process and output stream is represented as a vertical line which communicates with other processes by messages, represented by arrows.
 The names of each stream and process are written above the line, and time flows downwards.
@@ -91,7 +91,7 @@ In the definition of the @fold@ process template, the @drop@ instruction also up
 We use the shorthand (drop [update $A$]) to signify that the process updates its fold state with the pulled value $A$ after dropping the element.
 
 Execution starts with the @map@ process pushing the value $A$ to both @regression@ and @correlation@ processes.
-In the execution semantics from \autoref{s:Process:Eval}, this push changes the input state of each recipient process from @none@ to @pending@, to signify that there is a value available to pull.
+In the execution semantics from \cref{s:Process:Eval}, this push changes the input state of each recipient process from @none@ to @pending@, to signify that there is a value available to pull.
 At this point, the @map@ process cannot push again until both consumers have pulled and dropped the $A$ value.
 Next, the @regression@ process pulls the value $A$, temporarily changing its input state to @have@, before using and dropping the value, changing the input state back to @none@.
 The @correlation@ process now performs the same.
@@ -151,7 +151,7 @@ In this execution, both consumer processes transform the same element at much th
 
 
 
-\autoref{figs/swim/drop/priceOverTime-nosync} shows a hypothetical execution which may occur if our process network semantics did not use drop instructions to synchronise between all consumers.
+\Cref{figs/swim/drop/priceOverTime-nosync} shows a hypothetical execution which may occur if our process network semantics did not use drop instructions to synchronise between all consumers.
 In this execution, we replace the drop instructions with a jump instruction, using the shorthand (jump [update $A$]) to signify updating the fold state.
 As before, execution starts with the @map@ process pushing the $A$ value, which both consumers pull.
 Without drop synchronisation, the single-element buffer is cleared as soon as the process pulls, allowing the @map@ process to push another element to both consumers.
@@ -169,7 +169,7 @@ Keeping both elements means the process requires more live variables, which make
 % 
 % \TODO{SIMD?:} the bit above says we don't want to keep multiple consecutive elements at the same time.
 % Maybe we do want to, in order to use SIMD instructions.
-% In fact, for \autoref{figs/swim/map2par-no-sync} if we had vector instructions to compute @f@ and @g@ two elements at a time, that interleaving is exactly what we want.
+% In fact, for \cref{figs/swim/map2par-no-sync} if we had vector instructions to compute @f@ and @g@ two elements at a time, that interleaving is exactly what we want.
 % There are many other interleavings though, and we are not guaranteed to get this one.
 % We do not want to rely on chance to find a SIMD interleaving.
 % Future work may involve looking for the right interleavings to exploit SIMD instructions.

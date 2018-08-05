@@ -34,6 +34,7 @@ In \cref{related} we will compare with some more expressive but less efficient s
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Let us start by describing a situation in which we would like to execute many queries.
 To avoid mixing up the details of streaming with the details of the example, we initially assume that the dataset fits in memory as a list and ignore details about efficiency.
+Throughout the thesis, we will refer back to this example as \emph{gold panning}: looking for money in streams.
 
 Suppose we have a file containing the historical prices for a particular corporate stock.
 The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.

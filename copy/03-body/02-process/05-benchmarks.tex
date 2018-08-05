@@ -17,10 +17,9 @@ While the fusion is pull-based, splits can still be expressed in the program.
 When splits are present, they act as fusion barriers, requiring streams to be manifested as in-memory arrays.
 Vector also provides no guarantees about whether fusion will occur: it makes its best effort, but the easiest way to tell whether fusion has occurred is to look at the generated program.
 We could benchmark the program to see whether it is ``fast enough'', but if we do not have an optimal baseline to compare against, it is hard to know how fast the program \emph{should} be.
-After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it.
-Perhaps the program must be rewritten, hand-fused, or perhaps strictness annotations are required.
+After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
 
-\TODO{Move elsewhere.}
+% \TODO{Move elsewhere.}
 The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
 Vector has a minor problem with monadic actions, but this is an implementation detail that could probably be ignored.
 Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
@@ -34,7 +33,7 @@ These streaming libraries are pull-based, and do not naturally support multiple 
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
-Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
+% Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
 Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
 In Vector/stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into both step function and state.
 The step function is completely static, and so can be optimised etc, but the state changes dynamically.
@@ -50,7 +49,7 @@ It can also collect statistics on allocations, which is sometimes (but not alway
 
 There are many implementations of the benchmark programs, but for the most part they all follow the same structure.
 Showing five different implementations of the same program is not that interesting.
-I just show the Folderol versions, but the other versions are available in \cref{app:Benchmarks}.
+We show the implementations of the Folderol versions; the other versions are available in \cref{app:Benchmarks}.
 
 \subsection{Quickhull}
 
@@ -237,7 +236,7 @@ Vector &            & 1.78s &   191\% & 8.0e8 & 100\%\\
 Before compressing an audio signal, we may wish to perform some pre-processing on it.
 For this example, suppose we want to apply a low-pass filter to the input signal.
 
-\begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of compressor]
+\begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of compressor with low-pass]
 compressorLop :: Vector Double -> IO (Vector Double)
 compressorLop vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
@@ -448,7 +447,7 @@ Vector   & 2-loop   & 0.15s &    88\% & 1.6e8 &  67\% \\
 \label{table:bench:part2app2}
 \end{table}
 
-\Cref{table:bench:part2app2} shows the runtimes for partitioning and appending a file of size \TODO{number of rows}.
+\Cref{table:bench:part2app2} shows the runtimes for partitioning and appending an input file with $10^7$ lines.
 
 The Vector implementations follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
 Note that the 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
@@ -468,7 +467,7 @@ The author can be confident that if it compiles, it will have the desired stream
 
 % -----------------------------------------------------------------------------
 \section{Result Size}
-\TODO{Update with Folderol sizes}
+% \TODO{Update with Folderol sizes}
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
 \Cref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
@@ -492,7 +491,7 @@ In the particular case of @merge@, the implementation has two occurrences of the
 \input{copy/03-body/02-process/figures/process-size.tex}
 
 \section{Conclusion}
-In the benhmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
+In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
 For array computations there is a bit of boilerplate required to convert between vectors and streams, and vice versa.
 There is also some extra visual noise for the Template Haskell.
 But this is fairly minor, and the required changes are more or less mechanical and type-driven.
@@ -501,8 +500,4 @@ The real benefit is not having to read through Core programs, not having to gues
 If fusion succeeds, we know it has succeeded.
 If fusion fails, we know not just that it has failed, but \emph{where} it has failed.
 It is a lot easier to track down the failure.
-
-When fusion is not just an added bonus, when program correctness depends on fusion, when a stray unbounded buffer means a crashing program and an angry one-am phone call, we need strong guarantees about fusion.
-
-We have shown that this is possible, and that we can scale up to real, practical problems, as well as performing well on benchmarks.
 

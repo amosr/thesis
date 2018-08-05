@@ -1,5 +1,5 @@
 \section{All this boxing and unboxing}
-\TODO{Reorganise: what does boxing have to do with fusion?}
+% \TODO{Reorganise: what does boxing have to do with fusion?}
 
 In Haskell, most values are boxed by default \citep{jones1991unboxed}.
 Boxed values are stored as pointers to heap objects, which can in turn reference other boxed or unboxed values.
@@ -38,7 +38,7 @@ All of these new boxed values except the very last iteration are used once by th
 While the garbage collector is tuned for small, short-lived objects, it is better to not create any garbage in the first place.
 
 Compiler optimisations to replace boxed values with unboxed values are well-known, and there are many different ways to do this.
-\TODO{More concrete.}
+% \TODO{More concrete.}
 The point to make is not that this is an interesting thing, just that we must know which optimisations our compiler performs to generate code that our compiler can optimise.
 
 In GHC, boxed machine-word integers are represented by the following type, which defines @Int@ with a single constructor @I#@, taking an unboxed integer @Int#@. By convention, unboxed values and constructors that use them are named with the @#@ suffix.
@@ -113,7 +113,7 @@ sum vector = loop SPEC 0 0
 
 We have seen that GHC is able to unbox function arguments, and we will take advantage of this during code generation.
 We will make use of the @SPEC@ annotation to force constructor specialisation, to ensure as much can be unboxed as possible.
-The process calculus in \REFTODO{processes} uses a mutable heap with variable updates, which would be naturally expressed using a mutable reference for each variable.
+The process calculus in \cref{chapter:process:processes} uses a mutable heap with variable updates, which would be naturally expressed using a mutable reference for each variable.
 Sadly, mutable references in GHC contain boxed values, and an analogous constructor specialisation transform does not exist for unboxing mutable references.
 Were we to use mutable references, we would suffer the same allocation and pointer indirection problems of boxing described earlier.
 We must structure our generated code to pass values via function arguments instead of mutable references.

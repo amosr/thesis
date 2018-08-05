@@ -36,8 +36,6 @@ Continuous Query Language (CQL)~\cite{arasu2002abstract,stream2003stream} again 
 Icicle addresses a computationally similar problem, except that our input data sets can only have new records added rather than deleted, which allows us to support general aggregations rather than just filter predicates.
 It is not obvious how arbitrary aggregate functions could be supported while also allowing deletion of records from the input data --- other than by recomputing the entire aggregation after each deletion.
 
-Next, in \cref{chapter:process:processes}, we shall see how to use Kahn process networks to concurrently execute multiple queries with multiple input streams.
-
 
 % How to architect a query compiler~\cite{shaikhha2016architect}.
 % Scheduling dynamic dataflow~\cite{buck1993scheduling}.

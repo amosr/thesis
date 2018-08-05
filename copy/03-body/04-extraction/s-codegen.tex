@@ -33,7 +33,7 @@ Our example only has one process, the @filter@ process, which pulls from the sou
 The @filter@ process starts at label @l0@, the instruction for which pulls from the @input@ stream.
 The instructions for labels @l1@ to @l3@ perform the filtering for each element, while the instructions for labels @l4@ and @l5@ close the output stream and end the process once the @input@ stream is finished.
 
-The original process formulation \REFTODO{processes} used a mutable heap.
+The original process formulation \cref{chapter:process:processes} used a mutable heap.
 This would require a mutable reference for each variable in the heap.
 As explained in \cref{ss:extraction:mutablerefs}, we do not wish to generate code that uses mutable references; we must generate code that can be transformed by constructor specialisation.
 Instead of a mutable heap, we treat each label as a parameterised continuation.

@@ -76,78 +76,16 @@ The benefits of fusion have been known about for a long time, since at least the
 Jackson Structured Programming \citep{jackson2002jsp} is a design methodology where the structure of a program is derived using the structure of the input files to process.
 Here, a method known as ``program inversion'' performs a similar role to fusion, by removing intermediate results.
 It is similar to converting a pull computation into a push computation.
-While these methods were generally performed by hand, the concept is the same.
+While these methods were generally performed by hand, the concept is similar to mechanised fusion.
 
 Flow-based programming \cite{morrison2010flow} is a dataflow network computation, using runtime scheduling.
 Each component of the dataflow network is a concurrent process, either scheduled using green threads or real threads.
-This is able to express similar programs.
-
-
-Kilim \cite{srinivasan2010kilim} is an implementation of lightweight actors for the JVM.
-Uses linear types to ensure that messages are not aliased between actors.
-Has a postprocessor called the `weaver' which operates over the java bytecode to
-remove the overhead of actually performing actors as separate threads.
-This is more like modifying the Java bytecode to store explicit continuations on the stack, and still uses runtime scheduling.
-
-
-Some introduction is required before delving into the details of \emph{process fusion}.
-Fusion is first and foremost an optimisation for making programs run faster - but there are two main parts to this.
-Firstly, by fusing two loops together, the loop overhead that was previously paid twice is now only paid once.
-That is, the second set of looping instructions are removed from the program.
-This has some benefit, but generally only in cases where the loops are small: if the loops were performing more than a few instructions, its cost would outweigh the negligible amount of loop overhead.
-
-The real benefit of fusion comes from the fact that the fused program now has different space and time locality: by moving the instructions that write to an array next to instructions that read that same value, the value is more likely to be held in a register or in cache, saving a potentially expensive memory lookup.
-The intermediate array can also be removed from memory, but this is more of a side-benefit than anything else.
-In imperative languages, removing intermediate arrays is performed as a separate step called array contraction.
-
-It is possible to perform fusion while keeping intermediate arrays; for example partitioning a stream into those greater than or equal to zero (`aboves'), and those below zero (`belows'), and appending the aboves to the belows.
-
-\begin{code}
-partitions :: Stream Int -> Stream Int
-partitions inputs =
- let aboves      = filter (>=0) inputs
-     belows      = filter  (<0) inputs
-     partitioned = aboves ++ belows
- in  partitioned
-\end{code}
-
-\FigurePdf{figs/combinators/filter-even-odd}{Pairing even/odd: combinator diagram}{Combinator diagram for pairing even/odd.}
-
-\Cref{figs/combinators/filter-even-odd} shows the combinator diagram for partitions.
-This operation inherently requires a buffer, as the entire stream must be read in order to compute the aboves, and the append must wait until the end of aboves before it can read from belows.
-This operation can be fused together by using an intermediate buffer to store belows in, as values are read from inputs.
-
-\begin{code}
-partitions inputs =
- output partitioned.
- let go buf = do
-       v <- pull inputs (finish buf)
-       case v >= 0 of
-        True -> do
-         push partitioned v
-         go buf
-        False -> do
-         go (Buf.push buf v)
-     finish buf = case Buf.uncons buf of
-       Just (v,buf') -> do
-         push partitioned v
-         finish buf'
-       Nothing -> do
-         done
- in  go Buf.empty
-\end{code}
-
-If the input happens to be a manifest array, then the buffer is already there - one could loop over the array twice, or even reuse parts of the array in-place similar to the partition in quicksort.
-However, when the input is a stream of unknown size, this buffering can cause space issues.
-If the input stream does not fit entirely in memory, storing even a subset of elements in an unbounded buffer is likely to run out of memory at some stage---and running out of memory could very well mean a terminated program.
-
-We are therefore not just interested in fusing programs, but fusing them without unbounded buffers, even at the expense of expressivity.
-For this reason, the main fusion algorithm does not handle any insertion of buffers.
+This is able to express similar programs to Kahn process networks.
 
 \section{Kahn process networks}
 
 Kahn process networks~\citep{kahn1976coroutines} are a kind of restricted process network.
-The key insight here is that if each process has blocking reads and is deterministic, the entire network behaves deterministically.
+The key insight here is that if each process has blocking reads and is deterministic, along with certain other communication restrictions, the entire network behaves deterministically.
 While scheduling of processes must be assumed to be non-deterministic, this only affects the relative order between processes and how long communications take.
 The actual computation that each process performs remains deterministic, as do the values sent over communication channels.
 While a non-blocking read that checks for presence of an input value could use the non-determinism of the scheduler to act non-deterministically, blocking reads are insulated from this and can only act deterministically.
@@ -192,8 +130,8 @@ While only value-dependent merge is able to be expressed as a Kahn process netwo
 
 \subsection{Array computations}
 
-In our case we are interested in streams as a method for optimising array computations.
-Whether or not streams are ever \emph{stored} as arrays in memory or disk is not important; the distinction of array computations I wish to make is the the kind of \emph{computation} performed.
+In our case we are interested in streams as a method for optimising a subset of array computations.
+Whether or not streams are ever \emph{stored} as arrays in memory or disk is not important; the distinction of array computations is the the kind of \emph{computation} performed.
 Array computations are in control of when to pull, and when to push: they choose when to read from the input, and when to write to the output.
 
 Streaming computations tend to need to react to input events as they come in, rather than requesting values from an input stream.
@@ -204,8 +142,8 @@ In some ways, this makes Kahn process networks an ideal target for array computa
 Many standard online array operations can be written as Kahn processes, such as maps, filters, appends, etc.
 However, array computations that require random access, or anything other than monotonic access, cannot be described.
 This rules out reversing and random shuffling, as well as those that require multiple traversals such as sorting and self-appending.
-This probably means ``array computation'' is a misnomer.
-Stream computation is too pushy, array computation requires random access,...
+% This probably means ``array computation'' is a misnomer.
+% Stream computation is too pushy, array computation requires random access,...
 
 \section{Stream polarity}
 

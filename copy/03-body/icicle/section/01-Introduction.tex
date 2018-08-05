@@ -8,8 +8,26 @@ For such applications we must automatically fuse these separate queries and be s
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
 Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion nor incremental update then the cost of the computation would begin to exceed the salaries of the developers.
 
+The contributions of this chapter are:
+\begin{itemize}
+\item
+  We motivate the use of Icicle by extending the previous ``gold-panning'' queries (\cref{icicle/gold-panning});
+
+\item
+  We present Icicle, a domain specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
+
+\item
+  We present a fold-based intermediate language, which allows the query fusion transformation to be a simple matter of appending two intermediate programs, and exposes opportunities for common subexpression elimination (\cref{icicle:s:IcicleCore});
+
+\item
+  We present production benchmarks of Icicle compiled code (\cref{icicle:s:Benchmarks}). 
+\end{itemize}
+
+\section{Gold panning with Icicle}
+\label{icicle/gold-panning}
+
 In the following example queries, we extend the daily stock price records from \cref{taxonomy/gold-panning} to contain the open price and the close price for the day.
-As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle cannot express the @priceOverMarket@ example, which required multiple input streams.
+As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle cannot express the @priceOverMarket@ example, which contains multiple input streams.
 Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
 We also want the mean of the open price for days in which the open price exceeded the close price.
 In Icicle we write the three queries as follows:
@@ -78,17 +96,6 @@ We might try something like:
 Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally.
 While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start.
 We need a better solution.
-The contributions of this chapter are:
-\begin{itemize}
-\item
-  We present a domain specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
-
-\item
-  We present a fold-based intermediate language, which allows the query fusion transformation to be a simple matter of appending two intermediate programs, and exposes opportunities for common subexpression elimination (\cref{icicle:s:IcicleCore});
-
-\item
-  We present production benchmarks of Icicle compiled code which outperforms an existing R feature generation system by several orders of magnitude (\cref{icicle:s:Benchmarks}). 
-\end{itemize}
 
 % , and are on par with standard Unix utilities.
 % that conceptually perform less work.

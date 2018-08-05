@@ -32,7 +32,7 @@ We need a mutable reference for the vector.
 The reference is only written to and read from once at the end of the process, rather than once for every iteration, so the boxing overheads described earlier are negligible in this case.
 % Although we were able to avoid mutable references in code generation, some kind of mutable reference is required here.
 
-\TODO{IORef (Maybe a)?}
+% \TODO{IORef (Maybe a)?}
 \begin{lstlisting}
 sinkVector :: IORef (Vector a) -> Sink a
 sinkVector out
@@ -54,7 +54,7 @@ sinkVector out
     writeIORef out vec'
 \end{lstlisting}
 
-The runtime cost of resizing the vector, as well as the bounds check for every push, have a significant performance cost \REFTODO{benchmarks}.
+The runtime cost of resizing the vector, as well as the bounds check for every push, can have a significant performance cost.
 When the upper bound of the length of the output stream is known ahead of time, we can take advantage of this knowledge by allocating a large enough vector to start with, removing the need for dynamic resizing and bounds checks.
 
 
@@ -84,7 +84,7 @@ This puts the burden on the user of the sink to be certain of the upper bound.
 \subsection{Size hints}
 \label{s:implementation:sizehints}
 
-\TODO{Example of when we know the vector size ahead of time. Maps, filters, appends.}
+% \TODO{Example of when we know the vector size ahead of time. Maps, filters, appends.}
 
 Knowing the size of streams allows us to eliminate resizing and bounds checks.
 It would be safer and more convenient to do this automatically.

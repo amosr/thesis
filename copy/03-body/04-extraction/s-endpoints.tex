@@ -4,7 +4,7 @@ The processes in our process networks are pure and by themselves have no way of 
 To get values into the process network we use \emph{sources}; for example a source may read stream values from a file.
 To get values out of the process network we use \emph{sinks}; for example a sink may write stream values to a file.
 
-These sources and sinks are the pull and push streams we have seen before \REFTODO{background}, but in this case we do not need to implement combinators over them; such plumbing will be expressed as processes in the process network.
+These sources and sinks are the pull and push streams we have seen before in \cref{taxonomy}, but in this case we do not need to implement combinators over them; such plumbing will be expressed as processes in the process network.
 Sources and sinks are conceptually duals of each other, and they share many similarities, so let us refer to them collectively as \emph{endpoints}.
 
 Endpoints need to encapsulate some internal state: for example writing to a file requires a filehandle, and perhaps a buffer to fill before writing, to amortise the cost of the system call.
@@ -112,5 +112,5 @@ sinkToFile filepath
     return handle
 \end{lstlisting}
 
-\TODO{Spend a lot of time talking about why we need the state, but the examples only use the same filehandle. Need an example, eg to/from Vector or file IO with buffering, which uses the state.}
+% \TODO{Spend a lot of time talking about why we need the state, but the examples only use the same filehandle. Need an example, eg to/from Vector or file IO with buffering, which uses the state.}
 

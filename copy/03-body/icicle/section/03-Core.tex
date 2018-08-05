@@ -68,7 +68,7 @@ function sum (e : Element Int)
  = fold s = 0 then s + e;
 \end{icicle}
 
-Inlining these functions into the three stocks queries from \hyperref[icicle:s:Introduction]{the start of the chapter} yields the following set of queries:
+Inlining these functions into the three stocks queries from \cref{icicle/gold-panning} yields the following set of queries:
 
 \begin{icicle}
 table stocks { open : Int, close : Int }
@@ -158,7 +158,7 @@ queries = do
         
   return (Push push done)
 \end{haskell}
-  \TODO{this is in @IO@, and has a different type from the earlier version. need to modify push representation to \Hs/Push a r = (IO (a -> IO (), IO r))/ so reference construction can be done as part of stream}
+%  \TODO{this is in @IO@, and has a different type from the earlier version. need to modify push representation to \Hs/Push a r = (IO (a -> IO (), IO r))/ so reference construction can be done as part of stream}
 \caption{Push implementation of queries after inlining combinators}
 \label{icicle:fig:core:push_query}
 \end{figure}

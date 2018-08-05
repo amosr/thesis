@@ -2,12 +2,32 @@
 \label{chapter:process:processes}
 
 This chapter presents a language for expressing a collection of queries, each with potentially many input streams, as a Kahn process network.
+This work was first published as \citep{robinson2017machine}.
 The processes in these process networks execute concurrently and communicate via fixed-size bounded buffers between channels.
 Each buffer is restricted to contain at most a single element.
-The processes in a process network are then fused together to form a single process which computes the whole process, without the need for communication.
+The processes in a process network are then fused together to form a single process which produces the same output streams as the entire network, without the need for communication.
+
+The contributions of this chapter are:
+\begin{itemize}
+\item
+We informally introduce processes and fusion with example queries (\cref{kpn/gold-panning});
+\item
+We present a streaming process calculus with concurrent execution semantics (\cref{kpn/process-definition});
+\item
+We motivate an extra synchronisation primitive, @drop@, which coordinates between multiple consumers of the same stream, to improve locality by ensuring both consumers operate on the same value concurrently
+(\cref{s:Drop:in:synchrony});
+\item
+We present an algorithm for fusing pairs of processes (\cref{s:Fusion});
+\item
+We present a heuristic algorithm for fusing an entire process network (\cref{s:Optimisation});
+\item
+We present an overview of the mechanised soundness proofs of fusion (\cref{s:Proofs}).
+\end{itemize}
+
 
 
 \section{Gold panning with processes}
+\label{kpn/gold-panning}
 Recall the @priceAnalyses@ example from \cref{taxonomy/gold-panning}, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
 \Cref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
 

@@ -120,11 +120,12 @@ We must structure our generated code to pass values via function arguments inste
 
 It may be surprising to users of other languages that we should move away from using mutable references in favour of function arguments.
 Indeed, \citet{biboudis2017expressive} describes the \emph{opposite} transform when implementing Stream Fusion in MetaOCaml.
-This technique will not necessarily map to other compilers, but it is useful for GHC.
+This technique of using immutable references will not necessarily map to other compilers, but it is useful for GHC.
 
-In Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
+In our previous work on Data Flow Fusion \cite{lippmeier2013data} there is a transform called \emph{loop winding}, which converts mutable references to function arguments.
 The motivation here is that GHC does not track aliasing information of arrays stored in mutable references, but does track it for arrays as function arguments.
 
+\iffalse
 \subsection{Extended constructor specialisation}
 % \TODO{Move this to Stream Fusion section?}
 
@@ -258,4 +259,5 @@ Constructor specialisation has some heuristics about which call patterns to spec
 However, in the original implementation, when the @SPEC@ annotation is used to force constructor specialisation, an infinite number of specialisations were produced, and the compiler did not terminate.
 We implemented a suggestion by Roman Leshchinskiy\footnote{\url{https://ghc.haskell.org/trac/ghc/ticket/5550\#comment:12}} to fix this by setting a limit on how many times recursive types can be specialised, even when forcing constructor specialisation.
 
+\fi
 

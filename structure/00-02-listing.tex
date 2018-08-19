@@ -157,26 +157,33 @@
 
 
 
-\lstnewenvironment{icicle}{\noindent\minipage{\linewidth}\lstset{language=icicle}}{\endminipage}
-\lstnewenvironment{icicle-core}{\noindent\minipage{\linewidth}\lstset{language=icicle-core}}{\endminipage}
-\lstnewenvironment{haskell}{\noindent\minipage{\linewidth}\lstset{language=Haskell}}{\endminipage}
-\lstnewenvironment{sql}{\noindent\minipage{\linewidth}\lstset{language=sql}}{\endminipage}
-\lstnewenvironment{coq}{\noindent\minipage{\linewidth}\lstset{language=coq}}{\endminipage}
-\lstnewenvironment{process}{\noindent\minipage{\linewidth}\lstset{language=process}}{\endminipage}
+\lstnewenvironment{icicle}[1][]{\lstset{language=icicle,#1}}{}
+\lstnewenvironment{icicle-core}[1][]{\lstset{language=icicle-core,#1}}{}
+\lstnewenvironment{haskell}[1][]{\lstset{language=Haskell,#1}}{}
+\lstnewenvironment{sql}[1][]{\lstset{language=sql,#1}}{}
+\lstnewenvironment{coq}[1][]{\lstset{language=coq,#1}}{}
+\lstnewenvironment{process}[1][]{\lstset{language=process,#1}}{}
 
-\BeforeBeginEnvironment{icicle}{\par}
-\BeforeBeginEnvironment{icicle-core}{\par}
-\BeforeBeginEnvironment{haskell}{\par}
-\BeforeBeginEnvironment{sql}{\par}
-\BeforeBeginEnvironment{coq}{\par}
-\BeforeBeginEnvironment{process}{\par}
-
-\AfterEndEnvironment{icicle}{\par}
-\AfterEndEnvironment{icicle-core}{\par}
-\AfterEndEnvironment{haskell}{\par}
-\AfterEndEnvironment{sql}{\par}
-\AfterEndEnvironment{coq}{\par}
-\AfterEndEnvironment{process}{\par}
+% \lstnewenvironment{icicle}{\noindent\minipage{\linewidth}\lstset{language=icicle}}{\endminipage}
+% \lstnewenvironment{icicle-core}{\noindent\minipage{\linewidth}\lstset{language=icicle-core}}{\endminipage}
+% \lstnewenvironment{haskell}{\noindent\minipage{\linewidth}\lstset{language=Haskell}}{\endminipage}
+% \lstnewenvironment{sql}{\noindent\minipage{\linewidth}\lstset{language=sql}}{\endminipage}
+% \lstnewenvironment{coq}{\noindent\minipage{\linewidth}\lstset{language=coq}}{\endminipage}
+% \lstnewenvironment{process}{\noindent\minipage{\linewidth}\lstset{language=process}}{\endminipage}
+% 
+% \BeforeBeginEnvironment{icicle}{\par}
+% \BeforeBeginEnvironment{icicle-core}{\par}
+% \BeforeBeginEnvironment{haskell}{\par}
+% \BeforeBeginEnvironment{sql}{\par}
+% \BeforeBeginEnvironment{coq}{\par}
+% \BeforeBeginEnvironment{process}{\par}
+% 
+% \AfterEndEnvironment{icicle}{\par}
+% \AfterEndEnvironment{icicle-core}{\par}
+% \AfterEndEnvironment{haskell}{\par}
+% \AfterEndEnvironment{sql}{\par}
+% \AfterEndEnvironment{coq}{\par}
+% \AfterEndEnvironment{process}{\par}
 
 \newcommand\Hs{\lstinline}
 

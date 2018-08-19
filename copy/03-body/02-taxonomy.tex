@@ -34,7 +34,7 @@ In \cref{related} we will compare with some more expressive but less efficient s
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
 Let us start by describing a situation in which we would like to execute many queries.
 To avoid mixing up the details of streaming with the details of the example, we initially assume that the dataset fits in memory as a list and ignore details about efficiency.
-Throughout the thesis, we will refer back to this example as \emph{gold panning}: looking for money in streams.
+Throughout the thesis, we will refer back to this example as \emph{gold panning}.
 
 Suppose we have a file containing the historical prices for a particular corporate stock.
 The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.
@@ -82,8 +82,7 @@ correlation_k :: State -> (Double,Double) -> State
 correlation_x :: State -> Double
 \end{haskell}
 
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[float,label=figs/impl/correlation,caption=One-pass correlation implementation]
 type State = (Double, Double, Double, Double, Double, Double)
 
 correlation_z :: State
@@ -111,9 +110,6 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
       stddevY = sqrt varianceY
   in covariance / (stddevX * stddevY)
 \end{haskell}
-\caption{one-pass correlation implementation}
-\label{figs/impl/correlation}
-\end{figure}
 
 \Cref{figs/impl/correlation} contains the implementations of the fold worker functions \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
 We can implement a function to compute the regression similarly; we omit the definitions of the regression worker functions.
@@ -218,7 +214,7 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption[Dependency graph for queries priceOverTime and priceOverMarket]{dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
+\caption{Dependency graph for queries priceOverTime and priceOverMarket}
 \label{figs/procs/priceOverTime-priceOverMarket}
 \end{figure}
 
@@ -228,14 +224,14 @@ digraph G {
 The first streaming model we look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
 The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
 We represent a pull stream as a function with no parameters which either returns a value, or returns \Hs/Nothing/ when the stream is finished.
-Since the stream might want to read from a file or update some local state, the function is wrapped in \Hs/IO/.
+Since the stream might want to read from a file or update some local state, the function is wrapped in \Hs/IO/:
 
 \begin{haskell}
 data Pull a = Pull (IO (Maybe a))
 \end{haskell}
 
 With this stream representation we can implement analogues of the list combinators used in the example queries.
-We can map a function over a pull stream like so.
+We can map a function over a pull stream like so:
 
 \begin{haskell}
 map :: (a -> b) -> Pull a -> Pull b
@@ -254,7 +250,7 @@ When the stream is not finished, we apply the transform function \Hs/a_to_b/ to 
 In pull streams, consumers ask producers for the next value, and control flow bubbles up from consumer to producer.
 
 We can also implement \Hs/foldl/.
-Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/.
+Because pull streams can perform effects such as reading from a file, the result type for \Hs/foldl/ is now wrapped in \Hs/IO/:
 
 \begin{haskell}
 foldl :: (b -> a -> b) -> b -> Pull a -> IO b
@@ -277,22 +273,7 @@ Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
 
 
-\Cref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
-The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions.
-
-The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
-Both input streams are sorted by some key, which the comparison function extracts and compares.
-If the keys are equal, \Hs/join/ returns the pair.
-Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if one stream has a higher key than the other, it means the stream with the higher key does not have a corresponding value for the smaller key.
-% if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
-In our @priceOverMarket@ example the files are sorted by date and the comparison function compares the dates.
-We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
-% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
-% The join function takes the two input streams, as well as functions to extract the key from each input record.
-
-
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[float,caption=Pull stream combinators,label=figs/impl/pull/combinator]
 correlation :: Pull (Double,Double) -> IO Double
 regression  :: Pull (Double,Double) -> IO Line
 
@@ -313,9 +294,20 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
         go a b'
   go _ _ = return Nothing
 \end{haskell}
-\caption{Pull stream combinators}
-\label{figs/impl/pull/combinator}
-\end{figure}
+
+
+\Cref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
+The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions.
+
+The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
+Both input streams are sorted by some key, which the comparison function extracts and compares.
+If the keys are equal, \Hs/join/ returns the pair.
+Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if one stream has a higher key than the other, it means the stream with the higher key does not have a corresponding value for the smaller key.
+% if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
+In our @priceOverMarket@ example the files are sorted by date and the comparison function compares the dates.
+We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
+% eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
+% The join function takes the two input streams, as well as functions to extract the key from each input record.
 
 We cannot naively translate the list version of \Hs/priceOverTime/ to use these streaming combinators, because the list version required multiple traversals.
 The following program will not compute the correct result because it uses the \Hs/timeprices/ stream twice:
@@ -363,7 +355,7 @@ To write this version we have had to manually look inside the definitions of \Hs
 This was relatively easy because both use-sites were folds.
 This process of combining two folds into one is a simple instance of a transform known as \emph{tupling}.
 Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/ or \Hs/append/.
-We discuss tupling further in \REF{related/tupling}.
+We discuss tupling further in \cref{related/tupling}.
 
 
 % If the input data is stored in a file, we have the option or re-reading the input file again, but this also requires performing any parsing again --- duplicating work.
@@ -371,7 +363,7 @@ We discuss tupling further in \REF{related/tupling}.
 % In general, if we want to re-use the same stream multiple times we have the choice between duplicating work or buffering the values somewhere.
 
 Let us turn our attention to the second query, \Hs/priceOverMarket/.
-We can use the same function \Hs/regressionCorrelation_pull/ that we used above.
+We can use the same function \Hs/regressionCorrelation_pull/ that we used above, like so:
 
 \begin{haskell}
 priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
@@ -436,7 +428,7 @@ This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to
 Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
 
 To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
-Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression.
+Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression:
 
 \begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
@@ -451,7 +443,7 @@ map2 f g (Pull pull_a) = Pull pull_c
 \end{haskell}
 
 The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
-We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression.
+We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression:
 
 
 \begin{haskell}
@@ -467,7 +459,7 @@ map2 f g (Pull pull_a) = Pull pull_c
 By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
 Optimising compilers perform similar transforms as part of their suite of general purpose optimisations.
 In this representation, the @filter@ combinator is expressed as a recursive function, which makes it harder to inline the definition and remove the overhead.
-In \REF{related/fusion} we discuss more sophisticated representations; for example in the Stream Fusion~\cite{coutts2007stream} representation, @filter@ is defined non-recursively to assist inlining.
+In \cref{related/fusion} we discuss more sophisticated representations; for example in the Stream Fusion~\cite{coutts2007stream} representation, @filter@ is defined non-recursively to assist inlining.
 These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described above; the same set of combinators can be implemented with the same asymptotic space and time behaviour and improved constant factors.
 
 % more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
@@ -495,6 +487,12 @@ We augment the definition with an extra type parameter, \Hs/r/, for the result t
 Since the result only becomes available at the end of the stream, we separate the two cases of the (\Hs/Maybe a/) argument into two functions, \Hs/push/ and \Hs/done/.
 When we have a value we call \Hs/push/.
 When the stream is finished we call \Hs/done/ to retrieve the result.
+
+Although we use a slightly different representation, the push streams described here are analogous to the \emph{sinks} described in \cite{bernardy2015duality} and \cite{lippmeier2016polarized}.
+Push streams should not be confused with \emph{push arrays}, for example in \cite{claessen2012expressive}.
+Push arrays can be represented as a continuation which receives a push stream as an argument, and are useful for optimising code-generation for append operations.
+Like pull streams, push arrays do not support executing multiple queries concurrently; nor do they support combinators with multiple inputs except append.
+We discuss push arrays further in \cref{related/push-arrays}.
 
 % Most consumers also have some initialisation that needs to be performed, for example opening an output file or constructing a mutable reference in which to accumulate values.
 % In the \Hs/Push/ type, the \Hs/init/ function performs initialisation and returns a \Hs/PushRep/.

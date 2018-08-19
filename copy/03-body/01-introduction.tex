@@ -22,7 +22,7 @@ However, push streams do not support computations with multiple inputs except fo
 Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant overhead.
 In \cref{s:Fusion} we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
-This fusion method generalises previous work on stream fusion \REF{kpn/generalises} and demonstrates the connection between fusion and synchronised product of processes \REF{kpn/synchronised-product}, which is generally used as a proof technique rather than an optimisation.
+This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and synchronised product of processes (\cref{related/synchronised-product}), which is generally used as a proof technique rather than an optimisation.
 
 \section{Contributions}
 

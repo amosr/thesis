@@ -1,26 +1,18 @@
 \CHAPTERX{Abstract}
-[todo]
-
 To learn interesting things from large datasets, we generally want to perform lots of queries.
-When our query is simple and our data is big, we might spend more time reading the data than we spend computing the answer.
-In this case, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
+If we compute each query separately, we may spend more time reading the data than we spend computing the answer.
+Instead of computing each query separately, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
 
-Fusion is an essential part of optimising high-level array and streaming computations, as it reduces memory traffic and intermediate arrays.
-The benefits of removing intermediate arrays are even more important as data sizes approach the size of memory.
-When comparing fusion systems, three important criteria to consider are: whether the system supports splits, where a stream is used multiple times; whether it supports joins, where a combinator has multiple inputs; and whether arbitrary combinators such as @merge@ and segmented appends can be encoded.
-Existing fusion systems support one or two of these, but not three.
-We present a fusion system based on process calculus that supports all three: splits, joins and arbitrary combinators.
+Two streaming models for executing multiple queries at a time are push streams and Kahn process networks.
 
-We encode each combinator as a separate process with any number of input and output channels.
-Each process is sequential but multiple processes can be executed concurrently.
-We give a concurrent execution semantics for multiple processes, but these are used only as a specification for how the fused program must behave.
-The fused program itself is sequential and can easily be converted to simple imperative code.
+Push streams can execute multiple queries at a time, but these queries can be unwieldy to write as they must be constructed ``back-to-front''.
+We introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar array-based semantics, while retaining the execution strategy of push streams.
+The type system of Icicle aims to ensure that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together.
 
-Our fusion algorithm takes two concurrently executable processes and creates a sequential interleaving of the two such that they execute with no unbounded buffers.
-If fusion would require unbounded buffers (or the fusion algorithm wrongly infers that it would) then fusion fails.
-If fusion fails, the user can be presented with an error message telling them which combinators could not be fused.
-For scenarios where fusion is required, this is a great advantage over fragile shortcut fusion systems.
+However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams.
+Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant overhead.
+We introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
+The fused process communicates through local variables rather than costly communication channels.
+This fusion method generalises previous work on stream fusion and demonstrates the connection between fusion and synchronised product of processes, which is generally used as a proof technique rather than an optimisation.
 
-Our system has been formalised in Coq where we have proved soundness of the fusion algorithm.
-It is expressive enough to encode a wide range of combinators including operations on segmented arrays.
-The version presented here deals with infinite streams, and we informally describe the extensions required to support finite streams.
+

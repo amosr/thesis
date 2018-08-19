@@ -488,12 +488,6 @@ Since the result only becomes available at the end of the stream, we separate th
 When we have a value we call \Hs/push/.
 When the stream is finished we call \Hs/done/ to retrieve the result.
 
-Although we use a slightly different representation, the push streams described here are analogous to the \emph{sinks} described in \cite{bernardy2015duality} and \cite{lippmeier2016polarized}.
-Push streams should not be confused with \emph{push arrays}, for example in \cite{claessen2012expressive}.
-Push arrays can be represented as a continuation which receives a push stream as an argument, and are useful for optimising code-generation for append operations.
-Like pull streams, push arrays do not support executing multiple queries concurrently; nor do they support combinators with multiple inputs except append.
-We discuss push arrays further in \cref{related/push-arrays}.
-
 % Most consumers also have some initialisation that needs to be performed, for example opening an output file or constructing a mutable reference in which to accumulate values.
 % In the \Hs/Push/ type, the \Hs/init/ function performs initialisation and returns a \Hs/PushRep/.
 % \begin{haskell}
@@ -505,6 +499,17 @@ We discuss push arrays further in \cref{related/push-arrays}.
 
 In this representation, it is the consumers that are values of type (\Hs/Push a r/): they are sinks into which we can push values of type \Hs/a/, and eventually get an \Hs/r/ back.
 This inversion of pull streams results in a fundamental difference in how we program with push streams, and what we can express with push streams.
+
+Although we use a slightly different representation, the push streams described here are analogous to the \emph{sinks} described in \citet{bernardy2015duality} and \citet{lippmeier2016polarized}.
+In this thesis, we use the push/pull terminology of \citet{kay2009you}.
+However, the `push' in `push streams' is different from the `push' in the `\emph{push model}' used for database execution, as described in \citet{neumann2011efficiently}.
+In the Neumann push model, a stream producer is represented as a continuation which takes a sink to push values into.
+Once the consumer provides a sink, the producer repeatedly pushes all its values to the provided sink.
+The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
+% Push arrays can be represented as a continuation which receives a push stream as an argument, and are useful for optimising code-generation for append operations.
+Like pull streams, the Neumann push model does not support executing multiple queries concurrently; unlike pull streams, the Neumann push model does not support combinators with multiple inputs except append.
+For now, we are interested in executing multiple queries; we defer further discussion of the Neumann push model to \cref{related/push-model}.
+
 
 We cannot map a function over the elements in push streams in the way that we would with lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
 Instead, we implement contravariant-map, or \Hs/contramap/, like so:
@@ -553,7 +558,7 @@ As before, we can use this @foldl@ function to implement @correlation@ and @regr
 In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
 The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
-We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (pull streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \cref{taxonomy/polarised}.
+We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (push streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \cref{taxonomy/polarised}.
 
 \begin{haskell}
 dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
@@ -569,11 +574,11 @@ dup_ooo a1 a2 = Push push_a done_a
     return (r, r')
 \end{haskell}
 
-We could also use the applicative functor instance for push streams \REF{appendix} to combine consumers together, specifying how to transform and combine the results.
+We could also use the applicative functor instance for push streams to combine consumers together, specifying how to transform and combine the results.
 The applicative functor implementation is similar to the \Hs/dup_ooo/ function specified above.
 This \Hs/dup_ooo/ function could then be written equivalently as (\Hs/dup_ooo a1 a2 = (,) <$> a1 <*> a2/).
 
-We can use \Hs/dup_ooo/ and \Hs/contramap/ to implement \Hs/unzip/, which deconstructs a stream of pairs into a pair of streams.
+We can use \Hs/dup_ooo/ and \Hs/contramap/ to implement \Hs/unzip/, which deconstructs a stream of pairs into a pair of streams:
 
 \begin{haskell}
 unzip :: Push a r -> Push b r' -> Push (a,b) (r,r')
@@ -583,7 +588,7 @@ unzip push_a push_b = dup_ooo (contramap fst push_a) (contramap snd push_b)
 Pairs of @a@ and @b@ flow from the returned push stream into the argument streams; when there are no more input pairs, the stream results are paired together and flow from the argument streams to the returned stream.
 This inverted control flow is because the stream elements are contravariant and the stream results are covariant.
 
-With these combinators, we can write the \Hs/priceOverTime/ query using push streams.
+With these combinators, we can write the \Hs/priceOverTime/ query using push streams:
 
 \begin{haskell}
 priceOverTime_push :: IO (Push Record (Line,Double))
@@ -605,9 +610,9 @@ Recall the \Hs/join/ combinator, which takes two input streams and retrieves a v
 At every step the combinator chooses which stream to pull from, pulling on the stream with the smaller value.
 With push streams, a consumer cannot choose which input stream to pull from, or when: the consumer is a function waiting to be called with its input, always ready to accept values as they come.
 
-This failure to join two streams by date is a symptom of a more general limitation of push streams.
+This inability to join two streams by date is a symptom of a more general limitation of push streams.
 Push streams also cannot implement @zip@, which pairs two inputs together, because the consumer needs to control the computation to alternate between each input.
-Except for one special case, push streams do not support multiple inputs.
+Except for one special case, push streams do not support combinators with multiple inputs.
 The special case is that a push stream can react to multiple inputs in the order they are received.
 As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
 In certain circumstances we can control the push order and use this merge to append two streams.
@@ -617,12 +622,12 @@ Because the push order is controlled outside of the merge, appending two streams
 \section{Polarised streams}
 \label{taxonomy/polarised}
 
-Stream sharing allows push streams to support multiple queries via sharing, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
+Stream sharing allows push streams to support multiple queries by broadcasting the elements to multiple consumers, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
 Combining pull and push streams in the form of \emph{polarised streams} allows us to support multiple inputs and multiple queries~\citep{lippmeier2016polarized}.
 
 
 Although we cannot share the elements of a pull stream among multiple pull consumers, we can share the elements of a pull stream among one push consumer and one pull consumer.
-We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull).
+We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull):
 
 \begin{haskell}
 dup_ioi_ignore_result :: Pull a -> Push a r -> Pull a
@@ -644,7 +649,7 @@ The result of the push stream is ignored because the pull stream representation 
 
 Encoding the result of a stream inside the stream itself is not important for single-consumer pull streams, because it is usually the consumer of the stream that computes the result.
 When mixing stream representations to allow multiple consumers, however, we need to be able to capture the result of all the consumers.
-We extend the pull stream representation: instead of returning a @Maybe@ with @Nothing@ to signal the end of the stream, streams now return an @Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream.
+We extend the pull stream representation so that instead of returning a @Maybe@ with @Nothing@ to signal the end of the stream, streams now return an @Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream:
 
 \begin{haskell}
 data PullResult a r = PullResult (IO (Either a r))
@@ -841,8 +846,7 @@ This streaming single-pass implementation requires more complex control-flow tha
 Stream elements flow ``backwards'' from function result to argument in the places where push streams are used, and flow ``forwards'' where pull streams are used.
 When a pull stream is duplicated into a push stream, the stream results for the push stream are nested inside the resulting pull stream; recovering these results requires pattern-matching on the nested tuple.
 
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[float,caption=Polarised implementation of priceOverTime and priceOverMarket,label=figs/impl/polar/priceOverTime-priceOverMarket]
 priceOverTime_o :: IO (Push Record (Line,Double))
 priceOverTime_o = do
   pot_regres    <- regression_o
@@ -870,9 +874,6 @@ priceAnalyses_ii stock index = do
     (potC,(potR,((r,(pomC,pomR)),r'))) ->
       return ((potC,potR), (pomC,pomR))
 \end{haskell}
-\caption[Polarised implementation of priceOverTime and priceOverMarket]{polarised implementation of \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
-\label{figs/impl/polar/priceOverTime-priceOverMarket}
-\end{figure}
 
 Assigning polarities is a global analysis, in that we need to inspect the dependency graph containing all queries, rather than looking at each query or each combinator in isolation.
 If we add a new query to \Hs/priceAnalyses/, we need to consider the existing polarities when assigning polarities to the new query.
@@ -921,12 +922,11 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption[Polarised dependency graph for priceOverTime correlation using zip]{polarised dependency graph for priceOverTime correlation using with zip.}
+\caption{Polarised dependency graph for priceOverTime correlation using zip}
 \label{figs/polar/correlation-zip}
 \end{figure}
 
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[float,caption=Polarised implementation of zip\_ioo,label=figs/polar/impl/zip_ioo]
 zip_ioo :: PullResult a r -> Push (a,b) r' -> Push b (r,r')
 zip_ioo (Pull pull_a) push_ab = Push push_b done_b
  where
@@ -943,9 +943,6 @@ zip_ioo (Pull pull_a) push_ab = Push push_b done_b
      r' <- done push_ab
      return (r,r')
 \end{haskell}
-\caption[polarised implementation of \Hs/zip_ioo/]{polarised implementation of \Hs/zip_ioo/}
-\label{figs/polar/impl/zip_ioo}
-\end{figure}
 
 
 With polarised streams, we cannot execute @priceOverTime@ with the pair-of-lists version, although we can assign polarities.
@@ -1038,8 +1035,7 @@ Kahn process networks with bounded channels still compute results deterministica
 There are dynamic algorithms to identify artificial deadlocks at runtime and resolve them by increasing buffer sizes \cite{parks1995bounded,geilen2003requirements}.
 
 
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[caption=Types and combinators for Kahn process networks,label=figs/kpn/combinators]
 data Channel a
 
 data Network a
@@ -1057,9 +1053,6 @@ foldl   :: (a -> b -> a) -> a -> Channel b
 
 execute :: Network (Result a) -> IO a
 \end{haskell}
-\caption[Types and combinators for Kahn process networks]{types and combinators for Kahn process networks.}
-\label{figs/kpn/combinators}
-\end{figure}
 
 \Cref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
 We leave discussion of the implementation for \cref{chapter:process:processes}, and for now focus solely on this simplified version of the interface.
@@ -1074,8 +1067,7 @@ The @execute@ function takes a process network description containing the result
 
 
 
-\begin{figure}
-\begin{haskell}
+\begin{haskell}[caption=Implementations of priceAnalyses queries as a Kahn process network,label=figs/kpn/impl/priceAnalyses]
 correlation :: Channel (Double,Double) -> Network (Result Double)
 regression  :: Channel (Double,Double) -> Network (Result Line)
 
@@ -1101,9 +1093,6 @@ priceAnalysis stock index = do
   pom <- priceOverMarket stock index
   return ((,) <$> pot <*> pom)
 \end{haskell}
-\caption{implementations of \Hs/priceOverTime/, \Hs/priceOverMarket/, and \Hs/priceAnalyses/ as Kahn process network.} 
-\label{figs/kpn/impl/priceAnalyses}
-\end{figure}
 
 \Cref{figs/kpn/impl/priceAnalyses} shows the @priceAnalyses@ queries implemented as a Kahn process network.
 There are some differences from the list version: the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.

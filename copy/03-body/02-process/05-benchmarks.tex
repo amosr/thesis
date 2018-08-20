@@ -16,15 +16,18 @@ In cases where shortcut fusion cannot fuse it fails silently, leaving the progra
 This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
 To fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
 
-% For the benchmarks, I use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
+% For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
-I present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
+We present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
 The benchmarks are comparing with the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
 
 The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
-It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion known as \emph{stream fusion} \citep{coutts2007stream}.
-While the fusion is pull-based, splits can still be expressed in the program.
-When splits are present, they act as fusion barriers, requiring streams to be manifested as in-memory arrays.
+It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system known as \emph{stream fusion} \citep{coutts2007stream}.
+Array operations are implemented by converting the input array to a stream, then performing the corresponding stream operation, and converting back to an array.
+The short-cut fusion rule removes the superfluous conversion when a stream is converted to an intermediate array and immediately back to a stream.
+This rule can only remove intermediate arrays when the intermediate array is mentioned at most once.
+While the fusion is pull-based, splits can still be expressed in the program by mentioning the same array multiple times.
+These splits act as fusion barriers, requiring streams to be manifested as in-memory arrays.
 Vector also provides no guarantees about whether fusion will occur: it makes its best effort, but the easiest way to tell whether fusion has occurred is to look at the generated program.
 We could benchmark the program to see whether it is ``fast enough'', but if we do not have an optimal baseline to compare against, it is hard to know how fast the program \emph{should} be.
 After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
@@ -45,15 +48,15 @@ These libraries also have a monadic interface, which allows the structure of the
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
 % Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
 Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
-In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into both step function and state.
-The step function is completely static, and so can be optimised etc, but the state changes dynamically.
+In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into a static step function and a dynamic state.
+Vector's completely static step function can be optimised at compile-time, while the state can change dynamically.
 In contrast, in Pipes/Conduit, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside a constructor inside a monadic operation.
 
 
 
 The benchmark results presented below were all run on a MacBook Pro, with a 2GHz Intel Core i7, and 16GB of RAM.
 The operating system is OS X El Capitan.
-To run the benchmarks, I used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
+To run the benchmarks, we used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
 Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
 It can also collect statistics on allocations, which is sometimes (but not always) a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
 
@@ -85,7 +88,8 @@ filterMaxFolderol l ps = do
 
 \Cref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
 The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
-As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to remove the need to dynamically grow the vector. % (\cref{s:implementation:sizehints}).
+As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to specify the upper bound of the vector's size.
+% remove the need to dynamically grow the vector. (\cref{s:implementation:sizehints}).
 The Template Haskell splice calls @fuse@ to convert the process network into executable code.
 The process network starts by converting the input vector @pts@ to a stream @ins@.
 We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
@@ -98,7 +102,7 @@ Finally, @maxim@ is pushed into the scalar output sink, and all @above'@ points 
 Let us now look at two versions of @filterMax@ using Vector.
 The shortcut fusion system cannot fuse both operations into a single loop, and both operations require the distances between the line and each point.
 This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
-I compare both implementations.
+We compare both implementations.
 
 \begin{lstlisting}[float,label=l:bench:filterMaxVectorShare,caption=Vector / share implementation of filterMax]
 filterMaxVectorShare l ps
@@ -121,18 +125,18 @@ This way, both maps to compute the distance can be fused into their consumers.
 
 In the results below, recomputing the distances is faster than storing the distances.
 For this benchmark we used only two-dimensional points, but it is possible that at higher dimensions the cost of recomputing distances may outweigh the cost of allocation.
-Also, the choice to recompute the distances requires intimate knowledge of how shortcut fusion works and might be surprising to the naive user: duplicating work does not usually \emph{improve} performance.
+The choice to recompute the distances requires intimate knowledge of how shortcut fusion works and might be surprising to the naive user: duplicating work does not usually \emph{improve} performance.
 
-For Conduit, we also have two versions: the first uses two passes over the data, while the second is hand-fused into a single loop.
+For Conduit, we also have two versions: the first uses two passes over the data (\cref{l:a:bench:filterMaxConduitTwoPass}), while the second is hand-fused into a single pass (\cref{l:a:bench:filterMaxConduitOnePass}).
 The two-pass version defines two `conduits', or stream computations; @cabove@ for the filtered vector and @cmaxim@ for the maximum.
 Computation @cabove@ converts the vector to a conduit with @sourceVector@, then annotates with the distances, filters according to the distances, removes the annotations, and converts back to a vector.
 As with Folderol, we use size hints when converting back to a vector to remove any overhead with growing and copying the vector.
 Computation @cmaxim@ also converts the vector to a conduit, then annotates with the distances, and computes the maximum.
 The hand-fused Conduit version is more complicated, and loses the abstraction benefits from using a high-level streaming library.
 
-For Pipes, we only have a hand-fused version, which follows much the same structure as the Conduit hand-fused version.
+For Pipes, we only have a hand-fused version (\cref{l:a:bench:filterMaxPipes}), which follows much the same structure as the Conduit hand-fused version.
 
-Finally, the Streaming version is much closer to the Vector version, except that the stream must be explicitly split into both consumers.
+Finally, the Streaming version (\cref{l:a:bench:filterMaxStreaming}) is much closer to the Vector version, except that the stream must be explicitly split into both consumers.
 We start by converting the vector to a stream with @sourceVector@, and then use @map@ to annotate each point with the distance from the line.
 To split the stream, we use @store@ which takes a computation to perform on the copy of the stream --- in this case computing the maximum with @maximumBy@.
 The original stream is also passed through, which is filtered and then the annotations discarded.
@@ -160,19 +164,18 @@ Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 \end{table}
 
 \Cref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
-Different sizes of data produce similar results.
+We ran with different sizes of data ranging from $10^3$ to $10^9$ but do not show it; the results for this size are representative of the relationship between the different implementations.
 The hand-fused version is the fastest, followed by Folderol.
 The Vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
 Intimate knowledge of shortcut fusion was required to find `recompute', the faster of the two vector benchmarks, and there is no indication in the source program, or from the compiler, that the two could not be fused together.
 The streaming libraries are significantly slower, spending most of the time allocating closures and forcing thunks.
-Why are they so much slower? This would be better in the motivation.
 On the plus side, the limited APIs and linearity constraints for Conduit and Pipes made it more obvious that they would not be fused into a single loop, but even with partial hand-fusion, are still significantly slower.
 The `Streaming' program allows explicit sharing, and was the simplest of the three streaming libraries, requiring no hand fusion.
 Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Conduit' and `Pipes' programs, but is still significantly slower than Folderol.
 
-It would be nice to know why the Folderol version is slower than the hand-fused version.
-Inspecting the assembly, the code is very similar.
-The difference between hand-fused and Folderol appears to be that the Folderol implementation is spilling sixteen more bytes to the stack every iteration.
+% It would be nice to know why the Folderol version is slower than the hand-fused version.
+% Inspecting the assembly, the code is very similar.
+% The difference between hand-fused and Folderol appears to be that the Folderol implementation is spilling sixteen more bytes to the stack every iteration.
 
 These streaming libraries are not usually used for array computations because of this overhead.
 In practice, one tends to `chunk' the data so that each element is an array of multiple elements: this reduces overhead paid for streaming.
@@ -220,11 +223,11 @@ The difference between @postscanl@ and regular @scanl@ is that the output stream
 Now that we have our average, @avg@, we @clip@ each element by taking the square root, and clipping it to one. This is our multiplier, @mul@.
 Finally, we zip the original stream with the multiplier, and multiply them together.
 
-The Vector version is very similar to the Folderol version, except without the Template Haskell boilerplate.
+The Vector version (\cref{l:a:bench:compressorVector}) is very similar to the Folderol version, except without the Template Haskell boilerplate.
 The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
 
 \Cref{table:bench:compressor} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
-The difference between the hand-fused version and the Folderol version are very slight, and may be due to operating system scheduling overhead. 
+The difference between the hand-fused version and the Folderol version are very slight. 
 The Vector version is slower because its generated loop indexes the input array twice.
 
 \begin{table}
@@ -281,9 +284,9 @@ Vector &            & 2.21s &   190\% & 1.6e9 & 200\%\\
 \end{table}
 
 \Cref{table:bench:compressorlop} shows the results for compressor with low-pass.
-For the Vector implementation, in the previous example the two occurrences of @ins@ just meant that the input array was indexed twice.
-However, in the modified version it is not an input vector being used twice, but the result of @postscanl@.
-This means that the result vector for @lopped@ must be reified into a manifest vector, before it can be reused.
+For the Vector implementation in the previous example, the two occurrences of @ins@ just meant that the input array was indexed twice.
+However, in the modified version with low-pass (\cref{l:a:bench:compressorLopVector}), it is not an input vector being used twice, but the result of @postscanl@.
+This means that the result vector for @lopped@ must be reified into a manifest vector before it can be reused.
 The Vector version then has two loops, as well as an extra manifest array.
 
 
@@ -311,26 +314,9 @@ append2 fpIn1 fpIn2 fpOut = do
   return count
 \end{lstlisting}
 
-\begin{lstlisting}[float,label=l:bench:part2Folderol,caption=Folderol implementation of part2]
-part2 :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
-part2 fpIn1 fpOut1 fpOut2 = do
-  (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->
-    $$(fuse defaultFuseOptions $ do
-      in1       <- source    [|sourceLinesOfFile fpIn1|]
-      (o1s,o2s) <- partition [|\l -> length l `mod` 2 == 0|] in1
-
-      c1        <- fold      [|\c _ -> c + 1|] [|0|] o1s
-      c2        <- fold      [|\c _ -> c + 1|] [|0|] o2s
-
-      sink c1                [|snkC1                 |]
-      sink c2                [|snkC2                 |]
-      sink o1s               [|sinkFileOfLines fpOut1|]
-      sink o2s               [|sinkFileOfLines fpOut2|]$$)
-  return (c1, c2)
-\end{lstlisting}
-
-The first file benchmark simply appends two files while counting the lines.
-In Pipes and Conduit, counting the lines is implemented as a pipe which counts each line before passing it along.
+The first file benchmark appends two files while counting the lines.
+\Cref{l:bench:append2Folderol} shows the Folderol implementation.
+In Conduit (\cref{l:a:bench:append2Conduit}) and Pipes (\cref{l:a:bench:append2Pipes}), counting the lines is implemented as a stream transformer which counts each line before passing it along.
 \Cref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
 
 
@@ -353,9 +339,28 @@ Streaming &         & 0.57s &   196\% & 2.6e9 & 302\% \\
 
 The second file benchmark takes a file and partitions it into two files: one with even-length lines, and one with odd-length lines.
 The output lines are also counted.
-Even with partial hand-fusion because of the multiple outputs, the Pipes and Conduit programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
-The `Streaming' library allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
+\Cref{l:bench:part2Folderol} shows the Folderol implementation.
+Even with partial hand-fusion because of the multiple outputs, the Pipes (\cref{l:a:bench:part2Pipes}) and Conduit (\cref{l:a:bench:part2Conduit}) programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
+The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
 \Cref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
+
+\begin{lstlisting}[float,label=l:bench:part2Folderol,caption=Folderol implementation of part2]
+part2 :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
+part2 fpIn1 fpOut1 fpOut2 = do
+  (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->
+    $$(fuse defaultFuseOptions $ do
+      in1       <- source    [|sourceLinesOfFile fpIn1|]
+      (o1s,o2s) <- partition [|\l -> length l `mod` 2 == 0|] in1
+
+      c1        <- fold      [|\c _ -> c + 1|] [|0|] o1s
+      c2        <- fold      [|\c _ -> c + 1|] [|0|] o2s
+
+      sink c1                [|snkC1                 |]
+      sink c2                [|snkC2                 |]
+      sink o1s               [|sinkFileOfLines fpOut1|]
+      sink o2s               [|sinkFileOfLines fpOut2|]$$)
+  return (c1, c2)
+\end{lstlisting}
 
 \begin{table}
 \begin{center}
@@ -399,7 +404,7 @@ This is because @append@ requires all the @as@ first: all the even-valued elemen
 But this means that when reading from the stream, if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 In this case, the input stream is not really a stream, but is backed by a real vector.
-So we can actually implement it without introducing an unbounded buffer: we already have the buffer.
+This means we can implement it without introducing an unbounded buffer: we already have the buffer.
 To execute the program, we \emph{explicitly} introduce another source to read from the vector. 
 See \cref{l:bench:partitionAppend2Source}.
 The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
@@ -418,11 +423,11 @@ partitionAppend2Source xs = do
   return ys
 \end{lstlisting}
 
-But we can actually implement it another way, if we are willing to introduce two intermediate arrays.
+We can implement this program another way, if we are willing to introduce two intermediate arrays.
 In this version we introduce two loops.
 In the first loop, we partition the input into two intermediate arrays.
 Then in the second loop, we append the two intermediate arrays.
-See \cref{l:bench:partitionAppend2Loop}.
+This implementation is shown in \cref{l:bench:partitionAppend2Loop}.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Loop,caption=Partition / append with two loops]
 partitionAppend2Loop xs = do
@@ -442,6 +447,14 @@ partitionAppend2Loop xs = do
   return ys
 \end{lstlisting}
 
+The Vector implementations (\cref{l:a:bench:partitionAppendVector}) follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
+The 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
+The Vector @partition@ cannot fuse with any consumers and always constructs manifest output vectors.
+The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
+The length of both partitions must equal the length of the original array.
+Once the end is reached, the false parts which were filled backwards can be reversed in-place.
+Unfortunately, the Vector program still splits this array in two and appends it back together: which should be the same as not splitting the array in the first place.
+
 \begin{table}
 \begin{center}
 \begin{tabular}{ll|rrrr}
@@ -458,19 +471,10 @@ Vector   & 2-loop   & 0.15s &    88\% & 1.6e8 &  67\% \\
 \end{table}
 
 \Cref{table:bench:part2app2} shows the runtimes for partitioning and appending an input file with $10^7$ lines.
-
-The Vector implementations follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
-Note that the 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
-The Vector @partition@ cannot fuse with any consumers and always constructs manifest output vectors.
-The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
-The length of both partitions must equal the length of the original array.
-Once the end is reached, the false parts which were filled backwards can be reversed in-place.
-Unfortunately, the Vector program still splits this array in two and appends it back together: which should be the same as not splitting the array in the first place.
-
-In the table, the Vector version with two loops is the fastest, but the difference between it and Folderol with two loops is fairly small.
+In the results table, the Vector version with two loops is the fastest, but the difference between it and Folderol with two loops is fairly small.
 The Folderol version with two sources uses the least memory - a third of the two loop Folderol, and a half of the Vector versions.
 Sometimes, we are willing to sacrifice lower throughput for lower memory usage, and this decision really depends on the context.
-So by giving a compilation error when fusion fails, we are able to maintain a high level of abstraction, while at the same time forcing the author to make these scheduling decisions.
+By giving a compilation error when fusion fails, we are able to maintain a high level of abstraction, while at the same time forcing the author to make these scheduling decisions.
 The author must explicitly choose when is the right time to reuse an array, when is the right time to introduce a new loop, and when is the right time to introduce intermediate buffers.
 This way, the result of fusion should not be magic or surprising.
 The author can be confident that if it compiles, it will have the desired streaming behaviour.
@@ -481,24 +485,24 @@ The author can be confident that if it compiles, it will have the desired stream
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
 \Cref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
-To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @merge@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
-The @merge@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @merge@ at the start.
+To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @join@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
+The @join@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @join@ at the start.
 The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a @map@ and a @filter@ processing the same input stream.
 In both cases the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are fewer than 100 states in the result process. 
 
+
+\input{copy/03-body/02-process/figures/process-size.tex}
+
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
-On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N merge processes, N+1 input streams, and a single output stream. The output of each merge process is the input of the next, forming a chain of merges. In source notation the network for N = 3 is @sOut = merge sIn1 (merge sIn2 (merge sIn3 sIn4))@.
+On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N join processes, N+1 input streams, and a single output stream. The output of each join process is the input of the next, forming a chain of joins. In source notation the network for N = 3 is @sOut = join sIn1 (join sIn2 (join sIn3 sIn4))@.
 
-When fusing two processes the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the @instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
+When fusing two processes, the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the @instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
 
 In the worst case, fusion of two processes produces O($n*m$) different states, where $n$ and $m$ are the number of states in each. If we assume the two processes have about the same number of states then this is O($n^2$). Fusing the next process into this result yields O($n^3$), so overall the worst case number of states in the result will be O($n^k$), where $k$ is the number of processes fused. 
 
-In the particular case of @merge@, the implementation has two occurrences of the @push@ instruction. During fusion, the states for the consuming process are inlined at each occurrence of @push@. These states are legitimately different because at each occurence of @push@ the input channels of the merge process are in different channel states, and these channel states are included in the overall process state.
+In the particular case of @join@, the implementation has two occurrences of the @push@ instruction. During fusion, the states for the consuming process are inlined at each occurrence of @push@. These states are legitimately different because at each occurence of @push@ the input channels of the join process are in different channel states, and these channel states are included in the overall process state.
 
-
-
-\input{copy/03-body/02-process/figures/process-size.tex}
 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
@@ -509,5 +513,5 @@ But this is fairly minor, and the required changes are more or less mechanical a
 The real benefit is not having to read through Core programs, not having to guess whether fusion has worked or failed.
 If fusion succeeds, we know it has succeeded.
 If fusion fails, we know not just that it has failed, but \emph{where} it has failed.
-It is a lot easier to track down the failure.
+This makes it a lot easier to track down performance issues due to non-fusion.
 

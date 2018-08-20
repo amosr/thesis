@@ -41,7 +41,7 @@ filterMaxFolderol l ps = do
 \end{lstlisting}
 
 \begin{lstlisting}[float,label=l:a:bench:filterMaxHand,caption=Hand-fused implementation of filterMax]
-filterMax l ps
+filterMaxHand l ps
  | Unbox.length ps == 0
  = return ((0,0), Unbox.empty)
  | otherwise = do
@@ -121,7 +121,7 @@ filterMaxConduitTwoPass l ps = do
 \end{lstlisting}
 
 \begin{lstlisting}[float,label=l:a:bench:filterMaxConduitOnePass,caption=Conduit one-pass (hand-fused) implementation of filterMax]
-filterMaxOnePass l ps = do
+filterMaxConduitOnePass l ps = do
   r      <- MUnbox.unsafeNew (Unbox.length ps)
   (a,ix) <- runConduit $ both r
   r'     <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix r
@@ -145,6 +145,34 @@ filterMaxOnePass l ps = do
         filterAndMax r ix p' d'
      Nothing -> do
       return ((x,y), ix)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxPipes,caption=Pipes implementation of filterMax]
+filterMaxPipes l ps = do
+  r  <- MUnbox.unsafeNew (Unbox.length ps)
+  ix <- newIORef 0
+  pt <- newIORef (0,0)
+  P.runEffect (sourceVector ps        P.>->
+               annot                  P.>->
+               filterAndMax r ix pt 0 (0,0) (-1/0))
+  pt' <- readIORef pt
+  ix' <- readIORef ix
+  r'  <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix' r
+  return (pt', r')
+ where
+  annot = P.map (\p -> (p, distance p l))
+
+  filterAndMax !vecR !ixR !ptR !ix (!x,!y) !d1 = do
+    lift $ writeIORef ixR ix
+    lift $ writeIORef ptR (x,y)
+    (p2,d2) <- P.await
+    let (!p',!d') = if d1 > d2 then ((x,y),d1) else (p2,d2)
+    case d2 > 0 of
+     True -> do
+      lift $ MUnbox.unsafeWrite vecR ix p2
+      filterAndMax vecR ixR ptR (ix+1) p' d'
+     False -> do
+      filterAndMax vecR ixR ptR ix p' d'
 \end{lstlisting}
 
 \begin{lstlisting}[float,label=l:a:bench:filterMaxStreaming,caption=Streaming implementation of filterMax]
@@ -188,6 +216,291 @@ compressorVector ins = do
   let out     = Unbox.zipWith    (*)   mul     ins
   return out
 \end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:compressorLopFolderol,caption=Folderol implementation of compressor with low-pass]
+compressorLopFolderol :: Vector Double -> IO (Vector Double)
+compressorLopFolderol ins = do
+  (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
+    $$(fuse $ do
+        ins     <- source    [|sourceOfVector vecIns|]
+        lopped  <- postscanl [|lop20k     |] [|0|] ins
+        squares <- map       [|\x -> x * x|]       lopped
+        avg     <- postscanl [|lop        |] [|0|] squares
+        mul     <- map       [|clip       |]       avg
+        out     <- zipWith   [|(*)        |] mul   lopped
+        sink out             [|snkOut     |]$$)
+  return vecOut
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:compressorLopVector,caption=Vector implementation of compressor with low-pass]
+compressorLopVector :: Vector Double -> IO (Vector Double)
+compressorLopVector ins = do
+  let lopped  = Unbox.postscanl' lop20k 0 xs
+  let squares = Unbox.map (\x -> x * x) lopped
+  let avg     = Unbox.postscanl' expAvg 0 squares
+  let root    = Unbox.map clipRoot avg
+  let out     = Unbox.zipWith (*) root lopped
+  return out
+\end{lstlisting}
+
+\begin{lstlisting}[float,caption=Folderol implementation of append2]
+append2Folderol :: FilePath -> FilePath -> FilePath -> IO Int
+append2Folderol fpIn1 fpIn2 fpOut = do
+  (count,()) <- scalarIO $ \snkCount ->
+    $$(fuse $ do
+      in1   <- source [|sourceLinesOfFile fpIn1|]
+      in2   <- source [|sourceLinesOfFile fpIn2|]
+      aps   <- append in1 in2
+      count <- fold   [|\c _ -> c + 1|] [|0|] aps
+
+      sink count      [|snkCount               |]
+      sink aps        [|sinkFileOfLines fpOut  |]$$)
+  return count
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:append2Conduit,caption=Conduit implementation of append2]
+append2Conduit in1 in2 out =
+  C.runConduit (sources C..| sinks)
+ where
+  sources = sourceFile in1 >> sourceFile in2
+
+  sinks = do
+   (i,_) <- C.fuseBoth (counting 0) (sinkFile out)
+   return i
+
+  counting i = do
+   e <- C.await
+   case e of
+    Nothing   -> return i
+    Just v -> do
+     C.yield v
+     counting (i + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:append2Pipes,caption=Pipes implementation of append2]
+append2Pipes in1 in2 out = do
+  h  <- IO.openFile out IO.WriteMode
+  i  <- P.runEffect $ go h
+  IO.hClose h
+  return i
+ where
+  go h =
+   let ins  = sourceFile in1 >> sourceFile in2
+       ins' = counting ins 0
+       outs = sinkHandle h
+   in ins' P.>-> outs 
+
+  counting s i = do
+   e <- P.next s
+   case e of
+    Left _end -> return i
+    Right (v,s') -> do
+     P.yield v
+     counting s' (i + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:append2Hand,caption=Hand-fused implementation of append2]
+append2Hand in1 in2 out = do
+  f1 <- IO.openFile in1 IO.ReadMode
+  f2 <- IO.openFile in2 IO.ReadMode
+  h  <- IO.openFile out IO.WriteMode
+  i  <- go1 h f1 f2 0
+
+  IO.hClose f1
+  IO.hClose f2
+  IO.hClose h
+  return i
+ where
+  go1 h f1 f2 lns = do
+   f1' <- IO.hIsEOF f1
+   case f1' of
+    True -> go2 h f2 lns
+    False -> do
+     l <- Char8.hGetLine f1
+     Char8.hPutStrLn h l
+     go1 h f1 f2 (lns + 1)
+
+  go2 h f2 lns = do
+   f2' <- IO.hIsEOF f2
+   case f2' of
+    True -> return lns
+    False -> do
+     l <- Char8.hGetLine f2
+     Char8.hPutStrLn h l
+     go2 h f2 (lns + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:append2Streaming,caption=Streaming implementation of append2]
+append2Streaming in1 in2 out = do
+  sinkFile out $ go (sourceFile in1) (sourceFile in2)
+ where
+  go s1 s2 = S.store S.length_ $ (s1 >> s2)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:part2Folderol,caption=Folderol implementation of part2]
+part2Folderol :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
+part2Folderol fpIn1 fpOut1 fpOut2 = do
+  (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->
+    $$(fuse defaultFuseOptions $ do
+      in1       <- source    [|sourceLinesOfFile fpIn1|]
+      (o1s,o2s) <- partition [|\l -> length l `mod` 2 == 0|] in1
+
+      c1        <- fold      [|\c _ -> c + 1|] [|0|] o1s
+      c2        <- fold      [|\c _ -> c + 1|] [|0|] o2s
+
+      sink c1                [|snkC1                 |]
+      sink c2                [|snkC2                 |]
+      sink o1s               [|sinkFileOfLines fpOut1|]
+      sink o2s               [|sinkFileOfLines fpOut2|]$$)
+  return (c1, c2)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:part2Conduit,caption=Conduit implementation of part2]
+part2Conduit in1 out1 out2 =
+  C.runConduit (sources C..| sinks)
+ where
+  sources = sourceFile in1
+
+  sinks = do
+   h1 <- lift $ IO.openFile out1 IO.WriteMode
+   h2 <- lift $ IO.openFile out2 IO.WriteMode
+   ij <- go h1 h2 0 0
+   lift $ IO.hClose h1
+   lift $ IO.hClose h2
+   return ij
+
+
+  go h1 h2 !c1 !c2 = do
+   e <- C.await
+   case e of
+    Nothing   -> return (c1,c2)
+    Just v
+     | prd v -> do
+      lift $ Char8.hPutStrLn h1 v
+      go h1 h2 (c1 + 1) c2
+     | otherwise -> do
+      lift $ Char8.hPutStrLn h2 v
+      go h1 h2 c1 (c2 + 1)
+
+  prd l = ByteString.length l `mod` 2 == 0
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:part2Pipes,caption=Pipes implementation of part2]
+part2Pipes in1 out1 out2 = do
+  o1 <- IO.openFile out1 IO.WriteMode
+  o2 <- IO.openFile out2 IO.WriteMode
+  ref <- newIORef (0,0)
+  P.runEffect (sourceFile in1 P.>-> go ref o1 o2 0 0)
+  IO.hClose o1
+  IO.hClose o2
+  readIORef ref
+ where
+
+  go ref o1 o2 !c1 !c2 = do
+   lift $ writeIORef ref (c1, c2)
+   v <- P.await
+   case () of
+    _
+     | prd v -> do
+      lift $ Char8.hPutStrLn o1 v
+      go ref o1 o2 (c1 + 1) c2
+     | otherwise -> do
+      lift $ Char8.hPutStrLn o2 v
+      go ref o1 o2 c1 (c2 + 1)
+
+  prd l = ByteString.length l `mod` 2 == 0
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:part2Hand,caption=Hand implementation of part2]
+part2Hand in1 out1 out2 = do
+  f1 <- IO.openFile in1 IO.ReadMode
+  o1 <- IO.openFile out1 IO.WriteMode
+  o2 <- IO.openFile out2 IO.WriteMode
+  r <- go f1 o1 o2 0 0
+  IO.hClose f1
+  IO.hClose o1
+  IO.hClose o2
+  return r
+ where
+  go i1 o1 o2 c1 c2 = do
+   i1' <- IO.hIsEOF i1
+   case i1' of
+    True -> return (c1, c2)
+    False -> do
+     l <- Char8.hGetLine i1
+     case ByteString.length l `mod` 2 == 0 of
+      True  -> do
+        Char8.hPutStrLn o1 l
+        go i1 o1 o2 (c1 + 1) c2
+      False -> do
+        Char8.hPutStrLn o2 l
+        go i1 o1 o2 c1 (c2 + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:part2Streaming,caption=Streaming implementation of part2]
+part2Streaming in1 out1 out2 = do
+  (i S.:> j S.:> _)  <- go
+  return (i,j)
+ where
+  go
+   = into        prd  out1
+   $ into (not . prd) out2
+   $ S.copy
+   $ sourceFile in1
+
+  into p o i
+   = sinkFile o
+   $ S.store S.length
+   $ S.filter p i
+
+  prd l = ByteString.length l `mod` 2 == 0
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:partitionAppendFail,caption=Partition / append fusion failure]
+partitionAppendFailure :: Vector Int -> IO (Vector Int)
+partitionAppendFailure xs = do
+  (ys,()) <- vectorSize xs $ \snkYs ->
+    $$(fuse $ do
+        x0    <- source [|sourceOfVector xs|]
+        as    <- filter [|even             |] x0
+        bs    <- filter [|odd              |] x0
+        -- Failure: cannot fuse append with both filters
+        asbs  <- append as bs
+        sink asbs       [|snkYs            |]$$)
+  return ys
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:partitionAppend2Source,caption=Partition / append with two sources]
+partitionAppend2Source xs = do
+  (ys,()) <- vectorSize xs $ \snkYs ->
+    $$(fuse $ do
+        x0    <- source [|sourceOfVector xs|]
+        x1    <- source [|sourceOfVector xs|]
+        as    <- filter [|even             |] x0
+        bs    <- filter [|odd              |] x1
+        asbs  <- append as bs
+        sink asbs       [|snkYs            |]$$)
+  return ys
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:partitionAppend2Loop,caption=Partition / append with two loops]
+partitionAppend2Loop xs = do
+  (as,(bs,())) <- vectorSize xs $ \snkAs ->
+                  vectorSize xs $ \snkBs ->
+    $$(fuse $ do
+        x0      <- source    [|sourceOfVector xs|]
+        (as,bs) <- partition [|even             |] x0
+        sink as              [|snkAs            |]
+        sink bs              [|snkBs            |]$$)
+  (ys,()) <- vectorSize xs $ \snkYs ->
+    $$(fuse $ do
+        as'   <- source      [|sourceOfVector as|]
+        bs'   <- source      [|sourceOfVector bs|]
+        asbs  <- append as' bs'
+        sink asbs            [|snkYs            |]$$)
+  return ys
+\end{lstlisting}
+
 
 \begin{lstlisting}[float,label=l:a:bench:partitionAppendVector,caption=Vector implementations of partitionAppend]
 partitionAppendV2Loop :: Unbox.Vector Int -> IO (Unbox.Vector Int)

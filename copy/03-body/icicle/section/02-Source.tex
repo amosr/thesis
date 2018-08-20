@@ -96,7 +96,7 @@ Attempting to group by values of a type with an unbounded number of members, suc
 \subsection{Source Language}
 \label{icicle:s:IcicleSource}
 
-The grammar for Icicle is given in Figure~\ref{icicle:fig:source:grammar}.
+The grammar for Icicle is given in \cref{icicle:fig:source:grammar}.
 Value types $T$ include numbers, booleans and maps; some types such as @Real@ and @String@ are omitted.
 Modal types $\TauMode$ include the pure value types, and modalities associated with a value type.
 %% Review 3:
@@ -126,7 +126,7 @@ All queries in a top-level program process the same table.
 
 \input{copy/03-body/icicle/figures/Source-Type.tex}
 
-The typing rules for Icicle are given in Figure~\ref{icicle:fig:source:type:exp}.
+The typing rules for Icicle are given in \cref{icicle:fig:source:type:exp}.
 The judgment form $\Typecheck{\Gamma}{\mi{e}}{\TauMode}$ associates an expression $\mi{e}$ with its type $M$ under context $\Gamma$.
 The judgment form $\TypecheckP{\mi{p}}{\TauFun}$ associates a primitive with its function type $\TauFun$.
 The judgment form $\TypecheckApp{\TauFun}{\ov{\TauMode}}{\TauMode}$ is used to lift function application to modal types: a function type $\TauFun$ applied to a list of modal argument types $\ov{\TauMode}$ produces a result type and matching mode $\TauMode$.
@@ -153,7 +153,7 @@ Rule CheckFun builds the type of a user defined function, returning it as an ele
 \subsection{Evaluation}
 \input{copy/03-body/icicle/figures/Source-Eval.tex}
 
-Evaluation rules for Icicle are given in Figure~\ref{icicle:fig:source:eval}.
+Evaluation rules for Icicle are given in \cref{icicle:fig:source:eval}.
 Grammar $N$ defines the modes of evaluation, including pure computation.
 Grammar $\Sigma$ defines a heap containing stream values.
 Grammar $V'$ defines the results that can be produced by evaluation, depending on the mode:

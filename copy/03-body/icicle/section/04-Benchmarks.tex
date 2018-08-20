@@ -18,7 +18,7 @@ It computed 12 queries over each of 31 input tables, for 372 query evaluations i
 The R script took 15 hours to run and consisted of 3,566 lines of code.
 The replacement Icicle version is only 191 lines of code and takes seven minutes to run.
 
-The table in Figure~\ref{icicle:fig:bench:other} shows the throughput in megabytes per second.
+The graph in \cref{icicle:fig:bench:other} shows the throughput in megabytes per second.
 We compared the throughput of several programs over the same dataset:
 \begin{itemize}
 \item our original R implementation (R);
@@ -50,7 +50,7 @@ The R code is single threaded and would require at least 150 processors to reach
 
 \input{copy/03-body/icicle/figures/Bench-Queries.tex}
 
-Figure~\ref{icicle:fig:bench:queries} shows how the total read throughput scales as the number of fused queries is increased.
+\Cref{icicle:fig:bench:queries} shows how the total read throughput scales as the number of fused queries is increased.
 For each number of queries, we ran two versions of the fused result: one version that wrote the output to disk, and the other that piped the result to @/dev/null@.
 The graph shows the throughput of the disk version decreasing roughly linearly in the number of queries, while the version ignoring the output remains constant.
 This suggests that we are IO bound on the write side.

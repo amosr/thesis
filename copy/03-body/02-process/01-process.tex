@@ -95,8 +95,7 @@ Each process implements a logical \emph{operator} --- so we use ``operator'' whe
 
 
 \subsection{Fold combinator}
-\begin{figure}
-\begin{process}
+\begin{process}[float,caption=Process implementation of foldl,label=figs/procs/impl/foldl]
 foldl 
   = \ (k  : b -> a -> b) (z   : b) (j : b -> c)
       (sIn: Stream a)    (sOut: Stream b). 
@@ -114,9 +113,6 @@ foldl
                , F3 = close sOut       F4[]
                , F4 = exit } }
 \end{process}
-\caption{Process implementation of foldl}
-\label{figs/procs/impl/foldl}
-\end{figure}
 
 The definition of the @foldl@ combinator, used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \cref{figs/procs/impl/foldl}.
 The combinator is parameterised by the fold state update function (@k@) and the fold state initialisation (@z@).
@@ -151,8 +147,7 @@ The process terminates.
 
 \subsection{Map combinator}
 
-\begin{figure}
-\begin{process}
+\begin{process}[float,caption=Process implementation of map,label=figs/procs/impl/map]
 map 
   = \ (f  : a -> b)
       (sIn: Stream a) (sOut: Stream b). 
@@ -170,9 +165,6 @@ map
                , M3 = close sOut       M4[]
                , M4 = exit } }
 \end{process}
-\caption{Process implementation of map}
-\label{figs/procs/impl/map}
-\end{figure}
 
 The definition of the @map@ combinator, which applies a worker function to every element in the input stream, is given in \cref{figs/procs/impl/map}.
 The combinator is parameterised by the worker function (@f@), and takes one input stream (@sIn@) and produces one output stream (@sOut@).
@@ -437,8 +429,7 @@ Note that although the result process has a single shared heap, the heap binding
 
 
 
-\begin{figure}
-\begin{lstlisting}[language=process,linebackgroundcolor={
+\begin{lstlisting}[language=process,float,caption={Fusion of \colorbox{procFst}{timeprices} and \colorbox{procSnd}{regression}, along with \colorbox{procCommon}{shared} instructions and variables},label=figs/procs/instance/fused-timeprices-regression,linebackgroundcolor={
   \hilineFst{2}
   \hilineFst{3}
   \hilineSnd{4}
@@ -499,14 +490,10 @@ process -- \colorbox{procFst}{map tp\_f stock timeprices} / \colorbox{procSnd}{f
  -- \FuTiReLa{M4}{F4}{closed}; (LocalExit)
  } }
 \end{lstlisting}
-\caption{Fusion of \colorbox{procFst}{timeprices} and \colorbox{procSnd}{regression}, along with \colorbox{procCommon}{shared} instructions and variables. }
-\label{figs/procs/instance/fused-timeprices-regression}
-\end{figure}
 
 \subsection{Join combinator}
 
-\begin{figure}
-\begin{process}
+\begin{process}[float,caption=Process implementation of join,label=figs/procs/impl/join]
 join 
   = \ (cmp : a -> b -> Ordering)
       (sA  : Stream a) (sB : Stream b)
@@ -550,9 +537,6 @@ join
                , EX0 = close sOut       EX1[]
                , EX1 = exit } }
 \end{process}
-\caption{Process implementation of join}
-\label{figs/procs/impl/join}
-\end{figure}
 
 To implement the whole @priceAnalyses@ process network, we also need the @join@ combinator, which pairs together the elements of two sorted input streams.
 The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
@@ -751,6 +735,9 @@ We also associate each label with a precondition, which is expressed as a predic
 The precondition for the initial label must be true for the initial evaluation state.
 Whenever the program takes an evaluation step, assuming the precondition for the original label was satisfied at the start of the step, the precondition for the result label must be satisfied by the updated evaluation state.
 With these two conditions satisfied, we can show that all evaluations respect the preconditions by performing induction over the evaluation relation.
+
+The proof itself is not novel, except for the fact that it is mechanised.
+We believe that the proof gives sufficient confidence in the correctness of the presentation given earlier, despite the differences in formulation.
 
 % To prove soundness of fusion, we assert the invariant that defines how evaluation of the fused program relates to evaluation of the two original programs. 
 % For the fused process, the precondition is that, when the fused process evaluates to a particular evaluation state, then each original process must

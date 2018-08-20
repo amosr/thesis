@@ -6,13 +6,23 @@ This chapter shows benchmark results for fused programs and the result size of f
 
 \section{Benchmarks}
 
-For the benchmarks, I use the Folderol Template Haskell implementation described in \cref{chapter:process:implementation}.
+To benchmark our algorithm, we have implemented the fusion algorithm described in \cref{chapter:process:processes}, in a library called \emph{Folderol}\footnote{\url{https://github.com/amosr/folderol}}.
+% Folderol is a Haskell implementation of the fusion algorithm described in the previous chapter (\cref{chapter:process:processes}).
+This fusion system uses the topology of the entire process network to perform fusion.
+When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
+This coordination between all consumers means the fusion algorithm requires global knowledge of the process network.
+In contrast, shortcut fusion systems such as \cite{gill1993short} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
+In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
+This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
+To fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
+
+% For the benchmarks, I use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
 I present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
 The benchmarks are comparing with the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
 
 The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
-It is the \emph{de facto} standard for array programming in Haskell.
+It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion known as \emph{stream fusion} \citep{coutts2007stream}.
 While the fusion is pull-based, splits can still be expressed in the program.
 When splits are present, they act as fusion barriers, requiring streams to be manifested as in-memory arrays.
 Vector also provides no guarantees about whether fusion will occur: it makes its best effort, but the easiest way to tell whether fusion has occurred is to look at the generated program.
@@ -20,12 +30,12 @@ We could benchmark the program to see whether it is ``fast enough'', but if we d
 After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
 
 % \TODO{Move elsewhere.}
-The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
-Vector has a minor problem with monadic actions, but this is an implementation detail that could probably be ignored.
-Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
-Instead, the current implementation runs all of the stream's actions, collecting the result in a list, and only constructs the vector after the stream has finished.
-This way, the effects do not need to be interleaved.
-It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
+% The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
+% Vector has a minor problem with monadic actions, but this is an implementation detail that could probably be ignored.
+% Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
+% Instead, the current implementation runs all of the stream's actions, collecting the result in a list, and only constructs the vector after the stream has finished.
+% This way, the effects do not need to be interleaved.
+% It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
 
 The three Haskell streaming libraries, `Conduit', `Pipes', and `Streaming', have a limited API that ensures that any computation can be run with only bounded buffers.
@@ -35,7 +45,7 @@ These libraries also have a monadic interface, which allows the structure of the
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
 % Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
 Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
-In Vector/stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into both step function and state.
+In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into both step function and state.
 The step function is completely static, and so can be optimised etc, but the state changes dynamically.
 In contrast, in Pipes/Conduit, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside a constructor inside a monadic operation.
 
@@ -75,7 +85,7 @@ filterMaxFolderol l ps = do
 
 \Cref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
 The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
-As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to remove the need to dynamically grow the vector (\cref{s:implementation:sizehints}).
+As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to remove the need to dynamically grow the vector. % (\cref{s:implementation:sizehints}).
 The Template Haskell splice calls @fuse@ to convert the process network into executable code.
 The process network starts by converting the input vector @pts@ to a stream @ins@.
 We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.

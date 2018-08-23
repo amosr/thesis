@@ -502,8 +502,8 @@ This inversion of pull streams results in a fundamental difference in how we pro
 
 Although we use a slightly different representation, the push streams described here are analogous to the \emph{sinks} described in \citet{bernardy2015duality} and \citet{lippmeier2016polarized}.
 In this thesis, we use the push/pull terminology of \citet{kay2009you}.
-However, the `push' in `push streams' is different from the `push' in the `\emph{push model}' used for database execution, as described in \citet{neumann2011efficiently}.
-In the Neumann push model, a stream producer is represented as a continuation which takes a sink to push values into.
+However, the `push' in `push streams' is different from the `push' in the `push model' used for database execution, as described in \citet{neumann2011efficiently}.
+In the \emph{Neumann push model}, a stream producer is represented as a continuation which takes a sink to push values into.
 Once the consumer provides a sink, the producer repeatedly pushes all its values to the provided sink.
 The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
 % Push arrays can be represented as a continuation which receives a push stream as an argument, and are useful for optimising code-generation for append operations.
@@ -1035,7 +1035,7 @@ Kahn process networks with bounded channels still compute results deterministica
 There are dynamic algorithms to identify artificial deadlocks at runtime and resolve them by increasing buffer sizes \cite{parks1995bounded,geilen2003requirements}.
 
 
-\begin{haskell}[caption=Types and combinators for Kahn process networks,label=figs/kpn/combinators]
+\begin{haskell}[float,caption=Types and combinators for Kahn process networks,label=figs/kpn/combinators]
 data Channel a
 
 data Network a
@@ -1067,7 +1067,7 @@ The @execute@ function takes a process network description containing the result
 
 
 
-\begin{haskell}[caption=Implementations of priceAnalyses queries as a Kahn process network,label=figs/kpn/impl/priceAnalyses]
+\begin{haskell}[float,caption=Implementations of priceAnalyses queries as a Kahn process network,label=figs/kpn/impl/priceAnalyses]
 correlation :: Channel (Double,Double) -> Network (Result Double)
 regression  :: Channel (Double,Double) -> Network (Result Line)
 

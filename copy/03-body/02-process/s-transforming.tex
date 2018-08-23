@@ -312,22 +312,7 @@ If we take the @append3@ example and replace the append processes with @zip@ pro
 
 We propose to solve this in future work by modifying the fusion algorithm to be commutative and associative.
 These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
-
-The fusion algorithm is not commutative because when two processes are trying to execute instructions which could occur in either order, the algorithm must choose only one instruction.
-Fusion commits too early to a particular interleaving, when there are multiple interleavings that would work.
-By explicitly introducing non-determinism in the fused process, we can represent all possible interleavings, and do not have to commit to one too early.
-We are moving the non-determinism from the order in which fusion occurs, and reifying it in the process itself.
-
-Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.
-Different orders will not affect the result, or whether things fuse.
-Different orders do affect the size of the intermediate process, before all processes are fused together.
-Fusing two unrelated processes which read from different streams introduces a lot of non-determinism: at each step of the fused process, either of the original processes can take a step.
-The two processes do not constrain each other and the result process will have a lot of states.
-Fusing related processes, for example a producer and a consumer, introduce less non-determinism because there are points when only one of the processes can run.
-When the consumer is waiting for a value, only the producer can run.
-Generally, fusing related processes will produce a smaller process than fusing unrelated processes.
-The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
-Larger intermediate programs generally take longer to compile, so some heuristic order which fuses related processes is likely to be useful, even if the order does not affect the result.
+We discuss this in \cref{related/future}.
 
 
 % \subsection{Fusing a pair of processes}

@@ -1,0 +1,48 @@
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock [texlbl="\Hs/stock/"];
+  index [texlbl="\Hs/index/"];
+
+  stock_dup_ioi [texlbl="\Hs/dup_ioi/"];
+
+  index -> pom_join[style="*-*"];
+  stock -> stock_dup_ioi[style="*-*"];
+  stock_dup_ioi -> pom_join[style="*-*"];
+  stock_dup_ioi -> pot_tps[style="o-o"];
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_priceOverTime  {
+    lblstyle="right";
+    texlbl="\Hs/priceOverTime/";
+    pot_tps [texlbl="\Hs/map_o/"];
+    pot_dup_ooo [texlbl="\Hs/dup_ooo/"];
+    pot_cor [texlbl="\Hs/correlation_o/"];
+    pot_reg [texlbl="\Hs/regression_o/"];
+    pot_tps -> pot_dup_ooo[style="o-o"];
+    pot_dup_ooo -> pot_cor[style="o-o"];
+    pot_dup_ooo -> pot_reg[style="o-o"];
+  };
+
+  subgraph cluster_priceAgainstMarket {
+    lblstyle="left";
+    texlbl="\Hs/priceOverMarket/";
+    pom_join [texlbl="\Hs/join_ii/"];
+    pom_price [texlbl="\Hs/map_i/"];
+    pom_dup_ioi [texlbl="\Hs/dup_ioi/"];
+    pom_cor [texlbl="\Hs/correlation_i/"];
+    pom_reg [texlbl="\Hs/regression_o/"];
+    pom_join -> pom_price[style="*-*"];
+    pom_price -> pom_dup_ioi[style="*-*"];
+    pom_dup_ioi -> pom_cor[style="*-*"];
+    pom_dup_ioi -> pom_reg[style="o-o"];
+  };
+}
+\end{dot2tex}
+\caption[Polarised dependency graph for queries priceOverTime and priceOverMarket]{polarised dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
+\label{figs/polar/priceOverTime-priceOverMarket}
+\end{figure}
+

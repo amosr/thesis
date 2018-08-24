@@ -19,7 +19,7 @@ The type system of Icicle guarantees that well-typed query programs have the sam
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 
 However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams, and in some circumstances appending streams, as we shall see in \cref{taxonomy/push}.
-Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant overhead.
+As an alternative to push streams, Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant runtime overhead.
 In \cref{s:Fusion} we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
 This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and synchronised product of processes (\cref{related/synchronised-product}), which is generally used as a proof technique rather than an optimisation.

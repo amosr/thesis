@@ -6,41 +6,40 @@
 % Hide the label on the second graph
 	ylabel=Runtime (s),
 	xlabel=Chunk size (log elements),
-  ymin=0, ymax=5,
-  xmin=0, xmax=6,
+  ymin=0, ymax=2.6,
+  xmin=1, xmax=6,
   filter discard warning=false,
   xtick=data,
     width=15cm, height=9.0cm,
-    legend style={at={(0.5,-0.2)},anchor=north, legend columns=5}
+    legend style={at={(0.5,-0.2)},anchor=north, legend columns=7}
 ]
 
-\newcommand\ppplot[1] {
-  \addplot+[
-          x filter/.expression={
-              \thisrow{CPU} == #1 ? x : nan
-          },
+\newcommand\ppplot[2] {
+  \addplot+[#2,
         error bars/.cd,
         y dir=both,
         y explicit,
       ] table[
-        x expr=log10 \thisrow{Chunk},
+        x expr=log10 \thisrow{Name},
         y expr=\thisrow{Mean},
         y error plus expr=(\thisrow{MeanUB}-\thisrow{Mean}),
         y error minus expr=(\thisrow{Mean}-\thisrow{MeanLB}),
         col sep=comma,
-      ]{figs/runtime/gold-panning.csv};
+      ]{figs/runtime/out-#1.csv};
 }
-\ppplot{0}
-\ppplot{1}
-\ppplot{2}
-\ppplot{4}
-\ppplot{8}
+\ppplot{unfused-1}{}
+\ppplot{unfused-2}{}
+\ppplot{unfused-4}{}
+\ppplot{unfused-8}{}
+\ppplot{fused}{dashed}
+\ppplot{pipes}{}
+\ppplot{streaming}{}
 
-\legend{Fused, 1 CPU, 2 CPUs, 4 CPUs, 8 CPUs};
+\legend{KPN 1 CPU, 2 CPUs, 4 CPUs, 8 CPUs, Folderol, Pipes, Streaming};
 \end{axis}
 \end{tikzpicture}
 
-\caption{Runtime performance for concurrent execution of two queries, compared to a fused sequential implementation [REF: move to benchmarks]}
+\caption{Runtime performance for concurrent execution of two queries, compared to a fused sequential implementation}
 \label{fig:runtime:gold-panning}
 \end{figure}
 

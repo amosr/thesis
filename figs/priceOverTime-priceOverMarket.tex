@@ -1,0 +1,44 @@
+\begin{figure}[h]
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock [texlbl="\Hs/stock/"];
+  index [texlbl="\Hs/index/"];
+
+  stock -> pom_join;
+  index -> pom_join;
+  stock -> pot_tps;
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_priceOverTime  {
+    lblstyle="right";
+    texlbl="\Hs/priceOverTime/";
+    label="  priceOverTime";
+    pot_tps [texlbl="\Hs/timeprices/"];
+    pot_cor [texlbl="\Hs/correlation/"];
+    pot_reg [texlbl="\Hs/regression/"];
+    pot_tps -> pot_cor;
+    pot_tps -> pot_reg;
+  };
+
+  subgraph cluster_priceAgainstMarket {
+    lblstyle="left,xshift=0.2cm";
+    texlbl="\Hs/priceOverMarket/";
+    label="priceOverMarket";
+    pom_join [texlbl="\Hs/joined/"];
+    pom_price [texlbl="\Hs/prices/"];
+    pom_cor [texlbl="\Hs/correlation/"];
+    pom_reg [texlbl="\Hs/regression/"];
+    pom_join -> pom_price;
+    pom_price -> pom_cor;
+    pom_price -> pom_reg;
+  };
+}
+\end{dot2tex}
+\caption{Dependency graph for queries \Hs/priceOverTime/ and \Hs/priceOverMarket/}
+\label{figs/procs/priceOverTime-priceOverMarket}
+\end{figure}
+
+

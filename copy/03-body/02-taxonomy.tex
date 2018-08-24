@@ -5,7 +5,7 @@ In this thesis we write queries as \emph{streaming programs} so that we may quer
 Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and need only store a limited number of elements at a time as local state.
 A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read a particular index.
 These restrictions mean that a streaming program cannot, for example, sort all the input data in a single pass, because single-pass sorting requires storing all the elements in memory.
-The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- regardless of how large the input stream is.
+The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- no matter how large the input stream is.
 In general, input streams may be infinite; in this thesis we focus on finite streams.
 
 % With just this definition one could go and write a streaming program in more or less any language with input-output facilities.
@@ -38,7 +38,7 @@ Throughout the thesis, we will refer back to this example as \emph{gold panning}
 
 Suppose we have a file containing the historical prices for a particular corporate stock.
 The file contains many records; each record contains a date and the average price for that day, and all the records in the file are sorted chronologically.
-The records are stored on-disk in comma-separated values (CSV) format, and represented in memory by the following Haskell datatype:
+The records are stored on-disk in comma-separated values (CSV) format, and are represented in memory by the following Haskell datatype:
 
 \begin{haskell}
 data Record = Record
@@ -54,34 +54,7 @@ Fortunately, we can use a statistical tool called the \emph{Pearson correlation 
 The Pearson correlation coefficient is defined as the covariance of price with time, divided by the product of the standard deviation of price and the standard deviation of time.
 We can also define the Pearson correlation coefficient geometrically: it is the cosine of the angle between the regression line of price over time, and the regression line of time over price.
 
-\input{figs/stock.tex}
-
-\Cref{fig:stock:it:stock-over-time} shows the fluctuations of the example stock's price over a year, along with the regression line of price over time in red, and the regression line of time over price in blue.
-The stock price is far from a perfect line, but does show a clear upwards trend.
-% The correlation coefficient is a scalar ranging from negative one to positive one.
-In this graph, the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are, and the `straighter' the relationship is.
-The angle here corresponds to a correlation of $0.94$, in a range from negative one to positive one.
-
-% We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
-% The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
-% When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
-
-We can implement a one-pass correlation algorithm, and although the details are quite complicated, we can express it as a fold over a list.
-The fold uses an initial state, \Hs/correlation_z/, and for each element updates the state with a worker function \Hs/correlation_k/.
-The one-pass correlation algorithm keeps track of the running means, among other things, in order to compute the correlation.
-As such, the fold state contains more than just the correlation.
-After the fold has completed we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
-
-\begin{haskell}
-correlation :: [(Double,Double)] -> Double
-correlation = correlation_x (foldl correlation_k correlation_z)
-
-type State = (Double, Double, Double, Double, Double, Double)
-correlation_z :: State
-correlation_k :: State -> (Double,Double) -> State
-correlation_x :: State -> Double
-\end{haskell}
-
+\input{figs/stock-a.tex}
 \begin{haskell}[float,label=figs/impl/correlation,caption=One-pass correlation implementation]
 type State = (Double, Double, Double, Double, Double, Double)
 
@@ -111,15 +84,45 @@ correlation_x (mx, my, sd, sdX, sdY, n) =
   in covariance / (stddevX * stddevY)
 \end{haskell}
 
-\Cref{figs/impl/correlation} contains the implementations of the fold worker functions \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
+
+\Cref{fig:stock:it:stock-over-time} shows the fluctuations of the example stock's price over a year, along with the regression line of price over time in red, and the regression line of time over price in blue.
+The stock price is far from a perfect line, but does show a clear upwards trend.
+% The correlation coefficient is a scalar ranging from negative one to positive one.
+In this graph, the correlation is represented by the angle between the red and blue regression lines; the smaller the angle between the two regression lines, the more closely correlated the two are, and the `straighter' the relationship is.
+The angle here corresponds to a correlation of $0.94$, in a range from negative one to positive one.
+
+% We can roughly quantify whether or not price increases over time by computing the Pearson correlation coefficient of the two.
+% The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
+% When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
+
+We can implement a one-pass correlation algorithm, and although the details are quite complicated, we can express it as a fold over a list.
+The fold uses an initial state, \Hs/correlation_z/, and for each element updates the state with a worker function \Hs/correlation_k/.
+The one-pass correlation algorithm keeps track of the running means and standard deviations of both axes, which are used to compute the correlation.
+As such, the fold state contains more than just the correlation.
+After the fold has completed we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
+
+\begin{haskell}
+correlation :: [(Double,Double)] -> Double
+correlation = correlation_x (foldl correlation_k correlation_z)
+
+type State = (Double, Double, Double, Double, Double, Double)
+correlation_z :: State
+correlation_k :: State -> (Double,Double) -> State
+correlation_x :: State -> Double
+\end{haskell}
+
+\Cref{figs/impl/correlation} contains the implementations of the fold worker functions for computing the correlation: \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
+
 We can implement a function to compute the regression similarly; we omit the definitions of the regression worker functions.
+The definition of the fold uses the fold worker functions \Hs/regression_x/ for extracting the final result, \Hs/regression_z/ for the initial state, and \Hs/regression_k/ to update the state for every input element:
 
 \begin{haskell}
 regression :: [(Double,Double)] -> Line
 regression = regression_x (foldl regression_k regression_z)
 \end{haskell}
 
-Now that we have functions to compute the linear regression and the correlation, we can combine them together with the following program:
+Now that we have functions to compute the linear regression and the correlation, we can compute both at the same time.
+The following program returns a pair containing the correlation and regression:
 
 \begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
@@ -140,8 +143,12 @@ We are interested in comparing against the rest of the market as well.
 To compare against the rest of the market, we have another file of records containing the average price of a representative subset of stocks.
 This representative subset is called a \emph{market index}.
 We want to compare each day's price for our stock against the average price for the corresponding day in the index.
-\Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price compared to the index price.
+
+\input{figs/stock-bc.tex}
+
+\Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price from \cref{fig:stock:it:stock-over-time} compared to the index price.
 We can see in the comparison of stock price to index price that the stock has grown faster than the index.
+
 
 We can compute the comparison of stock over market with the following program:
 
@@ -157,8 +164,9 @@ To match day against day and discard any days missing from either input, we join
 We then extract both prices from the joined result and compute the regression and correlation.
 Again, this function requires two traversals of the \Hs/prices/ list.
 
-Since both analyses provide useful information, we will perform both.
-This is a simple matter of constructing a pair.
+Since both of the analyses we wrote, \Hs/priceOverTime/ and \Hs/priceOverMarket/, provide useful information, we will perform both.
+It is just as easy to combine these queries together as it was to compute both the correlation and the regression.
+The following program computes both:
 
 \begin{haskell}
 priceAnalyses :: [Record] -> [Record] -> ((Line, Double), (Line, Double))
@@ -168,6 +176,8 @@ priceAnalyses stock index =
   in (pot, pom)
 \end{haskell}
 
+\input{figs/priceOverTime-priceOverMarket.tex}
+
 \Cref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
 The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
 The edges are dependencies from one value to another; \Hs/joined/ is computed by joining together the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to \Hs/joined/.
@@ -175,48 +185,8 @@ The large boxes bisecting most of the nodes denote which nodes are defined insid
 This dependency graph is a directed acyclic graph: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
 Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.
 
-Although a sequential evaluation of this program requires multiple traversals of the input, we \emph{can} rewrite it as a single-pass streaming program.
+Although a sequential evaluation of this program requires multiple traversals of the input, we \emph{can} rewrite it to be a single-pass streaming program.
 Our choice of streaming model dictates how difficult this rewrite will be.
-
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock; index;
-
-  stock -> pom_join;
-  index -> pom_join;
-  stock -> pot_tps;
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_priceOverTime  {
-    lblstyle="right";
-    label="priceOverTime";
-    pot_tps [label="timeprices"];
-    pot_cor [label="correlation"];
-    pot_reg [label="regression"];
-    pot_tps -> pot_cor;
-    pot_tps -> pot_reg;
-  };
-
-  subgraph cluster_priceAgainstMarket {
-    lblstyle="left";
-    label="priceOverMarket";
-    pom_join [label="joined"];
-    pom_price [label="prices"];
-    pom_cor [label="correlation"];
-    pom_reg [label="regression"];
-    pom_join -> pom_price;
-    pom_price -> pom_cor;
-    pom_price -> pom_reg;
-  };
-}
-\end{dot2tex}
-\caption{Dependency graph for queries priceOverTime and priceOverMarket}
-\label{figs/procs/priceOverTime-priceOverMarket}
-\end{figure}
 
 \section{Pull streams}
 \label{taxonomy/pull}
@@ -230,7 +200,7 @@ Since the stream might want to read from a file or update some local state, the 
 data Pull a = Pull (IO (Maybe a))
 \end{haskell}
 
-With this stream representation we can implement analogues of the list combinators used in the example queries.
+With this stream representation, we can implement analogues of the list combinators used in the example queries.
 We can map a function over a pull stream like so:
 
 \begin{haskell}
@@ -267,7 +237,7 @@ This implementation of \Hs/foldl/ calls the local function \Hs/loop/ with the in
 The \Hs/loop/ function repeatedly pulls from the pull function, \Hs/pull_a/, updating the state for every element.
 
 Consuming a stream is an effectful operation.
-Because every time we call the pull function we get the next element, the pull function must somehow keep track of which value it is up to.
+Every time we call the pull function we get the next element, which means the pull function must somehow keep track of which value it is up to.
 For example, a pull function which reads from a file holds a file-handle, which in turn references some mutable state about the file offset.
 Every time we read from the file, the file offset is incremented.
 If two consumers were to ask the same pull function for the next input one after another, they would get different elements of the stream.
@@ -297,7 +267,7 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
 
 
 \Cref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
-The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions.
+The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions, using the pull implementation of \Hs/foldl/.
 
 The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
 Both input streams are sorted by some key, which the comparison function extracts and compares.
@@ -325,7 +295,7 @@ Computing the regression pulls all the values from the \Hs/timeprices/ stream an
 After computing the regression, the program computes the correlation of the same input stream.
 When the correlation tries to read the \Hs/timeprices/ stream again, the stream has already been exhausted.
 For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
-In fact, in \cref{taxonomy/polarised} we shall see that some streaming models are more strict and require that streams are used exactly once (\emph{linearly}).
+In fact, in \cref{taxonomy/polarised} we shall see a streaming model which is more strict and requires that streams are used exactly once (\emph{linearly}).
 
 Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
 When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
@@ -458,7 +428,7 @@ map2 f g (Pull pull_a) = Pull pull_c
 
 By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
 Optimising compilers perform similar transforms as part of their suite of general purpose optimisations.
-In this representation, the @filter@ combinator is expressed as a recursive function, which makes it harder to inline the definition and remove the overhead.
+In the pull stream representation used here, the @filter@ combinator is expressed as a recursive function, which makes it harder to inline the definition and remove the overhead.
 In \cref{related/fusion} we discuss more sophisticated representations; for example in the Stream Fusion~\cite{coutts2007stream} representation, @filter@ is defined non-recursively to assist inlining.
 These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described above; the same set of combinators can be implemented with the same asymptotic space and time behaviour and improved constant factors.
 
@@ -470,6 +440,7 @@ These more sophisticated representations of pull streams do not afford extra exp
 
 \emph{Push streams} are the conceptual dual of pull streams: rather than the consumer trying to pull from the producer, in push streams the producer pushes to the consumer.
 As we shall see, the advantage of push streams is that they enable stream elements to be shared among multiple consumers: a producer can push the same value to multiple consumers.
+This sharing of elements makes it easier to perform multiple queries over the same input stream.
 
 A push stream is a function which accepts a (\Hs/Maybe a/) and performs some \Hs/IO/ effect, for example writing to a file, or writing to some mutable state.
 This could be represented by the type (\Hs/Maybe a -> IO ()/), which is the dual of the pull stream (\Hs/IO (Maybe a)/).
@@ -540,7 +511,7 @@ map_result r_to_r' push_a = Push (push push_a) done_a'
 
 The type of \Hs/foldl/ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
 The return value is in \Hs/IO/ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
-As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold.
+As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold:
 
 \begin{haskell}
 foldl :: (b -> a -> b) -> b -> IO (Push a b)
@@ -655,7 +626,7 @@ We extend the pull stream representation so that instead of returning a @Maybe@ 
 data PullResult a r = PullResult (IO (Either a r))
 \end{haskell}
 
-With this extended pull stream representation, we can implement a version of @dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together.
+With this extended pull stream representation, we can implement a version of @dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together:
 
 \begin{haskell}
 dup_ioi :: PullResult a r -> Push a r' -> PullResult a (r,r')
@@ -676,7 +647,7 @@ dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
 Modifying @dup_ioi_ignore_result@ to work on the new representation only required changing the constructors for the stream and adding the return value; other combinators are modified similarly.
 We use the same naming convention for suffixes, for example @map_i@ for mapping pull streams, and @map_o@ for contravariantly mapping push streams.
 When consuming a pull stream by folding over it, we return the fold result as well as the stream result.
-The type signature for @foldl_i@ changes to include the stream result; the implementation change is similar to the change for @dup_ioi@.
+The type signature for @foldl_i@ changes to include the stream result; the implementation change is similar to the change for @dup_ioi@:
 
 \begin{haskell}
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
@@ -684,7 +655,7 @@ foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
 
 We can also convert a pull stream to a push stream: we call this operation \emph{draining} the pull stream.
 To drain a stream, we loop over all the values in the pull stream and push each one into the push stream.
-At the end, we return a pair of the results of both streams.
+At the end, we return a pair of the results of both streams:
 
 \begin{haskell}
 drain_io :: Pull a r -> Push a r' -> IO (r, r')
@@ -700,7 +671,7 @@ drain_io (Pull pull_a) push_a = loop
       return (r, r')
 \end{haskell}
 
-We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@.
+We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@:
 
 \begin{haskell}
 dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
@@ -714,7 +685,7 @@ Recall that the @join@ combinator required both inputs to be pull streams, and c
 With the polarised naming convection, this version of @join@ is called @join_iii@.
 Because the input streams have result values, we ensure that the joined stream's result contains the results of both inputs.
 To compute both results, when one stream ends before the other we drain the unfinished stream until we reach the result.
-Other than this draining, the implementation of @join_iii@ follows the implementation of @join@.
+Other than this draining, the implementation of @join_iii@ follows the implementation of @join@:
 
 \begin{haskell}
 join_iii :: (a -> b -> Ordering)
@@ -748,7 +719,7 @@ join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
 We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
 Conceptually, this combinator has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
 The definition for @join_ioo@ follows.
-The output push stream is given as an argument while the input push stream is the return value.
+The output push stream is given as an argument while the input push stream is the return value:
 
 \begin{haskell}
 join_ioo :: (a -> b -> Ordering)
@@ -788,65 +759,22 @@ The polarity of each stream is depicted as a filled or unfilled circle.
 Filled circles $\bullet$ represent pull streams because they always contain the next value or the result.
 Unfilled circles $\circ$ represent push streams because they are a hole which values can be pushed into.
 
+\input{figs/polarity-pot-pom.tex}
+
 We begin by classifying both input streams as pull streams: we can convert pull streams into push streams but not vice versa.
 The @stock@ input stream is used twice, so at least one of the use-sites must be push.
 Since we were able to express @priceOverTime@ entirely as a push stream, we duplicate @stock@ into a push stream for @priceOverTime@ and a pull stream for @priceOverMarket@.
 For @priceOverMarket@, we can join both pull streams and map over it.
-To compute both regression and correlation, one of the folds must be a push; in this case either consumer can be pull or push and the decision is inconsequential.
+To compute both regression and correlation, one of the folds must be a push; in this case either consumer can be pull or push.
+The decision is inconsequential.
 There are many ways to assign polarities to this program, but they all compute the same result.
-
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock; index;
-  stock_dup_ioi [label="dup_ioi"];
-
-  index -> pom_join[style="*-*"];
-  stock -> stock_dup_ioi[style="*-*"];
-  stock_dup_ioi -> pom_join[style="*-*"];
-  stock_dup_ioi -> pot_tps[style="o-o"];
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_priceOverTime  {
-    lblstyle="right";
-    label="priceOverTime";
-    pot_tps [label="map_o"];
-    pot_dup_ooo [label="dup_ooo"];
-    pot_cor [label="correlation_o"];
-    pot_reg [label="regression_o"];
-    pot_tps -> pot_dup_ooo[style="o-o"];
-    pot_dup_ooo -> pot_cor[style="o-o"];
-    pot_dup_ooo -> pot_reg[style="o-o"];
-  };
-
-  subgraph cluster_priceAgainstMarket {
-    lblstyle="left";
-    label="priceOverMarket";
-    pom_join [label="join_ii"];
-    pom_price [label="map_i"];
-    pom_dup_ioi [label="dup_ioi"];
-    pom_cor [label="correlation_i"];
-    pom_reg [label="regression_o"];
-    pom_join -> pom_price[style="*-*"];
-    pom_price -> pom_dup_ioi[style="*-*"];
-    pom_dup_ioi -> pom_cor[style="*-*"];
-    pom_dup_ioi -> pom_reg[style="o-o"];
-  };
-}
-\end{dot2tex}
-\caption[Polarised dependency graph for queries priceOverTime and priceOverMarket]{polarised dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/.}
-\label{figs/polar/priceOverTime-priceOverMarket}
-\end{figure}
 
 \Cref{figs/impl/polar/priceOverTime-priceOverMarket} shows the implementation of this polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/.
 This streaming single-pass implementation requires more complex control-flow than the list version.
 Stream elements flow ``backwards'' from function result to argument in the places where push streams are used, and flow ``forwards'' where pull streams are used.
 When a pull stream is duplicated into a push stream, the stream results for the push stream are nested inside the resulting pull stream; recovering these results requires pattern-matching on the nested tuple.
 
-\begin{haskell}[float,caption=Polarised implementation of priceOverTime and priceOverMarket,label=figs/impl/polar/priceOverTime-priceOverMarket]
+\begin{haskell}[float,caption=Polarised implementation of \Hs/priceOverTime/ and \Hs/priceOverMarket/,label=figs/impl/polar/priceOverTime-priceOverMarket]
 priceOverTime_o :: IO (Push Record (Line,Double))
 priceOverTime_o = do
   pot_regres    <- regression_o
@@ -896,25 +824,26 @@ Which version is preferable depends on the situation, but the difference is usua
 digraph G {
   node [shape="none"];
   stock;
+  stock [texlbl="\Hs/stock/"];
   stock -> pot_dup[style="*-*"];
 
   graph [style="rounded corners"];
 
   subgraph cluster_priceOverTime  {
     lblstyle="left";
-    label="priceOverTime_c";
-    pot_dup [label="dup_ioi"];
-    pot_time [label="map_i time"];
-    pot_price [label="map_o price"];
+    texlbl="\Hs/priceOverTime_c/";
+    pot_dup [texlbl="\Hs/dup_ioi/"];
+    pot_time [texlbl="\Hs/map_i time/"];
+    pot_price [texlbl="\Hs/map_o price/"];
     pot_dup -> pot_time[style="*-*"];
     pot_dup -> pot_price[style="o-o"];
 
     subgraph cluster_correlation {
     // lblstyle="below=4cm";
       lblstyle="above";
-      label="correlation";
-      potc_zip [label="zip_ioo"];
-      pot_cor [label="foldl_o"];
+      texlbl="\Hs/correlation";
+      potc_zip [texlbl="\Hs/zip_ioo/"];
+      pot_cor [texlbl="\Hs/foldl_o/"];
       potc_zip -> pot_cor[style="o-o"];
     };
     pot_time -> potc_zip[style="*-*"];
@@ -922,11 +851,11 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption{Polarised dependency graph for priceOverTime correlation using zip}
+\caption{Polarised dependency graph for \Hs/priceOverTime/ correlation using \Hs/zip/}
 \label{figs/polar/correlation-zip}
 \end{figure}
 
-\begin{haskell}[float,caption=Polarised implementation of zip\_ioo,label=figs/polar/impl/zip_ioo]
+\begin{haskell}[float,caption=Polarised implementation of \Hs/zip\_ioo/,label=figs/polar/impl/zip_ioo]
 zip_ioo :: PullResult a r -> Push (a,b) r' -> Push b (r,r')
 zip_ioo (Pull pull_a) push_ab = Push push_b done_b
  where
@@ -947,7 +876,7 @@ zip_ioo (Pull pull_a) push_ab = Push push_b done_b
 
 With polarised streams, we cannot execute @priceOverTime@ with the pair-of-lists version, although we can assign polarities.
 \Cref{figs/polar/correlation-zip} shows a polarised graph for a version of @priceOverTime@ that only computes the correlation and uses zip.
-The @zip_ioo@ combinator is implemented in \cref{figs/polar/impl/zip_ioo} similarly to the @join_ioo@ combinator, with an input pull, an input push, and an output push.
+The @zip_ioo@ combinator, implemented in \cref{figs/polar/impl/zip_ioo}, is similar to the @join_ioo@ combinator; it has an input pull, an input push, and an output push.
 When the input push stream receives a value, @zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
 
 Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
@@ -956,7 +885,7 @@ With downward arrows for pull streams and upward arrows for push streams, there 
 This cycle complicates translating the graph to an implementation.
 
 The following incomplete implementation also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
-The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result.
+The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result:
 
 \begin{haskell}
 priceOverTime_c :: PullResult Record r -> IO (Double, r)
@@ -1022,10 +951,10 @@ Kahn process networks ensure deterministic results by imposing restrictions on h
 % The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels are written to by a single process, broadcasting each value to all consumers of the channel.
 All communication between processes is through first-in-first-out channels.
 Processes with shared mutable state can non-deterministically compute different results: if one process were reading from mutable state while another were writing a new value, the reading process may get the old value or new value, depending on how the processes were scheduled.
-Restricting all communication through channels outlaws processes from communicating via shared mutable state.
+Restricting all communication to go through channels outlaws processes from communicating via shared mutable state.
 Reading from channels is blocking: processes are not allowed to \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
 Channels are written to by a single process, broadcasting each value to all consumers of the channel.
-Only one process is allowed to push to a channel: if two processes tried to push to the same channel at the same time, the scheduler would have to decide the order the values were received.
+Only one process is allowed to push to a channel: if two processes were able to push to the same channel at the same time, the scheduler would have to decide the order the values were received.
 
 With Kahn process networks, we can implement a process which joins sorted streams by pulling from each input channel as in the @join@ combinator, and we can share streams among multiple consumers because pushed values are broadcast to each consumer.
 We can also convert both push streams and pull streams to processes.
@@ -1127,11 +1056,10 @@ From a functional programming perspective, small, fine-grained processes like th
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
 We can reduce the amount of communication by combining multiple connected processes together into one larger process.
 The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
-In \REF{kpn/fusion} we describe an algorithm to combine processes together to reduce overhead.
+In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
 For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
-A single process executes sequentially, removing any potential speedup from parallelism.
-Our benchmarks \REF{kpn/benchmarks} show that the sequential version is faster than the concurrent version executed on several processors.
-Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation requires to achieve similar performance~\cite{mcsherry2015scalability}.
+A single process executes sequentially; this removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version.
+Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation required to achieve similar performance~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}
 % "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."

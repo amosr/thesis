@@ -1058,7 +1058,7 @@ We can reduce the amount of communication by combining multiple connected proces
 The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
 In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
 For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
-A single process executes sequentially; this removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version.
+A single process executes sequentially; this removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
 Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation required to achieve similar performance~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}

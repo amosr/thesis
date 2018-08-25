@@ -1,6 +1,69 @@
 \chapter{Benchmark code}
 \label{app:Benchmarks}
 
+\begin{lstlisting}[float,caption=Folderol implementation of \Hs/priceAnalyses/,label=l:a:bench:priceAnalysesFolderol]
+priceAnalysesFolderol :: (FilePath,FilePath) -> IO (Double,Double)
+priceAnalysesFolderol (fpStock, fpMarket) = do
+  (pot,(pom,())) <- scalarIO $ \snkPOT -> scalarIO $ \snkPOM ->
+    $$(fuse $ do
+      stock  <- source [|sourceRecords fpStock|]
+      market <- source [|sourceRecords fpMarket|]
+      pot' <- priceOverTime   stock
+      pom' <- priceOverMarket stock market
+      sink pot' [|snkPOT|]
+      sink pom' [|snkPOM|])
+  return (pot,pom)
+
+priceOverTime stock = do
+  tp <- map [|\s -> (daysSinceEpoch (time s), price s)|] stock
+  Stats.regressionCorrelation tp
+
+priceOverMarket stock market = do
+  j  <- joinBy [|\s m -> time s `compare` time m|] stock market
+  pp <- map    [|\(s,m) -> (price s, price m)|] j
+  Stats.regressionCorrelation pp
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:priceAnalysesPipes,caption=Pipes two-pass implementation of \Hs/priceAnalyses/]
+priceAnalysesPipes (fpStock,fpMarket) =
+  (,) <$> priceOverTime fpStock <*> priceOverMarket fpStock fpMarket
+
+priceOverTime fpStock = 
+  Fold.purely P.fold Stats.regressionCorrelation $ go
+ where
+  go
+   = sourceRecords fpStock
+   P.>-> P.map (\s -> (daysSinceEpoch $ time s, cost s)) 
+
+priceOverMarket :: FilePath -> FilePath -> IO Double
+priceOverMarket fpStock fpMarket = 
+  Fold.purely P.fold Stats.regressionCorrelation $ go
+ where
+  go
+   = joinBy (\s m -> time s `compare` time m)
+        (sourceRecords fpStock)
+        (sourceRecords fpMarket)
+   P.>-> P.map (\(s,m) -> (cost s, cost m)) 
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:priceAnalysesStreaming,caption=Streaming implementation of \Hs/priceAnalyses/]
+priceAnalysesStreaming (fpStock,fpMarket) = do
+  (pom S.:> (pot S.:> (),_)) <- priceOverMarket
+      (S.store priceOverTime $ sourceRecords fpStock)
+      (sourceRecords fpMarket)
+  return (pot,pom)
+
+priceOverTime stock
+ = Fold.purely S.fold covariance
+ $ S.map (\s -> (daysSinceEpoch (time s), cost s)) stock
+
+priceOverMarket stock market
+ = Fold.purely S.fold covariance
+ $ S.map (\(s,m) -> (cost s, cost m))
+ $ joinBy (\s m -> time s `compare` time m)
+   stock market
+\end{lstlisting}
+
 \begin{lstlisting}[float,label=l:a:bench:quickhull,caption=Quickhull skeleton parameterised by filterMax and pivots]
 quickhull :: (Vector Point -> IO (Point,Point))
           -> (Line -> Vector Point -> IO (Point, Vector Point))
@@ -101,7 +164,7 @@ filterMaxVectorRecompute l ps
    in return (point, above)
 \end{lstlisting}
 
-\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitTwoPass,caption=Conduit 2-pass implementation of filterMax]
+\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitTwoPass,caption=Conduit two-pass implementation of filterMax]
 filterMaxConduitTwoPass l ps = do
   maxim <- runConduit cmaxim
   above <- runConduit cabove

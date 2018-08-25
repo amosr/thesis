@@ -18,8 +18,8 @@ To fuse the entire process network, as well as to inform the programmer when fus
 
 % For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
-We present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
-The benchmarks are comparing with the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
+As well as the ``gold-panning'' example from \cref{taxonomy/gold-panning}, we present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
+In the benchmarks, we compare Folderol variously against the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
 
 The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
 It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system known as \emph{stream fusion} \citep{coutts2007stream}.
@@ -41,8 +41,8 @@ After benchmarking, if we discover that fusion has not occurred, it is a complet
 % It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
 
-The three Haskell streaming libraries, `Conduit', `Pipes', and `Streaming', have a limited API that ensures that any computation can be run with only bounded buffers.
-These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
+The first two Haskell streaming libraries, `Conduit' and `Pipes', have a limited API that ensures that any computation can be run with only bounded buffers.
+These streaming libraries are pull-based, and do not naturally support multiple queries: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
@@ -50,7 +50,12 @@ If the function that computes the next step of the stream is hidden inside a mon
 Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
 In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into a static step function and a dynamic state.
 Vector's completely static step function can be optimised at compile-time, while the state can change dynamically.
-In contrast, in Pipes/Conduit, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside a constructor inside a monadic operation.
+In contrast, in Conduit and Pipes, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside the continuation for a monadic operation.
+
+The final streaming library, `Streaming', is similar to the the previous two in that it is a monadic streaming library with limited static fusion.
+Streaming does support explicit duplication of streams, in a similar way to polarised streams (\cref{taxonomy/polarised}).
+To duplicate the stream, the @store@ function takes a computation to perform on the copy of the stream, while the original stream is passed through.
+Operationally, this is equivalent to the \Hs/dup_ioi/, which duplicates a pull stream into a push stream and returns a new pull stream; however, the implementation encodes stream polarity with a monad transformer stack rather than directly using pull and push streams.
 
 
 
@@ -62,10 +67,67 @@ It can also collect statistics on allocations, which is sometimes (but not alway
 
 There are many implementations of the benchmark programs, but for the most part they all follow the same structure.
 Showing five different implementations of the same program is not that interesting.
-We show the implementations of the Folderol versions; the other versions are available in \cref{app:Benchmarks}.
+For the most part, we show only the implementations of the Folderol versions; the other versions are available in \cref{app:Benchmarks}.
 
 \subsection{Gold-panning}
+
+Our first benchmark is the @priceAnalyses@ example from \cref{taxonomy/gold-panning}.
+This example computes statistical analyses of a particular stock's price over time, as well as how the stock compares to a market index.
+
+\begin{haskell}[float,caption=Folderol implementation of \Hs/priceAnalyses/,label=l:bench:priceAnalysesFolderol]
+priceAnalysesFolderol :: (FilePath,FilePath) -> IO (Double,Double)
+priceAnalysesFolderol (fpStock, fpMarket) = do
+  (pot,(pom,())) <- scalarIO $ \snkPOT -> scalarIO $ \snkPOM ->
+    $$(fuse $ do
+      stock  <- source [|sourceRecords fpStock|]
+      market <- source [|sourceRecords fpMarket|]
+      pot' <- priceOverTime   stock
+      pom' <- priceOverMarket stock market
+      sink pot' [|snkPOT|]
+      sink pom' [|snkPOM|])
+  return (pot,pom)
+
+priceOverTime stock = do
+  tp <- map [|\s -> (daysSinceEpoch (time s), price s)|] stock
+  Stats.regressionCorrelation tp
+
+priceOverMarket stock market = do
+  j  <- joinBy [|\s m -> time s `compare` time m|] stock market
+  pp <- map    [|\(s,m) -> (price s, price m)|] j
+  Stats.regressionCorrelation pp
+\end{haskell}
+
+\Cref{l:bench:priceAnalysesFolderol} shows the Folderol implementation of @priceAnalyses@.
+The calls to \Hs@scalarIO@ indicate that the query returns two scalar variables that we wish to capture.
+The \Hs@fuse@ function converts the process network into executable code.
+The dollar-sign syntax around \Hs@fuse@ denotes a Template Haskell splice, which means that the call to \Hs@fuse@ is evaluated at compile-time, and returns code to execute at runtime.
+The \Hs@fuse@ function takes a process network constructed at compile-time, fuses the network into a single process, and generates code for the resulting process.
+In the call to \Hs@source@, the piped brackets around the argument \Hs@[|sourceRecords fpStock|]@ indicate a Template Haskell quasiquote; this is used by code executed at compile-time to delay execution until runtime.
+
+We use the same Folderol implementation to benchmark against concurrent execution of a Kahn process network.
+We disable fusion by replacing the call to \Hs@fuse@ with a function called \Hs@fuseWith@, which takes a set of fusion and code generation options.
+These options dictate whether to perform fusion, whether to automatically insert communication channels between each process, and if so what chunk size to use for channels.
+After inserting the communication channels, the concurrent version uses the same code generation backend as the fused version.
+
+For Pipes, which does not naturally support multiple queries, we implement a two-pass version which computes \Hs/priceOverTime/ and \Hs/priceOverMarket/ in separate loops over the input.
+The implementation is available in \cref{l:a:bench:priceAnalysesPipes}.
+
+For Streaming, we duplicate the stream explicitly to compute @priceOverTime@ as a push stream.
+The implementation is available in \cref{l:a:bench:priceAnalysesStreaming}.
+
 \input{figs/runtime/gold-panning.tex}
+
+\Cref{fig:runtime:gold-panning} shows the results of benchmarking the different implementations of \Hs/priceAnalyses/ over $10^6$ elements.
+We ran with different sizes of data ranging from $10^3$ to $10^8$ but do not show these additional values; the results for this size are representative of the relationship between the different implementations.
+We compare the concurrent execution of Kahn process networks (KPN) with one, two, four, and eight processors.
+For the concurrent executions, we vary the chunk size along the x axis, to try to find the best trade-off between memory usage and communication overhead.
+For the sequential implementations --- Folderol, Pipes, and Streaming --- the inter-process chunk size does not affect execution.
+
+Interpreting the results in \cref{fig:runtime:gold-panning}, we see that the fused Folderol implementation is the fastest.
+For multiple processors, a chunk size of one hundred appears to be ideal.
+For this example with only a few queries, there is a significant improvement between one and two processors, but little further improvement as more processors are added.
+With the ideal chunk size, the concurrent execution is 1.5 times faster than the Pipes implementation, and $3.7$ times slower than the fused version.
+
 
 \subsection{Quickhull}
 
@@ -167,7 +229,6 @@ Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 \end{table}
 
 \Cref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
-We ran with different sizes of data ranging from $10^3$ to $10^9$ but do not show it; the results for this size are representative of the relationship between the different implementations.
 The hand-fused version is the fastest, followed by Folderol.
 The Vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
 Intimate knowledge of shortcut fusion was required to find `recompute', the faster of the two vector benchmarks, and there is no indication in the source program, or from the compiler, that the two could not be fused together.
@@ -182,7 +243,7 @@ Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Con
 
 These streaming libraries are not usually used for array computations because of this overhead.
 In practice, one tends to `chunk' the data so that each element is an array of multiple elements: this reduces overhead paid for streaming.
-This chunking complicates the program further, again reducing the level of abstraction the programmer can work at.
+This chunking must be implemented manually and complicates the program further, reducing the level of abstraction the programmer can work at.
 Even with chunking, we may reduce the streaming overhead from once per element to once per thousand elements, but we can never remove it entirely.
 With Folderol there is no streaming overhead to reduce because it is statically fused away.
 
@@ -222,7 +283,7 @@ We are going to compute the volume of the input stream using the \emph{root mean
 This is the @squares@ stream.
 We need to compute the average of the squares, so we will use an exponential moving average --- which is equivalent to as a low-pass filter.
 To compute the moving average, we use @postscanl@, which is like a fold over the data, except it returns the stream of accumulators rather than just the final result.
-The difference between @postscanl@ and regular @scanl@ is that the output stream for @scanl@ contains the original zero accumulator for the fold, while @postscanl@ omits this.
+The difference between @postscanl@ and regular @scanl@ is that the output stream for @scanl@ contains the original zero accumulator for the fold, which @postscanl@ omits.
 Now that we have our average, @avg@, we @clip@ each element by taking the square root, and clipping it to one. This is our multiplier, @mul@.
 Finally, we zip the original stream with the multiplier, and multiply them together.
 
@@ -297,9 +358,10 @@ The Vector version then has two loops, as well as an extra manifest array.
 
 
 \subsection{File operations}
-For the file benchmarks, we compare against three Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
-These streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
-These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
+For the file benchmarks, we compare against a hand-fused implementation, as well as the three previously mentioned Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
+We do not compare against `Vector'.
+% The first of these two streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
+% These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 
 \begin{lstlisting}[float,label=l:bench:append2Folderol,caption=Folderol implementation of append2]
@@ -316,14 +378,6 @@ append2 fpIn1 fpIn2 fpOut = do
       sink aps        [|sinkFileOfLines fpOut  |]$$)
   return count
 \end{lstlisting}
-
-The first file benchmark appends two files while counting the lines.
-\Cref{l:bench:append2Folderol} shows the Folderol implementation.
-In Conduit (\cref{l:a:bench:append2Conduit}) and Pipes (\cref{l:a:bench:append2Pipes}), counting the lines is implemented as a stream transformer which counts each line before passing it along.
-\Cref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
-
-
-
 \begin{table}
 \begin{center}
 \begin{tabular}{ll|rrrr}
@@ -340,12 +394,13 @@ Streaming &         & 0.57s &   196\% & 2.6e9 & 302\% \\
 \label{table:bench:append2}
 \end{table}
 
-The second file benchmark takes a file and partitions it into two files: one with even-length lines, and one with odd-length lines.
-The output lines are also counted.
-\Cref{l:bench:part2Folderol} shows the Folderol implementation.
-Even with partial hand-fusion because of the multiple outputs, the Pipes (\cref{l:a:bench:part2Pipes}) and Conduit (\cref{l:a:bench:part2Conduit}) programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
-The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
-\Cref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
+
+The first file benchmark appends two files while counting the lines.
+\Cref{l:bench:append2Folderol} shows the Folderol implementation.
+In Conduit (\cref{l:a:bench:append2Conduit}) and Pipes (\cref{l:a:bench:append2Pipes}), counting the lines is implemented as a stream transformer which counts each line before passing it along.
+\Cref{table:bench:append2} shows the runtimes for appending two text files each with half a million lines, around 6.5MB in total.
+
+
 
 \begin{lstlisting}[float,label=l:bench:part2Folderol,caption=Folderol implementation of part2]
 part2 :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
@@ -364,7 +419,6 @@ part2 fpIn1 fpOut1 fpOut2 = do
       sink o2s               [|sinkFileOfLines fpOut2|]$$)
   return (c1, c2)
 \end{lstlisting}
-
 \begin{table}
 \begin{center}
 \begin{tabular}{ll|rrrr}
@@ -381,7 +435,27 @@ Streaming &         & 1.21s &   403\% & 6.1e9 & 709\% \\
 \label{table:bench:part2}
 \end{table}
 
+The second file benchmark takes a file and partitions it into two files: one with even-length lines, and one with odd-length lines.
+The output lines are also counted.
+\Cref{l:bench:part2Folderol} shows the Folderol implementation.
+Even with partial hand-fusion because of the multiple outputs, the Pipes (\cref{l:a:bench:part2Pipes}) and Conduit (\cref{l:a:bench:part2Conduit}) programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
+The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
+\Cref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
+
 \subsection{Partition / append}
+
+The program in \cref{l:bench:partitionAppendFail} partition an input vector into a vector containing the even-valued elements, and a vector containing the odd-valued elements.
+The two result vectors are then appended together.
+If we try to compile this code with Folderol, we get a compilation error:
+
+\begin{code}
+Maximum process count exceeded:
+ after fusion there are 2 processes, but maximum is 1
+\end{code}
+
+This error indicates that the program could not be fused into a single loop without introducing unbounded buffering.
+Some sort of buffering is inevitable, because @append@ requires all the @evens@ first: all the even-valued elements need to be read from the input stream @x0@ before the odd-valued elements can be read by @append@.
+To implement this, we would need to read from the input stream @x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppendFail,caption=Partition / append fusion failure]
 partitionAppendFailure :: Vector Int -> IO (Vector Int)
@@ -389,29 +463,20 @@ partitionAppendFailure xs = do
   (ys,()) <- vectorSize xs $ \snkYs ->
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
-        as    <- filter [|even             |] x0
-        bs    <- filter [|odd              |] x0
+        evens <- filter [|even             |] x0
+        odds  <- filter [|odd              |] x0
         -- Failure: cannot fuse append with both filters
-        asbs  <- append as bs
-        sink asbs       [|snkYs            |]$$)
+        apps  <- append evens odds
+        sink apps       [|snkYs            |]$$)
   return ys
 \end{lstlisting}
 
-If we try to compile the code in \cref{l:bench:partitionAppendFail}, we get a compilation error:
-\begin{code}
-Maximum process count exceeded:
- after fusion there are 2 processes, but maximum is 1
-\end{code}
-This indicates that the program could not be fused into a single loop, without introducing unbounded buffering.
-This is because @append@ requires all the @as@ first: all the even-valued elements need to be read from the stream, before the odd-valued elements can be read by append.
-But this means that when reading from the stream, if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 In this case, the input stream is not really a stream, but is backed by a real vector.
 This means we can implement it without introducing an unbounded buffer: we already have the buffer.
-To execute the program, we \emph{explicitly} introduce another source to read from the vector. 
-See \cref{l:bench:partitionAppend2Source}.
+To execute the program, we \emph{explicitly} introduce another source to read from the vector, as in \cref{l:bench:partitionAppend2Source}.
 The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
-All of @as@ can be read by @append@, independently of @bs@.
+All of @evens@ can be read by @append@, independently of @odds@.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Source,caption=Partition / append with two sources]
 partitionAppend2Source xs = do
@@ -419,9 +484,9 @@ partitionAppend2Source xs = do
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
         x1    <- source [|sourceOfVector xs|]
-        as    <- filter [|even             |] x0
-        bs    <- filter [|odd              |] x1
-        asbs  <- append as bs
+        evens <- filter [|even             |] x0
+        odds  <- filter [|odd              |] x1
+        apps  <- append evens odds
         sink asbs       [|snkYs            |]$$)
   return ys
 \end{lstlisting}
@@ -434,24 +499,25 @@ This implementation is shown in \cref{l:bench:partitionAppend2Loop}.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Loop,caption=Partition / append with two loops]
 partitionAppend2Loop xs = do
-  (as,(bs,())) <- vectorSize xs $ \snkAs ->
-                  vectorSize xs $ \snkBs ->
+  (evens,(odds,())) <- vectorSize xs $ \snkEvens ->
+                       vectorSize xs $ \snkOdds ->
     $$(fuse $ do
         x0      <- source    [|sourceOfVector xs|]
-        (as,bs) <- partition [|even             |] x0
-        sink as              [|snkAs            |]
-        sink bs              [|snkBs            |]$$)
-  (ys,()) <- vectorSize xs $ \snkYs ->
+        (evens,odds)
+                <- partition [|even             |] x0
+        sink evens           [|snkEvens         |]
+        sink odds            [|snkOdds          |]$$)
+  (apps,()) <- vectorSize xs $ \snkApps ->
     $$(fuse $ do
-        as'   <- source      [|sourceOfVector as|]
-        bs'   <- source      [|sourceOfVector bs|]
-        asbs  <- append as' bs'
-        sink asbs            [|snkYs            |]$$)
-  return ys
+        evens' <- source      [|sourceOfVector evens|]
+        odds'  <- source      [|sourceOfVector odds|]
+        apps   <- append evens' odds'
+        sink apps             [|snkApps          |]$$)
+  return apps
 \end{lstlisting}
 
-The Vector implementations (\cref{l:a:bench:partitionAppendVector}) follow the same structure: the 2-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
-The 2-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
+The Vector implementations (\cref{l:a:bench:partitionAppendVector}) follow the same structure: the two-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
+The two-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
 The Vector @partition@ cannot fuse with any consumers and always constructs manifest output vectors.
 The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
 The length of both partitions must equal the length of the original array.

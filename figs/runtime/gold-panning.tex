@@ -5,7 +5,7 @@
 \begin{axis}[
 % Hide the label on the second graph
 	ylabel=Runtime (s),
-	xlabel=Chunk size (log elements),
+	xlabel=Chunk size ($\log_{10}$ elements),
   ymin=0, ymax=2.6,
   xmin=1, xmax=6,
   filter discard warning=false,
@@ -39,7 +39,7 @@
 \end{axis}
 \end{tikzpicture}
 
-\caption{Runtime performance for concurrent execution of two queries, compared to a fused sequential implementation}
+\caption{Runtime performance for \Hs/priceAnalyses/ queries}
 \label{fig:runtime:gold-panning}
 \end{figure}
 

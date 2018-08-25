@@ -44,21 +44,30 @@ In the above code, @open > close@ and @close < open@ are filter predicates, and 
 The input table, @stocks@, defines the open and close prices as @Int@s.
 In Icicle, input tables have an implicit time field and the input stream is sorted chronologically.
 
-We can express the same three queries using the push streams from \cref{taxonomy/push} as follows.
+We can express the same three queries using the push streams from \cref{taxonomy/push}, as in the following program:
 
 \begin{haskell}
 data Record = Record
  { time :: Time, open :: Int, close :: Int }
 
-queries :: Push Record (Int,Int,Int)
-queries = (,,) <$> more <*> less <*> mean
+queries :: IO (Push Record (Int,Int,Int))
+queries = do
+  more_count <- count
+  let more = filter (\r -> open r > close r) more_count
+
+  less_count <- count
+  let less = filter (\r -> open r < close r) less_count
+
+  mean_sum   <- foldl (+) 0
+  mean_count <- count
+  let mean = filter (\r -> open r > close r)
+                    (div <$> contramap open mean_sum <*> mean_count)
+  return ((,,) <$> more <*> less <*> mean)
  where
-  more = filter (\r -> open r > close r) count
-  less = filter (\r -> open r < close r) count
-  mean = filter (\r -> open r > close r) (div <$> map open sum <*> count)
 \end{haskell}
 
-Aside from syntactic differences, the two programs have the same structure.
+Despite the syntactic differences, the two programs have roughly the same structure in terms of the three queries.
+The three instances of \Hs@count@ are constructed as monadic \Hs@IO@ operations, because each count uses a separate mutable reference.
 The applicative functor syntax is used to divide the sum by the count in the @mean@ query, because the division is performed on the result of the push stream.
 Icicle does not use the applicative syntax as it uses a modal type system to infer which computations are performed on the result of the stream, as described in \cref{icicle:s:ElementsAndAggregates:TypeSystem}.
 
@@ -94,7 +103,7 @@ We might try something like:
 \end{icicle}
 
 Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally.
-While streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start.
+When we are streaming through the table we always have access to the last key in the stream, but finding the rows that match this key requires streaming the table again from the start.
 We need a better solution.
 
 % , and are on par with standard Unix utilities.

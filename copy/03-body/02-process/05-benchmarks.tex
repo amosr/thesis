@@ -576,11 +576,10 @@ In the particular case of @join@, the implementation has two occurrences of the 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
 For array computations there is a bit of boilerplate required to convert between vectors and streams, and vice versa.
-There is also some extra visual noise for the Template Haskell.
-But this is fairly minor, and the required changes are more or less mechanical and type-driven.
+There is also some extra visual noise for the Template Haskell, but this is fairly minor, and the required changes are more or less mechanical and type-driven.
 
-The real benefit is not having to read through Core programs, not having to guess whether fusion has worked or failed.
+Another benefit, aside from performance, is not having to read through Core programs to know whether whether fusion has worked or failed.
 If fusion succeeds, we know it has succeeded.
 If fusion fails, we know not just that it has failed, but \emph{where} it has failed.
-This makes it a lot easier to track down performance issues due to non-fusion.
+These explicit fusion failures make it a lot easier to track down performance issues due to non-fusion.
 

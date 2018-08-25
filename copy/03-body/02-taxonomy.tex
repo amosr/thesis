@@ -27,7 +27,7 @@ Choosing a streaming model requires making a trade-off between the performance o
 % \ED{A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.}
 We must compare different streaming models to make an informed decision.
 We start our initial comparison by focussing on two low-overhead streaming models to illustrate how different streaming models support different operations, and to motivate the use of Kahn process networks as a streaming model.
-In \cref{related} we will compare with some more expressive but less efficient streaming models.
+In \cref{s:Benchmarks} we will compare with some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 \label{taxonomy/gold-panning}
@@ -991,7 +991,7 @@ The @map@ and @join@ combinators have type signatures similar to the list versio
 
 Because execution is deferred, the @foldl@ combinator cannot return the fold result immediately; the result is wrapped in a @Result@ type.
 The @Result@ type describes the result of executing a process network; it is a promise that the value will be available after all the processes in the network finish.
-The @Result@ is an applicative functor to allow multiple results to be combined together.
+The @Result@ has an applicative functor instance, allowing multiple results to be combined together.
 The @execute@ function takes a process network description containing the result promise, and executes the processes before extracting the result.
 
 
@@ -1058,7 +1058,7 @@ We can reduce the amount of communication by combining multiple connected proces
 The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
 In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
 For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
-A single process executes sequentially; this removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
+A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
 Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation required to achieve similar performance~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}

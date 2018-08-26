@@ -1,7 +1,26 @@
 %!TEX root = ../Main.tex
 
 \begin{figure*}
+$$
+V'~     ::=~\VValue{V}
+        ~|~\VStream {(V \stackrel{\bullet}{\to} V)}
+        ~|~\VFold{V}{(V \stackrel{\bullet}{\to} V \stackrel{\bullet}{\to} V)}
+                    {(V \stackrel{\bullet}{\to} V)}
+$$
+$$
+\begin{array}{ll}
+
+\RawMode~::=~@Pure@~|~@Element@~|~@Aggregate@
+
+&
+
+\Sigma~::=~\cdot~|~\Sigma,~x~=~V'
+
+\end{array}
+$$
+
   \scriptsize
+
 
 $$
 \boxed{\SourceStepX{\RawMode}{\Sigma}{e}{V'}}
@@ -166,26 +185,7 @@ $$
 }{ETable}
 $$
 
-$$
-V'~     ::=~\VValue{V}
-        ~|~\VStream {(V \stackrel{\bullet}{\to} V)}
-        ~|~\VFold{V}{(V \stackrel{\bullet}{\to} V \stackrel{\bullet}{\to} V)}
-                    {(V \stackrel{\bullet}{\to} V)}
-$$
-$$
-\begin{array}{ll}
-
-\RawMode~::=~@Pure@~|~@Element@~|~@Aggregate@
-
-&
-
-\Sigma~::=~\cdot~|~\Sigma,~x~=~V'
-
-\end{array}
-$$
-
-
-\caption{Evaluation rules}
+\caption{Evaluation rules and auxiliary grammar}
 \label{icicle:fig:source:eval}
 \end{figure*}
 

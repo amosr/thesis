@@ -90,7 +90,7 @@ The @injects@ form is similar to the @inject@ form, operating on a process netwo
 Rule (InjectPush) injects a single value into a single process. The value is stored as a (@pending@~ v) binding in the $\InputState$ of the associated channel of the process. The $\InputState$ acts as a single element buffer, and must be empty (@none@) for injection to succeed.
 Rule (InjectClose) injects a close message and updates the input state in a similar way.
 
-Rules (InjectNopPush) and (RuleNopClose) allow processes that do not use a particular named channel to ignore messages injected into that channel.
+Rules (InjectNopPush) and (InjectNopClose) allow processes that do not use a particular named channel to ignore messages injected into that channel.
 Rule (InjectNopInternal) allows processes to ignore empty messages.
 
 Rule (InjectMany) injects a single value into a network.

@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\section{Intermediate Language}
+\section{Intermediate language}
 \label{icicle:s:IcicleCore}
 
 \begin{figure}
@@ -35,7 +35,7 @@ $\mi{Plan}$
 
 
 
-\caption{Query Plan Grammar}
+\caption{Query plan grammar}
 \label{icicle:fig:core:grammar}
 \end{figure}
 
@@ -167,13 +167,14 @@ With the intermediate representation of Icicle we can use a common subexpression
 
 \subsection{A more complicated example}
 
-The previous queries were simple to translate to the intermediate language; the query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
+The previous queries were simple to translate to the intermediate language; the ``mean of latest'' query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
 That query, again, is:
 
 \begin{icicle}
-  table kvs { key : Date; value : Int }
-  query avg = let k = last key
-              in  filter (key == k) of mean value;
+  table kvs { key : Date; value : Int } 
+  query avg = let k    = last  key in
+              let avgs = group key of mean value
+              in  lookup k avgs
 \end{icicle}
 
 We first define the @mean@ and @last@ functions used in the query.
@@ -183,7 +184,7 @@ function mean (e : Element Int)
  = sum e / count;
 \end{icicle}
 
-The @last@ function uses a @fold@ that initialises the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream.
+The @last@ function uses a @fold@ that initialises the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream:
 \begin{icicle}
 function last (d : Element Date)
  = fold l = NO_DATE then d;
@@ -196,7 +197,7 @@ function last (d : Element Date)
 % \end{icicle}
 
 
-Inlining the above functions into the query from \cref{icicle:s:ElementsAndAggregates} yields the following:
+Inlining the above functions into the ``mean of latest'' query yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
 \begin{icicle}
 query avg
@@ -209,7 +210,7 @@ query avg
 \end{icicle}
 
 To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
-The @lst@ binding becomes a single fold, initialised to @NO_DATE@ and updated with the current @key@.
+The @lst@ binding becomes a single fold, initialised to @NO_DATE@ and updated with the current @key@:
 \begin{icicle-core}
 plan kvs {      key : Date; value : Int;       }
 folds    { fold fL  : Date = NO_DATE then key  }

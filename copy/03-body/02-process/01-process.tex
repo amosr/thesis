@@ -67,7 +67,7 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption{Dependency graph for priceAnalyses example.}
+\caption{Dependency graph for \Hs/priceAnalyses/ example}
 \label{figs/procs/priceAnalyses-again}
 \end{figure}
 
@@ -95,7 +95,7 @@ Each process implements a logical \emph{operator} --- so we use ``operator'' whe
 
 
 \subsection{Fold combinator}
-\begin{process}[float,caption=Process implementation of foldl,label=figs/procs/impl/foldl]
+\begin{process}[float,caption=Process implementation of \Hs/foldl/,label=figs/procs/impl/foldl]
 foldl 
   = \ (k  : b -> a -> b) (z   : b) (j : b -> c)
       (sIn: Stream a)    (sOut: Stream b). 
@@ -147,7 +147,7 @@ The process terminates.
 
 \subsection{Map combinator}
 
-\begin{process}[float,caption=Process implementation of map,label=figs/procs/impl/map]
+\begin{process}[float,caption=Process implementation of \Hs/map/,label=figs/procs/impl/map]
 map 
   = \ (f  : a -> b)
       (sIn: Stream a) (sOut: Stream b). 
@@ -247,7 +247,7 @@ edge[style="procFstD,thick"];
   M3 -> M4;
 }
 \end{dot2tex}
-\caption{Instantiated process for map with control flow graph}
+\caption{Instantiated process for \Hs/map/ with control flow graph}
 \label{figs/procs/instance/pot-timeprices}
 \end{figure}
 
@@ -289,7 +289,7 @@ edge[style="procSndD,thick"];
   F3 -> F4;
 }
 \end{dot2tex}
-\caption{Instantiated process for fold (regression) with control flow graph}
+\caption{Instantiated process for \Hs/fold/ (\Hs/regression/) with control flow graph}
 \label{figs/procs/instance/pot-regression}
 \end{figure}
 
@@ -420,13 +420,6 @@ node[shape=none,texmode="raw"];
 
 
 \subsubsection{Fusion result}
-\Cref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
-There are similar rules for handling the other combinations of instructions, but we defer the details to \cref{s:Fusion}.
-The result process has one input stream, @stock@, and two output streams: @timeprices@ from @map@, and @reg_out@ from @regression@.
-
-To complete the implementation of @priceOverTime@, we would now fuse this result process with the @correlation@ process.
-Note that although the result process has a single shared heap, the heap bindings from each fused process are guaranteed not to interfere, as when we instantiate combinators to create source processes we introduce fresh names. 
-
 
 
 \begin{lstlisting}[language=process,float,caption={Fusion of \colorbox{procFst}{timeprices} and \colorbox{procSnd}{regression}, along with \colorbox{procCommon}{shared} instructions and variables},label=figs/procs/instance/fused-timeprices-regression,linebackgroundcolor={
@@ -491,9 +484,22 @@ process -- \colorbox{procFst}{map tp\_f stock timeprices} / \colorbox{procSnd}{f
  } }
 \end{lstlisting}
 
+\Cref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
+There are similar rules for handling the other combinations of instructions, but we defer the details to \cref{s:Fusion}.
+The result process has one input stream, @stock@, and two output streams: @timeprices@ from @map@, and @reg_out@ from @regression@.
+
+To complete the implementation of @priceOverTime@, we would now fuse this result process with the @correlation@ process.
+Note that although the result process has a single shared heap, the heap bindings from each fused process are guaranteed not to interfere, as when we instantiate combinators to create source processes we introduce fresh names. 
+
+
 \subsection{Join combinator}
 
-\begin{process}[float,caption=Process implementation of join,label=figs/procs/impl/join]
+To implement the whole @priceAnalyses@ process network, we also need the @join@ combinator, which pairs together the elements of two sorted input streams.
+The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
+The process, shown in \cref{figs/procs/impl/join}, reads from two input streams (@sA@ and @sB@), and produces one output stream (@sOut@).
+Two heap variables are used to store the most recent input elements (@va@ and @vb@), and another is used to store the key comparison (@c@).
+
+\begin{process}[float,caption=Process implementation of \Hs/join/,label=figs/procs/impl/join]
 join 
   = \ (cmp : a -> b -> Ordering)
       (sA  : Stream a) (sB : Stream b)
@@ -538,11 +544,6 @@ join
                , EX1 = exit } }
 \end{process}
 
-To implement the whole @priceAnalyses@ process network, we also need the @join@ combinator, which pairs together the elements of two sorted input streams.
-The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
-The process reads from two input streams (@sA@ and @sB@), and produces one output stream (@sOut@).
-Two heap variables are used to store the most recent input elements (@va@ and @vb@), and another is used to store the key comparison (@c@).
-
 In the first group of instructions, the instructions at labels @IN0@ and @IN1@ pull an element from each input stream.
 If both pulls are successful, the instruction at label @IN2@ compares the input values using the key comparison function (@cmp va vb@).
 Next, the instruction at label @IN3@ checks whether the keys are equal: if so, execution proceeds to the instruction at label @EQ0@; otherwise, instruction proceeds to the instruction at label @NE0@.
@@ -561,7 +562,7 @@ Without draining, the producer would be blocked indefinitely on a terminated pro
 As an alternative to draining, we could extend the process network semantics to include a ``disconnect'' instruction, which indicates that a process is no longer interested in consuming a particular input stream.
 Here, we use the simpler process semantics without disconnection, at the expense of having to explicitly drain streams.
 It may be tempting to instead modify the network semantics so that producers do not push to terminated processes, effectively disconnecting from all inputs upon termination.
-However, a fused process, which performs the job of two input processes, only terminates once both processes are terminated; as such, the fused process would only disconnect once both input processes have terminated, which may be later than necessary.
+However, a fused process, which performs the job of two input processes, only terminates once both input processes have terminated; as such, the fused process would only disconnect once both input processes have terminated, which may be later than necessary.
 
 % In the @priceAnalyses@ example, the @stock@ input stream is used by two consumers, the @join@ in @priceOverMarket@, and the @map@ in @priceOverTime@.
 % When a stream has multiple consumers, all consumers must agree when to read the next value, otherwise execution might require an unbounded buffer.

@@ -136,13 +136,14 @@ For this to succeed, it must be possible to inject the action into all the other
 As all consuming processes must accept the output action at the time it is created, there is no need to buffer it further in the producing process.
 When any process in the network produces an output action, we take that as the action of the whole network.
 
-\input{copy/03-body/02-process/figures/ProcessFeed.tex}
-
 % -----------------------------------------------------------------------------
 \subsubsection{Feeding}
 \Cref{fig:Process:Eval:Feed} gives the rules for collecting output actions and feeding external input values to the network.
 These rules exchange input and output values with the environment in which the network runs.
 % The first set of rules concerns feeding values to other processes within the same network, while the second exchanges input and output values with the environment the network is running in.
+
+\input{copy/03-body/02-process/figures/ProcessFeed.tex}
+
 
 The statement ($\ProcsFeed{i}{ps}{o}$) reads ``when fed input channel values $i$, network $ps$ executes to termination of all processes, and produces output channel values $o$''.
 The input channel values map $i$ contains a list of values for each input channel; these channels are inputs of the overall network, and cannot be outputs of any processes.
@@ -150,7 +151,7 @@ The output channel values map $o$ contains the list of values for every output c
 In a concrete implementation the input and output values would be transported over some IO device, but for the semantics we describe the abstract behavior only.
 
 Rule (FeedExit) terminates execution of a network when all processes have terminated.
-We require the input channel values map to be empty, as any leftover input values would be ignored by the network.
+We require the input channel values map to be empty, instead of allowing the terminated network to ignore any leftover input values.
 The output channel values map is empty.
 
 Rule (FeedInternal) allows the network to perform local computation in the context of the channel values.

@@ -579,7 +579,7 @@ Finally, the group of instructions at @EX0@ close the output stream and terminat
 \label{s:Fusion}
 
 Our core fusion algorithm constructs a static execution schedule for a single pair of processes.
-In \cref{ss:Fusing:a:network} we fuse a whole process network by fusing successive pairs of processes until only one remains.
+In \cref{ss:Fusing:a:network}, we fuse a whole process network by fusing successive pairs of processes until only one remains.
 
 \Cref{fig:Fusion:Types} defines some auxiliary grammar used during fusion. We extend the $\Label$ grammar with a new alternative, $\LabelF \times \LabelF$ for the labels in a fused result process. Each $\LabelF$ consists of a $\Label$ from a source process, paired with a map from $\Chan$ to the statically known part of that channel's current $\InputState$. When fusing a whole network, as we fuse pairs of individual processes the labels in the result collect more and more information. Each label of the final, completely fused process encodes the joint state that all the original source processes would be in at that point.
 
@@ -604,16 +604,17 @@ Each output channel is uniquely owned and cannot be pushed to by more than one p
 
 \smallskip
 % -------------------------------------
-\Cref{fig:Fusion:Def:Top} defines function \ti{fusePair} that fuses a pair of processes, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from \cref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states we add them to a map $bs$ of joint label to the corresponding instruction, and repeat the process to a fixpoint where no new states can be discovered.
+\Cref{fig:Fusion:Def:Top} defines function \ti{fusePair}, which fuses a pair of processes, constructing a result process that does the job of both. We start with a joint label $l_0$ formed from the initial labels of the two source processes. We then use \ti{tryStepPair} to statically choose which of the two processes to advance, and hence which instruction to execute next. The possible destination labels of that instruction (computed with $outlabels$ from \cref{fig:Fusion:Utils}) define new joint labels and reachable states. As we discover reachable states, we add them to a map $bs$ of joint label to the corresponding instruction, and repeat the process to a fixpoint where no new states can be discovered.
 
 \input{copy/03-body/02-process/figures/Fusion-tryStepPair.tex}
 
 % -------------------------------------
-\Cref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair} which decides which process to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
+\Cref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair}, which decides which of the two input processes to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
 
 Clauses (DeferExit1) and (DeferExit2) ensure that the fused process only terminates once both processes are ready to terminate; if either has remaining work, the process with remaining work will execute.
 The clauses achieve this by checking if either process is at an @exit@ instruction, and if so, choosing the other process.
 The instruction for the second process was computed by calling \ti{tryStep} with the label arguments swapped, so in (DeferExit2) we need to swap the labels back with $\ti{swaplabels}$ (from \cref{fig:Fusion:Utils}).
+The result process terminates once both processes have terminated at an @exit@ instruction; in this case, clause (DeferExit1) will return the @exit@ instruction from the first process.
 
 Clauses (PreferJump1) and (PreferJump2) prioritise processes that can perform a @jump@.
 This helps collect @jump@ instructions together so they are easier for post-fusion optimisation to handle (\cref{s:Optimisation}).
@@ -630,7 +631,10 @@ Clause (Deadlock) applies when neither process can advance, in which case the pr
 
 % -------------------------------------
 \smallskip
-\Cref{fig:Fusion:Def:Step} defines function \ti{tryStep} which schedules a single instruction. This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
+\Cref{fig:Fusion:Def:Step} defines function \ti{tryStep}, which schedules a single instruction.
+This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
+The \ti{tryStep} function is called twice in \ti{tryStepPair}, once for each process, so the left process may correspond to either input process at any given time.
+
 
 Clause (LocalJump) applies when the left process wants to jump.
 In this case, the result instruction simply performs the corresponding jump, leaving the right process where it is.
@@ -645,7 +649,7 @@ Clause (SharedPush) applies when the left process wants to push to a shared chan
 Pushing to a shared channel requires the downstream process to be ready to accept the value at the same time.
 We encode this constraint by requiring the static input state of the downstream channel to be $@none@_F$.
 When this constraint is satisfied, the result instruction stores the pushed value in the stream buffer variable $(@chan@~c)$ and sets the static input state to $@pending@_F$, which indicates that the new value is now available.
-This clause corresponds to a static version of the rule (Push) for advancing the left process, combined with the rule (InjectPush) for injecting the push action into the right process.
+This clause corresponds to a static version of the evaluation rule (Push) for advancing the left process, combined with the rule (InjectPush) for injecting the push action into the right process.
 
 Still in \cref{fig:Fusion:Def:Step}, clause (LocalPull) applies when the left process wants to pull from a local channel, which requires no coordination.
 
@@ -659,20 +663,20 @@ The result instruction jumps to the close output label.
 
 Clause (SharedPullInject) applies when the left process wants to pull from a shared channel that both processes pull from, and neither already has a value.
 The result instruction is a @pull@ that loads the stream buffer variable, leaving the labels the same and updating the channel state for both processes.
-In the next instruction the left process will try to pull again with the updated channel state, and one of the clauses (SharedPullPending) or (SharedPullClosed) will apply.
+In the next instruction, the left process will try to pull again with the updated channel state, and one of the clauses (SharedPullPending) or (SharedPullClosed) will apply.
 
 Clause (LocalDrop) applies when the left process wants to drop the current value that it read from an unshared input channel, which requires no coordination.
 
 Clause (ConnectedDrop) applies when the left process wants to drop the current value that it received from an upstream process. As the value will have been sent via a heap variable instead of a still extant channel, the result instruction just performs a @jump@ while updating the static channel state.
 
-Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants to drop from a channel shared by both processes. In (SharedDropOne) the channel states reveal that the other process is still using the value. In this case the result is a @jump@ updating the channel state to note that the left process has dropped. In (SharedDropBoth) the channel states reveal that the other process no longer needs the value. In this case the result is a real @drop@, because we are sure that neither process requires the value any longer.
+Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants to drop from a channel shared by both processes. In (SharedDropOne), the channel states reveal that the other process is still using the value. In this case, the result is a @jump@ updating the channel state to note that the left process has dropped. In (SharedDropBoth), the channel states reveal that the other process has already dropped its copy of the channel value using clause (SharedDropOne). In this case, the result is a real @drop@, because we are sure that neither process requires the value any longer.
 
 Clause (LocalClose) applies when the left process wants to close an unshared output channel, which requires no coordination.
 
-Clause (SharedClose) applies when the left process wants to close a shared output channel.
-Closing the channel updates the channel state and requires the downstream process to have dropped any previously read values.
+Clause (SharedClose) applies when the left process wants to close a shared output channel that the other process pulls from.
+Closing the channel updates the channel state and requires the downstream process to have dropped any previously read values, just as the (InjectClose) evaluation rule requires the downstream process to have @none@ as its input state.
 
-Clause (LocalExit) applies when the left process wants to finish execution, which requires no coordination here, but prioritises the other process in the (DeferExit) clauses in the earlier \ti{tryStepPair} definition.
+Clause (LocalExit) applies when the left process wants to finish execution, which requires no coordination here, but causes the other process to be prioritised in the (DeferExit) clauses in the earlier definition of \ti{tryStepPair}.
 
 Clause (Blocked) returns @Nothing@ when no other clauses apply, meaning that this process is waiting for the other process to advance.
 

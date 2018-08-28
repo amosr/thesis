@@ -1,8 +1,8 @@
 \chapter{Evaluation}
 \label{s:Benchmarks}
 Stream fusion is ultimately performed for practical reasons: we want the fused result program to run faster than the original unfused program.
-We also need to be sure that the fused program is not too large, otherwise compilation and fusion would consume too much memory.
-This chapter shows benchmark results for fused programs and the result size of fused programs.
+We also need to be sure that the fused program is not too large, to ensure that compilation and fusion do not consume too much memory.
+This chapter shows runtime benchmark results for fused programs, and the result size of fused programs.
 
 \section{Benchmarks}
 
@@ -14,7 +14,7 @@ This coordination between all consumers means the fusion algorithm requires glob
 In contrast, shortcut fusion systems such as \cite{gill1993short} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
 In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
 This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
-To fuse the entire process network, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
+To fuse the entire process network at compile-time, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
 
 % For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
@@ -25,12 +25,14 @@ The `Vector' library provides high-performance boxed and unboxed arrays with pul
 It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system known as \emph{stream fusion} \citep{coutts2007stream}.
 Array operations are implemented by converting the input array to a stream, then performing the corresponding stream operation, and converting back to an array.
 The short-cut fusion rule removes the superfluous conversion when a stream is converted to an intermediate array and immediately back to a stream.
-This rule can only remove intermediate arrays when the intermediate array is mentioned at most once.
-While the fusion is pull-based, splits can still be expressed in the program by mentioning the same array multiple times.
-These splits act as fusion barriers, requiring streams to be manifested as in-memory arrays.
-Vector also provides no guarantees about whether fusion will occur: it makes its best effort, but the easiest way to tell whether fusion has occurred is to look at the generated program.
+Just as pull streams only support a single consumer, this rule can only remove intermediate arrays which have a single consumer.
+If the same intermediate array is used multiple times, it acts as a \emph{fusion barrier}, forcing the stream to be manifested into an array.
+% While the fusion is pull-based, splits can still be expressed in the program by mentioning the same array multiple times.
+% These splits act as fusion barriers, requiring streams to be manifested as in-memory arrays.
+Vector also provides no guarantees about whether fusion will occur, and the easiest way to tell whether fusion has occurred is to look at the generated program to count the loops and arrays.
 We could benchmark the program to see whether it is ``fast enough'', but if we do not have an optimal baseline to compare against, it is hard to know how fast the program \emph{should} be.
-After benchmarking, if we discover that fusion has not occurred, it is a completely other thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
+After benchmarking, if we discover that fusion has not occurred, compiler directives such as inlining and strictness annotations may help, or it may be necessary to rewrite the program and hand-fuse it.
+% it is a different thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
 
 % \TODO{Move elsewhere.}
 % The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
@@ -41,8 +43,8 @@ After benchmarking, if we discover that fusion has not occurred, it is a complet
 % It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
 
-The first two Haskell streaming libraries, `Conduit' and `Pipes', have a limited API that ensures that any computation can be run with only bounded buffers.
-These streaming libraries are pull-based, and do not naturally support multiple queries: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
+The first two Haskell streaming libraries, `Conduit' and `Pipes', both have limited APIs that ensure that any computation can be run with only bounded buffers.
+These streaming libraries are pull-based, and do not naturally support multiple queries: when a stream is shared among multiple consumers, part of the program must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.

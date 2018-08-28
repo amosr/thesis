@@ -25,7 +25,8 @@ When repeatedly fusing the pairs of processes in a network, we perform some simp
 \begin{dot2tex}[dot]
 digraph G {
   node [shape="none"];
-  stock; index;
+  stock [texlbl="\Hs/stock/"];
+  index [texlbl="\Hs/index/"];
 
   stock -> pom_join;
   index -> pom_join;
@@ -37,18 +38,18 @@ digraph G {
     graph [bgcolor="0.0 0.0 0.9"];
     subgraph cluster_priceAgainstMarket {
       lblstyle="right";
-      label="priceOverMarket";
+      texlbl="\Hs/priceOverMarket/";
       graph [bgcolor="0.0 0.0 0.8"];
-      pom_join [label="join"];
+      pom_join [texlbl="\Hs/join/"];
       subgraph cluster_x {
         label="";
         graph [bgcolor="0.0 0.0 0.7"];
         subgraph cluster_x {
           graph [bgcolor="0.0 0.0 0.6"];
-          pom_price [label="map"];
-          pom_cor [label="correlation"];
+          pom_price [texlbl="\Hs/map/"];
+          pom_cor [texlbl="\Hs/correlation/"];
         };
-      pom_reg [label="regression"];
+      pom_reg [texlbl="\Hs/regression/"];
       }
       pom_join -> pom_price;
       pom_price -> pom_cor;
@@ -57,15 +58,15 @@ digraph G {
 
     subgraph cluster_priceOverTime  {
       lblstyle="left";
-      label="priceOverTime";
+      texlbl="\Hs/priceOverTime/";
       graph [bgcolor="0.0 0.0 0.8"];
       subgraph cluster_x1 {
         label="";
         graph [bgcolor="0.0 0.0 0.7"];
-        pot_tps [label="map"];
-        pot_cor [label="correlation"];
+        pot_tps [texlbl="\Hs/map/"];
+        pot_cor [texlbl="\Hs/correlation/"];
       }
-      pot_reg [label="regression"];
+      pot_reg [texlbl="\Hs/regression/"];
       pot_tps -> pot_cor;
       pot_tps -> pot_reg;
     };
@@ -73,7 +74,7 @@ digraph G {
   }
 }
 \end{dot2tex}
-\caption{Pairwise fusion ordering of the priceAnalyses network.}
+\caption{Pairwise fusion ordering of the \Hs/priceAnalyses/ network.}
 \label{figs/procs/priceAnalyses-fusing-whole}
 \end{figure}
 
@@ -101,7 +102,7 @@ Finally, we fuse the result process for @priceOverTime@ with the result process 
 % We shall start by explaining a heuristic which does not always choose the right order, but works for the benchmarks in \REFTODO{benchmarks}.
 % \TODO{Maybe the explanation of why it has to be a heuristic should come first, but it makes it unappealing to start with an example where the heuristic doesn't work. If I explain the future work, it seems like there's no reason to explain the heuristic. Reorganise later.}
 
-To demonstrate how fusion order can affect whether fusion succeeds, consider the following list program, which takes three input lists, appends them, and zips the appended lists together.
+To demonstrate how fusion order can affect whether fusion succeeds, consider the following list program, which takes three input lists, appends them, and zips the appended lists together:
 
 \begin{lstlisting}
 append2zip :: [a] -> [a] -> [a] -> [(a,a)]
@@ -112,14 +113,35 @@ append2zip a b c =
   in  z
 \end{lstlisting}
 
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  a [texlbl="\Hs/a/"];
+  b [texlbl="\Hs/b/"];
+  c [texlbl="\Hs/c/"];
+  app1 [texlbl="\Hs/append/"];
+  app2 [texlbl="\Hs/append/"];
+  a -> app1;
+  b -> app1; b -> app2;
+  c -> app2;
+  zip [texlbl="\Hs/zip/"];
+  app1 -> zip;
+  app2 -> zip;
+}
+\end{dot2tex}
+\caption{Process network for \Hs/append2zip/}
+\label{figs/procs/append2zip}
+\end{figure}
+
 We use the more convenient syntax for list programs rather than the process network syntax introduced earlier, but in the discussion we interpret this program as a process network.
 In the process network interpretation, each list combinator corresponds to a process, and each list corresponds to a stream.
-The dependency graph for the corresponding process network is shown in \cref{figs/specconstr/append2zip}.
+The dependency graph for the corresponding process network is shown in \cref{figs/procs/append2zip}.
 
 
-\FigurePdf{figs/specconstr/append2zip}{Dependency graph for append2zip}{Dependency graph for append2zip}
 
-This example appends the input streams, then pairs together the elements in both appended streams.
+The \Hs/append2zip/ program appends the input streams, then pairs together the elements in both appended streams.
 The result of the two append processes, @ba@ and @bc@, both contain the elements from @b@ stream, followed by the elements of the second append argument; stream @a@ or stream @c@ respectively.
 These two streams, @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
 
@@ -192,7 +214,8 @@ Input stream @b@ has multiple consumers, so when it pushes elements, it pushes t
 The execution has three sections.
 In the first section, all the values from the @b@ stream are pushed to both append processes, then paired together.
 In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
-In the third section, the streams are closed, which propagates down to the consumers.
+In the third section, the remaining input streams are closed, causing the consumers to also close their output streams.
+
 The bottom-most consumer process, @zip@, executes by alternately pulling from each of the append processes.
 The order in which a process pulls from its inputs is called its \emph{access pattern}.
 Each append process can only push when the @zip@ process' buffer for that channel is empty: append must wait for @zip@ to read the most recent element before pushing a new element.
@@ -242,7 +265,7 @@ In the implementation, if at any point we encounter a pair of processes which we
 Unfortunately, this heuristic cannot always choose the correct fusion ordering.
 It is not possible, in general, to choose the correct ordering based on the dependency graph alone.
 Consider the following list program, @append3@, which appends three input lists in various orders, producing three output lists.
-As with the @append2zip@ example, we present the example as a list program for syntactic convenience, while we interpret it as a process network.
+As with the @append2zip@ example, we present the example as a list program for syntactic convenience, while we interpret it as a process network:
 
 \begin{haskell}
 append3 :: [a] -> [a] -> [a] -> ([a],[a],[a])
@@ -312,7 +335,7 @@ If we take the @append3@ example and replace the append processes with @zip@ pro
 
 We propose to solve this in future work by modifying the fusion algorithm to be commutative and associative.
 These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
-We discuss this in \cref{related/future}.
+We discuss this enhancement further in \cref{related/future}.
 
 
 % \subsection{Fusing a pair of processes}

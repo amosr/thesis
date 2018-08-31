@@ -19,61 +19,64 @@ To fuse the entire process network at compile-time, as well as to inform the pro
 % For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
 As well as the ``gold-panning'' example from \cref{taxonomy/gold-panning}, we present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
-In the benchmarks, we compare Folderol variously against the array library `Vector', as well as streaming libraries `Conduit', `Pipes' and `Streaming'.
+In the benchmarks, we compare Folderol variously against hand-fused implementations, the array library `Vector'\footnote{\url{http://hackage.haskell.org/package/vector}}, as well as streaming libraries `Conduit'\footnote{\url{https://hackage.haskell.org/package/conduit}}, `Pipes'\footnote{\url{https://hackage.haskell.org/package/pipes}} and `Streaming'\footnote{\url{https://hackage.haskell.org/package/streaming}}.
 
 The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
-It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system known as \emph{stream fusion} \citep{coutts2007stream}.
+It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system called \emph{stream fusion}, introduced by \citet{coutts2007stream}.
 Array operations are implemented by converting the input array to a stream, then performing the corresponding stream operation, and converting back to an array.
-The short-cut fusion rule removes the superfluous conversion when a stream is converted to an intermediate array and immediately back to a stream.
+The shortcut fusion rule removes the superfluous conversion when a stream is converted to an intermediate array and immediately back to a stream.
 Just as pull streams only support a single consumer, this rule can only remove intermediate arrays which have a single consumer.
-If the same intermediate array is used multiple times, it acts as a \emph{fusion barrier}, forcing the stream to be manifested into an array.
+If the same intermediate array is used multiple times, it acts as a \emph{fusion barrier}, forcing the stream to be manifested into a real, memory-backed array.
 % While the fusion is pull-based, splits can still be expressed in the program by mentioning the same array multiple times.
 % These splits act as fusion barriers, requiring streams to be manifested as in-memory arrays.
-Vector also provides no guarantees about whether fusion will occur, and the easiest way to tell whether fusion has occurred is to look at the generated program to count the loops and arrays.
+In practice, Vector provides no guarantees about whether fusion will occur, and the easiest way to tell whether fusion has occurred is to look at the generated code to count the loops and arrays.
 We could benchmark the program to see whether it is ``fast enough'', but if we do not have an optimal baseline to compare against, it is hard to know how fast the program \emph{should} be.
-After benchmarking, if we discover that fusion has not occurred, compiler directives such as inlining and strictness annotations may help, or it may be necessary to rewrite the program and hand-fuse it.
+After inspecting the generated code, if we discover that fusion has not occurred, it may be necessary to rewrite the program and hand-fuse it.
 % it is a different thing to convince the compiler to somehow fuse it: perhaps the program must be rewritten and hand-fused, or perhaps strictness annotations are required.
 
 % \TODO{Move elsewhere.}
 % The Stream part of Vector is split into two types: the fully general stream, which is parameterised over a monad, and pure streams, essentially specialised to the identity monad.
 % Vector has a minor problem with monadic actions, but this is an implementation detail that could probably be ignored.
-% Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires @ST@ or @IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from @IO@.
+% Converting from monadic streams back to vectors goes via linked-lists: this is because constructing a vector requires \Hs@ST@ or \Hs@IO@, but we cannot easily interleave the stream's monadic actions (which may be an arbitrary monad) with effects from \Hs@IO@.
 % Instead, the current implementation runs all of the stream's actions, collecting the result in a list, and only constructs the vector after the stream has finished.
 % This way, the effects do not need to be interleaved.
 % It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
 
-The first two Haskell streaming libraries, `Conduit' and `Pipes', both have limited APIs that ensure that any computation can be run with only bounded buffers.
+The first two Haskell streaming libraries, `Conduit' and `Pipes', both have limited APIs that ensure that any computation can be run with bounded buffers.
 These streaming libraries are pull-based, and do not naturally support multiple queries: when a stream is shared among multiple consumers, part of the program must be hand-fused, or somehow rewritten as a straight-line computation.
-These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
+These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values.
+This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
 % Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
 Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
 In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into a static step function and a dynamic state.
-Vector's completely static step function can be optimised at compile-time, while the state can change dynamically.
+Vector's static step function can be optimised at compile-time, while the state can change dynamically.
 In contrast, in Conduit and Pipes, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside the continuation for a monadic operation.
 
-The final streaming library, `Streaming', is similar to the the previous two in that it is a monadic streaming library with limited static fusion.
-Streaming does support explicit duplication of streams, in a similar way to polarised streams (\cref{taxonomy/polarised}).
-To duplicate the stream, the @store@ function takes a computation to perform on the copy of the stream, while the original stream is passed through.
-Operationally, this is equivalent to the \Hs/dup_ioi/, which duplicates a pull stream into a push stream and returns a new pull stream; however, the implementation encodes stream polarity with a monad transformer stack rather than directly using pull and push streams.
+The final streaming library, `Streaming', is similar to the previous two libraries, in that it is a monadic streaming library with limited static fusion.
+Unlike the previous two, Streaming supports explicit duplication of streams, in a similar way to polarised streams (\cref{taxonomy/polarised}).
+To duplicate the stream, the \Hs@store@ function takes a computation to perform on the copy of the stream, while the original stream is passed through.
+This operation is analogous to the \Hs/dup_ioi/ combinator, which duplicates a pull stream into a push stream and returns a new pull stream; however, the implementation encodes stream polarity with a monad transformer stack rather than directly using pull and push streams.
 
 
 
-The benchmark results presented below were all run on a MacBook Pro, with a 2GHz Intel Core i7, and 16GB of RAM.
+The benchmark results presented in this chapter were all run on a MacBook Pro, with a 2GHz Intel Core i7, and 16GB of RAM.
 The operating system is OS X El Capitan.
 To run the benchmarks, we used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
 Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
-It can also collect statistics on allocations, which is sometimes (but not always) a more stable performance indicator than runtime, as it is less affected by the whims of the underlying operating system.
+It can also collect statistics on allocations, which can be a more stable performance indicator than runtime, as it is less affected by the underlying operating system's scheduling decisions.
 
-There are many implementations of the benchmark programs, but for the most part they all follow the same structure.
-Showing five different implementations of the same program is not that interesting.
-For the most part, we show only the implementations of the Folderol versions; the other versions are available in \cref{app:Benchmarks}.
+We have implemented each benchmark program multiple times across the different backends.
+These different implementations generally follow the same structure.
+All the implementations are available in \cref{app:Benchmarks}; in this chapter, we focus on the Folderol versions.
+% Showing five different implementations of the same program is not that interesting.
+% For the most part, we show only the implementations of the Folderol versions; the other versions are available in \cref{app:Benchmarks}.
 
 \subsection{Gold-panning}
 
-Our first benchmark is the @priceAnalyses@ example from \cref{taxonomy/gold-panning}.
+Our first benchmark is the \Hs@priceAnalyses@ example from \cref{taxonomy/gold-panning}.
 This example computes statistical analyses of a particular stock's price over time, as well as how the stock compares to a market index.
 
 \begin{haskell}[float,caption=Folderol implementation of \Hs/priceAnalyses/,label=l:bench:priceAnalysesFolderol]
@@ -99,12 +102,12 @@ priceOverMarket stock market = do
   Stats.regressionCorrelation pp
 \end{haskell}
 
-\Cref{l:bench:priceAnalysesFolderol} shows the Folderol implementation of @priceAnalyses@.
+\Cref{l:bench:priceAnalysesFolderol} shows the Folderol implementation of \Hs@priceAnalyses@.
 The calls to \Hs@scalarIO@ indicate that the query returns two scalar variables that we wish to capture.
 The \Hs@fuse@ function converts the process network into executable code.
 The dollar-sign syntax around \Hs@fuse@ denotes a Template Haskell splice, which means that the call to \Hs@fuse@ is evaluated at compile-time, and returns code to execute at runtime.
 The \Hs@fuse@ function takes a process network constructed at compile-time, fuses the network into a single process, and generates code for the resulting process.
-In the call to \Hs@source@, the piped brackets around the argument \Hs@[|sourceRecords fpStock|]@ indicate a Template Haskell quasiquote; this is used by code executed at compile-time to delay execution until runtime.
+In the call to \Hs@source@, the piped brackets around the argument \Hs@[|sourceRecords fpStock|]@ indicate a Template Haskell quasiquote; this is used to delay execution of code from compile-time to runtime.
 
 We use the same Folderol implementation to benchmark against concurrent execution of a Kahn process network.
 We disable fusion by replacing the call to \Hs@fuse@ with a function called \Hs@fuseWith@, which takes a set of fusion and code generation options.
@@ -114,7 +117,7 @@ After inserting the communication channels, the concurrent version uses the same
 For Pipes, which does not naturally support multiple queries, we implement a two-pass version which computes \Hs/priceOverTime/ and \Hs/priceOverMarket/ in separate loops over the input.
 The implementation is available in \cref{l:a:bench:priceAnalysesPipes}.
 
-For Streaming, we duplicate the stream explicitly to compute @priceOverTime@ as a push stream.
+For Streaming, we duplicate the stream explicitly to compute \Hs@priceOverTime@ as a push stream.
 The implementation is available in \cref{l:a:bench:priceAnalysesStreaming}.
 
 \input{figs/runtime/gold-panning.tex}
@@ -134,8 +137,8 @@ With the ideal chunk size, the concurrent execution is 1.5 times faster than the
 \subsection{Quickhull}
 
 Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
-At its core is the @filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
-The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an @IO@ monad.
+At its core is the \Hs@filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
+The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an \Hs@IO@ monad.
 
 \begin{lstlisting}[float,label=l:bench:filterMaxFolderol,caption=Folderol implementation of filterMax]
 filterMaxFolderol :: Line -> Vector Point -> IO (Point, Vector Point)
@@ -153,23 +156,26 @@ filterMaxFolderol l ps = do
   return (fst maxim, above)
 \end{lstlisting}
 
-\Cref{l:bench:filterMaxFolderol} shows the Folderol implementation of @filterMax@.
-The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (@snkMaxim@), and a sink for the vector of points above the line (@snkAbove@).
-As we know the output vector of points is not going to be any longer than the input vector, we use @vectorSize@ as a size hint to specify the upper bound of the vector's size.
+\Cref{l:bench:filterMaxFolderol} shows the Folderol implementation of \Hs@filterMax@.
+The Folderol implementation starts by constructing a sink for the maximum point to be pushed into (\Hs@snkMaxim@), and a sink for the vector of points above the line (\Hs@snkAbove@).
+As we know the output vector of points is not going to be any longer than the input vector, we use \Hs@vectorSize@ as a size hint to specify the upper bound of the vector's size.
 % remove the need to dynamically grow the vector. (\cref{s:implementation:sizehints}).
-The Template Haskell splice calls @fuse@ to convert the process network into executable code.
-The process network starts by converting the input vector @pts@ to a stream @ins@.
-We use @source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
-We then annotate each point of @ins@ with the distance between each point and the line with @map@, calling this stream @annot@.
-The @annot@ stream is filtered to only those above the line (@above@), then the annotations thrown away (@above'@).
-The maximum is computed by comparing the second half of each annotated point --- the distance --- and stored in @maxim@.
-Finally, @maxim@ is pushed into the scalar output sink, and all @above'@ points are pushed into the vector output sink.
+The Template Haskell splice calls \Hs@fuse@ to convert the process network into executable code.
+The process network starts by converting the input vector \Hs@pts@ to a stream \Hs@ins@.
+We use \Hs@source@ to create an input stream, which takes a Template Haskell expression denoting how to construct a source at runtime.
+We then annotate each point of \Hs@ins@ with the distance between each point and the line with \Hs@map@, calling this stream \Hs@annot@.
+The \Hs@annot@ stream is filtered to only those above the line (\Hs@above@), then the annotations thrown away (\Hs@above'@).
+The maximum is computed by comparing the second half of each annotated point --- the distance --- and stored in \Hs@maxim@.
+Finally, \Hs@maxim@ is pushed into the scalar output sink, and all \Hs@above'@ points are pushed into the vector output sink.
 
 
-Let us now look at two versions of @filterMax@ using Vector.
-The shortcut fusion system cannot fuse both operations into a single loop, and both operations require the distances between the line and each point.
-This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
-We compare both implementations.
+In the Folderol implementation, the \Hs/annot/ stream is used twice.
+If we rewrite this to use Vector, as in \cref{l:bench:filterMaxVectorShare}, the corresponding \Hs/annot/ vector cannot be fused with both of its consumers, and the program requires multiple loops.
+We call this the `shared distances' version, as the \Hs/annot/ vector containing the distances is made manifest and re-used by the two loops computing the maximum and the filter.
+
+% The shortcut fusion system cannot fuse both operations into a single loop, and both operations require the distances between the line and each point.
+% This means a choice must be made: either compute the distances upfront and share them, or recompute the distances in each operation.
+% We compare both implementations.
 
 \begin{lstlisting}[float,label=l:bench:filterMaxVectorShare,caption=Vector / share implementation of filterMax]
 filterMaxVectorShare l ps
@@ -181,31 +187,32 @@ filterMaxVectorShare l ps
    in return (point, above)
 \end{lstlisting}
 
-The shared distances implementation is shown in \cref{l:bench:filterMaxVectorShare}.
-First, compute the distance between each point and the line, and store this in a vector called @annot@.
-Then @point@ computes the maximum with @maximumBy@, comparing each distance.
-Next, @above@ filters each point.
+% The shared distances implementation is shown in \cref{l:bench:filterMaxVectorShare}.
+% First, compute the distance between each point and the line, and store this in a vector called \Hs@annot@.
+% Then \Hs@point@ computes the maximum with \Hs@maximumBy@, comparing each distance.
+% Next, \Hs@above@ filters each point.
 
-The recomputed distances implementation is available in \cref{app:Benchmarks}, \cref{l:a:bench:filterMaxVectorRecompute}.
-To recompute the vectors, we start from the shared version and duplicate the @annot@ vector to @annot1@ and @annot2@. The maximum now uses @annot1@, and filter uses @annot2@.
+Instead of manifesting the distances vector and sharing it among the two consumer loops, we can also recompute the distances for each consumer.
+The recomputed distances implementation is available in \cref{l:a:bench:filterMaxVectorRecompute}.
+To recompute the vectors, we modify the shared version, duplicating the binding for the \Hs@annot@ vector to \Hs@annot1@ and \Hs@annot2@. The maximum now uses \Hs@annot1@, and filter uses \Hs@annot2@.
 This way, both maps to compute the distance can be fused into their consumers.
 
-In the results below, recomputing the distances is faster than storing the distances.
+In the results below, recomputing the distances is faster and allocates less than the shared distances version.
 For this benchmark we used only two-dimensional points, but it is possible that at higher dimensions the cost of recomputing distances may outweigh the cost of allocation.
 The choice to recompute the distances requires intimate knowledge of how shortcut fusion works and might be surprising to the naive user: duplicating work does not usually \emph{improve} performance.
 
 For Conduit, we also have two versions: the first uses two passes over the data (\cref{l:a:bench:filterMaxConduitTwoPass}), while the second is hand-fused into a single pass (\cref{l:a:bench:filterMaxConduitOnePass}).
-The two-pass version defines two `conduits', or stream computations; @cabove@ for the filtered vector and @cmaxim@ for the maximum.
-Computation @cabove@ converts the vector to a conduit with @sourceVector@, then annotates with the distances, filters according to the distances, removes the annotations, and converts back to a vector.
+The two-pass version defines two `conduits', or stream computations; \Hs@cabove@ for the filtered vector and \Hs@cmaxim@ for the maximum.
+Computation \Hs@cabove@ converts the vector to a conduit with \Hs@sourceVector@, then annotates with the distances, filters according to the distances, removes the annotations, and converts back to a vector.
 As with Folderol, we use size hints when converting back to a vector to remove any overhead with growing and copying the vector.
-Computation @cmaxim@ also converts the vector to a conduit, then annotates with the distances, and computes the maximum.
-The hand-fused Conduit version is more complicated, and loses the abstraction benefits from using a high-level streaming library.
+Computation \Hs@cmaxim@ also converts the vector to a conduit, then annotates with the distances, and computes the maximum.
+The hand-fused Conduit version is more complicated, and loses some of the abstraction benefits from using a high-level streaming library.
 
 For Pipes, we only have a hand-fused version (\cref{l:a:bench:filterMaxPipes}), which follows much the same structure as the Conduit hand-fused version.
 
-Finally, the Streaming version (\cref{l:a:bench:filterMaxStreaming}) is much closer to the Vector version, except that the stream must be explicitly split into both consumers.
-We start by converting the vector to a stream with @sourceVector@, and then use @map@ to annotate each point with the distance from the line.
-To split the stream, we use @store@ which takes a computation to perform on the copy of the stream --- in this case computing the maximum with @maximumBy@.
+Finally, the Streaming version (\cref{l:a:bench:filterMaxStreaming}) executes in a single pass, with the stream explicitly duplicated into both consumers.
+We start by converting the vector to a stream with \Hs@sourceVector@, and then use \Hs@map@ to annotate each point with the distance from the line.
+To duplicate the stream we use the \Hs@store@ combinator, which takes a computation to perform on the copy of the stream --- in this case computing the maximum with \Hs@maximumBy@.
 The original stream is also passed through, which is filtered and then the annotations discarded.
 
 \begin{table}
@@ -249,45 +256,96 @@ This chunking must be implemented manually and complicates the program further, 
 Even with chunking, we may reduce the streaming overhead from once per element to once per thousand elements, but we can never remove it entirely.
 With Folderol there is no streaming overhead to reduce because it is statically fused away.
 
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  input [texlbl="(input)"];
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_level  {
+    lblstyle="left,xshift=1.0cm";
+    label="(level detector)";
+    squares [texlbl="\Hs/square/"];
+    avg [texlbl="\Hs/average/"];
+    sqrt [texlbl="\Hs/root/"];
+
+    squares -> avg -> sqrt;
+  };
+
+  subgraph cluster_gain  {
+    lblstyle="left";
+    label="(gain)";
+    transfer [texlbl="\Hs/transfer/"];
+    multiply [texlbl="\Hs/multiply/"];
+    transfer -> multiply;
+  };
+
+  input -> squares;
+  input -> multiply;
+  sqrt -> transfer;
+  output [texlbl="(output)"];
+  multiply -> output;
+}
+\end{dot2tex}
+\caption{Dependency graph for audio compressor}
+\label{figs/dep/compressor}
+\end{figure}
+
 \subsection{Dynamic range compression}
 Dynamic range compression is an audio signal processing algorithm to reduce the volume of loud sounds, leaving quiet sounds unchanged.
-To implement this, we take an audio signal, and at each point compute a rolling average of the volume.
-We clip the volume at the upper bound, one, and divide the clipped volume by the original volume.
-This will be our multiplier, which we multiply the original signal by at each step.
-This way, if the volume is less than the limit, our multiplier will be one and the signal is unchanged. 
-If the volume is above the limit, our multiplier will be the reciprocal of volume: whatever is required to get the volume back down to one.
+To implement this, we take an audio signal, and at each point approximate the signal's current volume with a rolling average.
+We pass the current volume to a \emph{transfer function} to compute the \emph{gain multiplier}, which denotes how much to adjust the volume by.
+If the volume of the input signal is not above the volume threshold, the transfer function sets the gain multiplier to one, indicating no change.
+If the volume is louder than the threshold, the transfer function decreases the volume by setting the gain multiplier to a value below one.
 
-\begin{lstlisting}[float,label=l:bench:compressorFolderol,caption=Folderol implementation of compressor]
+\Cref{figs/dep/compressor} shows the dependency graph for the audio compressor.
+The input stream is used twice, once by the level detector subgraph, and again by the gain subgraph.
+The level detector subgraph approximates the signal volume by computing the root mean square with an exponential moving average.
+The gain subgraph uses the output of the level detector to compute the gain multiplier, and then uses this to adjust the volume of the input signal.
+
+\begin{lstlisting}[float,label=l:bench:compressorFolderol,caption=Folderol implementation of \Hs/compressor/]
 compressor :: Vector Double -> IO (Vector Double)
 compressor vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
     $$(fuse $ do
-        ins     <- source    [|sourceOfVector vecIns|]
-        squares <- map       [|\x -> x * x|]       ins
-        avg     <- postscanl [|lop        |] [|0|] squares
-        mul     <- map       [|clip       |]       avg
-        out     <- zipWith   [|(*)        |] mul   ins
-        sink out             [|snkOut     |]$$)
+        input   <- source    [|sourceOfVector vecIns|]
+        squares <- square    input
+        means   <- average   squares
+        roots   <- root      means
+        gains   <- transfer  roots
+        output  <- multiply  input    gains
+        sink output          [|snkOut|]$$)
   return vecOut
- where
-  lop acc sample = acc * 0.9 + sample * 0.1
 
-  clip mean
-   = let root    = sqrt mean
-     in  min 1.0 root / root
+square   = map       [|\x -> x * x|]
+average  = postscanl [|average'   |] [|0|]
+root     = map       [|sqrt       |]
+transfer = map       [|transfer'  |]
+multiply = zipWith   [|(*)        |]
+
+average' acc sample
+ = acc * 0.9 + sample * 0.1
+
+transfer' mean
+ | mean > 1  = 1 / mean
+ | otherwise = 1
 \end{lstlisting}
 
 The Folderol version is shown in \cref{l:bench:compressorFolderol}.
-To implement this in Folderol, we start by creating a sink for our output vector, calling the sink @snkOut@ and the vector @vecOut@.
-This will be the same size as the input vector, so we use @vectorSize@.
-We take the input array @vecIns@ and convert it to a stream @ins@.
-We are going to compute the volume of the input stream using the \emph{root mean square}, so first we need to square each element.
-This is the @squares@ stream.
-We need to compute the average of the squares, so we will use an exponential moving average --- which is equivalent to as a low-pass filter.
-To compute the moving average, we use @postscanl@, which is like a fold over the data, except it returns the stream of accumulators rather than just the final result.
-The difference between @postscanl@ and regular @scanl@ is that the output stream for @scanl@ contains the original zero accumulator for the fold, which @postscanl@ omits.
-Now that we have our average, @avg@, we @clip@ each element by taking the square root, and clipping it to one. This is our multiplier, @mul@.
-Finally, we zip the original stream with the multiplier, and multiply them together.
+% To implement this in Folderol, we start by creating a sink for our output vector, calling the sink \Hs@snkOut@ and the vector \Hs@vecOut@.
+% This will be the same size as the input vector, so we use \Hs@vectorSize@.
+% We take the input array \Hs@vecIns@ and convert it to a stream \Hs@ins@.
+% We are going to compute the volume of the input stream using the \emph{root mean square}, so first we need to square each element.
+% This is the \Hs@squares@ stream.
+% We need to compute the average of the squares, so we will use an exponential moving average --- which is equivalent to as a low-pass filter.
+The combinators \Hs/square/, \Hs/root/ and \Hs/transfer/ are computed by applying a single function to each stream element.
+To compute the moving average, we use \Hs@postscanl@, which is like a fold over the data, except it returns the stream of accumulators rather than just the final result.
+The difference between \Hs@postscanl@ and regular \Hs@scanl@ is that the output stream for \Hs@scanl@ contains the original zero accumulator for the fold, which \Hs@postscanl@ omits.
+% Now that we have our average, \Hs@avg@, we \Hs@clip@ each element by taking the square root, and clipping it to one. This is our multiplier, \Hs@mul@.
+% Finally, we zip the original stream with the multiplier, and multiply them together.
 
 The Vector version (\cref{l:a:bench:compressorVector}) is very similar to the Folderol version, except without the Template Haskell boilerplate.
 The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
@@ -312,7 +370,7 @@ Vector &            & 1.78s &   191\% & 8.0e8 & 100\%\\
 \end{table}
 
 \subsection{Dynamic range compression with low-pass}
-Before compressing an audio signal, we may wish to perform some pre-processing on it.
+Before applying dynamic range compression to an audio signal, we may wish to perform some pre-processing on it.
 For this example, suppose we want to apply a low-pass filter to the input signal.
 
 \begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of compressor with low-pass]
@@ -320,19 +378,20 @@ compressorLop :: Vector Double -> IO (Vector Double)
 compressorLop vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
     $$(fuse $ do
-        ins     <- source    [|sourceOfVector vecIns|]
-        lopped  <- postscanl [|lop20k     |] [|0|] ins
-        squares <- map       [|\x -> x * x|]       lopped
-        avg     <- postscanl [|lop        |] [|0|] squares
-        mul     <- map       [|clip       |]       avg
-        out     <- zipWith   [|(*)        |] mul   lopped
-        sink out             [|snkOut     |]$$)
+        input   <- source    [|sourceOfVector vecIns|]
+        lopass  <- postscanl [|lop20k|] [|0|] input
+        squares <- square    lopass
+        means   <- average   squares
+        roots   <- root      means
+        gains   <- transfer  roots
+        output  <- multiply  input    gains
+        sink out             [|snkOut|]$$)
   return vecOut
 \end{lstlisting}
 
 The code for compressor with a low-pass is shown in \cref{l:bench:compressorLopFolderol}.
-Here we again use @postscanl@ to create another low-pass filter, calling the result @lopped@.
-Then @lopped@ is used as the input to both @squares@ and @out@.
+Here, we use \Hs@postscanl@ to create a low-pass filter to remove frequencies above 20kHz, and call the result stream \Hs@lopass@.
+The \Hs@lopass@ stream is then used as the input to the level detector subgraph and the gain subgraph.
 
 \begin{table}
 \begin{center}
@@ -349,10 +408,10 @@ Vector &            & 2.21s &   190\% & 1.6e9 & 200\%\\
 \label{table:bench:compressorlop}
 \end{table}
 
-\Cref{table:bench:compressorlop} shows the results for compressor with low-pass.
-For the Vector implementation in the previous example, the two occurrences of @ins@ just meant that the input array was indexed twice.
-However, in the modified version with low-pass (\cref{l:a:bench:compressorLopVector}), it is not an input vector being used twice, but the result of @postscanl@.
-This means that the result vector for @lopped@ must be reified into a manifest vector before it can be reused.
+\Cref{table:bench:compressorlop} shows the runtimes for compressor with low-pass.
+For the Vector implementation in the previous example, the two occurrences of \Hs@ins@ just meant that the input array was indexed twice.
+However, in the modified version with low-pass (\cref{l:a:bench:compressorLopVector}), it is not an input vector being used twice, but the result of \Hs@postscanl@.
+This means that the result vector for \Hs@lopped@ must be reified into a manifest vector before it can be reused.
 The Vector version then has two loops, as well as an extra manifest array.
 
 
@@ -456,8 +515,8 @@ Maximum process count exceeded:
 \end{code}
 
 This error indicates that the program could not be fused into a single loop without introducing unbounded buffering.
-Some sort of buffering is inevitable, because @append@ requires all the @evens@ first: all the even-valued elements need to be read from the input stream @x0@ before the odd-valued elements can be read by @append@.
-To implement this, we would need to read from the input stream @x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
+Some sort of buffering is inevitable, because \Hs@append@ requires all the \Hs@evens@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
+To implement this, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppendFail,caption=Partition / append fusion failure]
 partitionAppendFailure :: Vector Int -> IO (Vector Int)
@@ -478,7 +537,7 @@ In this case, the input stream is not really a stream, but is backed by a real v
 This means we can implement it without introducing an unbounded buffer: we already have the buffer.
 To execute the program, we \emph{explicitly} introduce another source to read from the vector, as in \cref{l:bench:partitionAppend2Source}.
 The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
-All of @evens@ can be read by @append@, independently of @odds@.
+All of \Hs@evens@ can be read by \Hs@append@, independently of \Hs@odds@.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Source,caption=Partition / append with two sources]
 partitionAppend2Source xs = do
@@ -519,8 +578,8 @@ partitionAppend2Loop xs = do
 \end{lstlisting}
 
 The Vector implementations (\cref{l:a:bench:partitionAppendVector}) follow the same structure: the two-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
-The two-loop Vector version uses the @partition@ primitive, which is itself a hand-fused implementation of two filters.
-The Vector @partition@ cannot fuse with any consumers and always constructs manifest output vectors.
+The two-loop Vector version uses the \Hs@partition@ primitive, which is itself a hand-fused implementation of two filters.
+The Vector \Hs@partition@ cannot fuse with any consumers and always constructs manifest output vectors.
 The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
 The length of both partitions must equal the length of the original array.
 Once the end is reached, the false parts which were filled backwards can be reversed in-place.
@@ -556,9 +615,9 @@ The author can be confident that if it compiles, it will have the desired stream
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
 \Cref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
-To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the @map@, @filter@, @scan@, @group@ and @join@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
-The @join@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a @join@ at the start.
-The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a @map@ and a @filter@ processing the same input stream.
+To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the \Hs@map@, \Hs@filter@, \Hs@scan@, \Hs@group@ and \Hs@join@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
+The \Hs@join@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a \Hs@join@ at the start.
+The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a \Hs@map@ and a \Hs@filter@ processing the same input stream.
 In both cases the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are fewer than 100 states in the result process. 
 
 
@@ -566,13 +625,13 @@ In both cases the number of states in the result process grows linearly with the
 
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
-On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N join processes, N+1 input streams, and a single output stream. The output of each join process is the input of the next, forming a chain of joins. In source notation the network for N = 3 is @sOut = join sIn1 (join sIn2 (join sIn3 sIn4))@.
+On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N join processes, N+1 input streams, and a single output stream. The output of each join process is the input of the next, forming a chain of joins. In source notation the network for N = 3 is \Hs@sOut = join sIn1 (join sIn2 (join sIn3 sIn4))@.
 
-When fusing two processes, the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the @instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
+When fusing two processes, the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the \Hs@instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
 
 In the worst case, fusion of two processes produces O($n*m$) different states, where $n$ and $m$ are the number of states in each. If we assume the two processes have about the same number of states then this is O($n^2$). Fusing the next process into this result yields O($n^3$), so overall the worst case number of states in the result will be O($n^k$), where $k$ is the number of processes fused. 
 
-In the particular case of @join@, the implementation has two occurrences of the @push@ instruction. During fusion, the states for the consuming process are inlined at each occurrence of @push@. These states are legitimately different because at each occurence of @push@ the input channels of the join process are in different channel states, and these channel states are included in the overall process state.
+In the particular case of \Hs@join@, the implementation has two occurrences of the \Hs@push@ instruction. During fusion, the states for the consuming process are inlined at each occurrence of \Hs@push@. These states are legitimately different because at each occurence of \Hs@push@ the input channels of the join process are in different channel states, and these channel states are included in the overall process state.
 
 
 \section{Conclusion}

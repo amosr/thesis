@@ -15,7 +15,7 @@ Ultimately, the job of an array fusion system is to make the program go as fast 
 
 
 % -----------------------------------------------------------------------------
-% \subsection{Haskell short-cut fusion}
+% \subsection{Haskell shortcut fusion}
 % Existing fusion systems for Haskell such as stream fusion\cite{coutts2007stream, % mainland2013exploiting}, tend to cleverly reuse compiler optimisations such as inlining%  and % rewrite rules\cite{peytonjones2001rules}, to fuse combinators without having to modify % the % compiler itself. This approach has the advantage of simplicity, but is inherently limit% ed i% n the % amount of fusion it can perform.% 
 % 
 % Consider the following @filterMax@ function, where each element in the input array is % incremented, then the maximum is found, and the array is filtered to those greater tha% n zero.

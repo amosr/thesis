@@ -261,7 +261,7 @@ With Folderol there is no streaming overhead to reduce because it is statically 
 \begin{dot2tex}[dot]
 digraph G {
   node [shape="none"];
-  input [texlbl="(input)"];
+  input [texlbl="\Hs/input/"];
 
   graph [style="rounded corners"];
 
@@ -286,7 +286,7 @@ digraph G {
   input -> squares;
   input -> multiply;
   sqrt -> transfer;
-  output [texlbl="(output)"];
+  output [texlbl="\Hs/output/"];
   multiply -> output;
 }
 \end{dot2tex}
@@ -298,7 +298,7 @@ digraph G {
 Dynamic range compression is an audio signal processing algorithm to reduce the volume of loud sounds, leaving quiet sounds unchanged.
 To implement this, we take an audio signal, and at each point approximate the signal's current volume with a rolling average.
 We pass the current volume to a \emph{transfer function} to compute the \emph{gain multiplier}, which denotes how much to adjust the volume by.
-If the volume of the input signal is not above the volume threshold, the transfer function sets the gain multiplier to one, indicating no change.
+If the volume of the input signal is not above the volume threshold, the transfer function sets the gain multiplier to one, indicating no change to the input signal.
 If the volume is louder than the threshold, the transfer function decreases the volume by setting the gain multiplier to a value below one.
 
 \Cref{figs/dep/compressor} shows the dependency graph for the audio compressor.
@@ -320,12 +320,14 @@ compressor vecIns = do
         sink output          [|snkOut|]$$)
   return vecOut
 
+-- Stream transformers
 square   = map       [|\x -> x * x|]
 average  = postscanl [|average'   |] [|0|]
 root     = map       [|sqrt       |]
 transfer = map       [|transfer'  |]
 multiply = zipWith   [|(*)        |]
 
+-- Worker functions
 average' acc sample
  = acc * 0.9 + sample * 0.1
 
@@ -334,25 +336,25 @@ transfer' mean
  | otherwise = 1
 \end{lstlisting}
 
-The Folderol version is shown in \cref{l:bench:compressorFolderol}.
+The Folderol implementation is shown in \cref{l:bench:compressorFolderol}.
 % To implement this in Folderol, we start by creating a sink for our output vector, calling the sink \Hs@snkOut@ and the vector \Hs@vecOut@.
 % This will be the same size as the input vector, so we use \Hs@vectorSize@.
 % We take the input array \Hs@vecIns@ and convert it to a stream \Hs@ins@.
 % We are going to compute the volume of the input stream using the \emph{root mean square}, so first we need to square each element.
 % This is the \Hs@squares@ stream.
 % We need to compute the average of the squares, so we will use an exponential moving average --- which is equivalent to as a low-pass filter.
-The combinators \Hs/square/, \Hs/root/ and \Hs/transfer/ are computed by applying a single function to each stream element.
-To compute the moving average, we use \Hs@postscanl@, which is like a fold over the data, except it returns the stream of accumulators rather than just the final result.
+The stream transformers \Hs/square/, \Hs/root/ and \Hs/transfer/ are computed by applying a single function to each stream element.
+To compute the moving average, we use \Hs@postscanl@, which is like a fold over the data except it returns the stream of accumulators rather than just the final result.
 The difference between \Hs@postscanl@ and regular \Hs@scanl@ is that the output stream for \Hs@scanl@ contains the original zero accumulator for the fold, which \Hs@postscanl@ omits.
 % Now that we have our average, \Hs@avg@, we \Hs@clip@ each element by taking the square root, and clipping it to one. This is our multiplier, \Hs@mul@.
 % Finally, we zip the original stream with the multiplier, and multiply them together.
 
-The Vector version (\cref{l:a:bench:compressorVector}) is very similar to the Folderol version, except without the Template Haskell boilerplate.
-The shortcut fusion \emph{is} able to fuse this into a single loop, except the two occurrences of the input vector mean that it will be indexed twice.
+The Vector implementation (\cref{l:a:bench:compressorVector}) is similar to the Folderol implementation, except it does not require the Template Haskell fusion directives or explicit conversion between arrays and streams.
+Vector's shortcut fusion is able to fuse this program into a single loop, except the two occurrences of the input vector mean that the vector will be indexed twice.
 
 \Cref{table:bench:compressor} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
-The difference between the hand-fused version and the Folderol version are very slight. 
-The Vector version is slower because its generated loop indexes the input array twice.
+The runtime difference between the hand-fused implementation and the Folderol implementation are very slight. 
+The Vector implementation is slower because its generated loop indexes the input array twice.
 
 \begin{table}
 \begin{center}
@@ -371,7 +373,7 @@ Vector &            & 1.78s &   191\% & 8.0e8 & 100\%\\
 
 \subsection{Dynamic range compression with low-pass}
 Before applying dynamic range compression to an audio signal, we may wish to perform some pre-processing on it.
-For this example, suppose we want to apply a low-pass filter to the input signal.
+For this benchmark, we want to apply a low-pass filter to the input signal.
 
 \begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of compressor with low-pass]
 compressorLop :: Vector Double -> IO (Vector Double)
@@ -389,8 +391,9 @@ compressorLop vecIns = do
   return vecOut
 \end{lstlisting}
 
-The code for compressor with a low-pass is shown in \cref{l:bench:compressorLopFolderol}.
-Here, we use \Hs@postscanl@ to create a low-pass filter to remove frequencies above 20kHz, and call the result stream \Hs@lopass@.
+The Folderol implementation of a dynamic range compressor with a low-pass is shown in \cref{l:bench:compressorLopFolderol}.
+The low-pass filter is itself a kind of moving average, and is defined in much the same way as the \Hs/average/ stream transformer.
+We use \Hs@postscanl@ to create a low-pass filter to remove frequencies above 20kHz, and call the result stream \Hs@lopass@.
 The \Hs@lopass@ stream is then used as the input to the level detector subgraph and the gain subgraph.
 
 \begin{table}
@@ -409,9 +412,9 @@ Vector &            & 2.21s &   190\% & 1.6e9 & 200\%\\
 \end{table}
 
 \Cref{table:bench:compressorlop} shows the runtimes for compressor with low-pass.
-For the Vector implementation in the previous example, the two occurrences of \Hs@ins@ just meant that the input array was indexed twice.
-However, in the modified version with low-pass (\cref{l:a:bench:compressorLopVector}), it is not an input vector being used twice, but the result of \Hs@postscanl@.
-This means that the result vector for \Hs@lopped@ must be reified into a manifest vector before it can be reused.
+For the Vector implementation in the previous example, the two occurrences of the input vector meant that the input array was indexed twice.
+However, in the modified version with low-pass (\cref{l:a:bench:compressorLopVector}), it is the \Hs@lopass@ vector which is used twice, rather than the input vector.
+Using the \Hs@lopass@ vector twice means that it must be reified into a manifest vector before it can be reused.
 The Vector version then has two loops, as well as an extra manifest array.
 
 
@@ -505,51 +508,77 @@ The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to
 
 \subsection{Partition / append}
 
-The program in \cref{l:bench:partitionAppendFail} partition an input vector into a vector containing the even-valued elements, and a vector containing the odd-valued elements.
+The program in \cref{l:bench:partitionAppendFail} partitions an input vector into a vector containing the even-valued elements, and a vector containing the odd-valued elements.
 The two result vectors are then appended together.
-If we try to compile this code with Folderol, we get a compilation error:
+If we try to compile this code with Folderol, we get a compile-time warning:
+
+% Process network after fusion:
+% ()    ->{Folderol.Source.sourceOfVector xs_6989586621679047426}-> $0
+% 
+% $0    ->------------------------(dup2)--------------------------> $4 $5
+%       ->L0
+%         L0 (dup2_L0_0): pull $0 L1 L4
+%         L1 (dup2_L1_0): push $4 L2
+%         L2 (dup2_L2_0): push $5 L3
+%         L3 (dup2_L3_0): drop $0 L0
+%         L4 (dup2_L4_0): done
+% $4 $5 ->--------------(append / filter / filter)----------------> $3
+%       ->L0
+%         L0 (append_L0_0_filter_L0_0_n_0_filter_L0_0_n_0): pull $4 L1 L4
+%         L1 (append_L0_0_filter_L1_0_n_0_filter_L0_0_n_0): bool L3 L2
+%         L2 (append_L0_0_filter_L3_0_n_0_filter_L0_0_n_0): drop $4 L0
+%         L3 (append_L0_0_filter_L3_0_h_0_filter_L0_0_n_0): jump L5
+%         L4 (append_L3_0_filter_L4_0_c_0_filter_L0_0_n_0): pull $5 L6 L9
+%         L5 (append_L1_0_filter_L3_0_h_0_filter_L0_0_n_0): push $3 L2
+%         L6 (append_L3_0_filter_L4_0_c_0_filter_L1_0_n_0): bool L8 L7
+%         L7 (append_L3_0_filter_L4_0_c_0_filter_L3_0_n_0): drop $5 L4
+%         L8 (append_L3_0_filter_L4_0_c_0_filter_L3_0_h_0): jump L10
+%         L9 (append_L6_0_filter_L4_0_c_0_filter_L4_0_c_0): done
+%         L10 (append_L4_0_filter_L4_0_c_0_filter_L3_0_h_0): push $3 L7
+% $3    ->--------------{snkYs_6989586621679047427}---------------> ()
 
 \begin{code}
-Maximum process count exceeded:
- after fusion there are 2 processes, but maximum is 1
+bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
+  Maximum process count exceeded:
+    after fusion there are 2 processes, but maximum is 1.
+  Falling back to unbounded communication channels.
 \end{code}
 
-This error indicates that the program could not be fused into a single loop without introducing unbounded buffering.
+This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering.
 Some sort of buffering is inevitable, because \Hs@append@ requires all the \Hs@evens@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
 To implement this, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppendFail,caption=Partition / append fusion failure]
 partitionAppendFailure :: Vector Int -> IO (Vector Int)
 partitionAppendFailure xs = do
-  (ys,()) <- vectorSize xs $ \snkYs ->
+  (apps,()) <- vectorSize xs $ \snkApps ->
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
         evens <- filter [|even             |] x0
         odds  <- filter [|odd              |] x0
         -- Failure: cannot fuse append with both filters
         apps  <- append evens odds
-        sink apps       [|snkYs            |]$$)
-  return ys
+        sink apps       [|snkApps          |]$$)
+  return apps
 \end{lstlisting}
 
 
-In this case, the input stream is not really a stream, but is backed by a real vector.
-This means we can implement it without introducing an unbounded buffer: we already have the buffer.
-To execute the program, we \emph{explicitly} introduce another source to read from the vector, as in \cref{l:bench:partitionAppend2Source}.
-The two filters now apply to different input sources, even though they are backed by the same vector, so there is no need to coordinate the two uses.
+In this case, the input stream is backed by a real vector, which means we can, in fact, implement it without introducing an unbounded buffer: we already have the buffer.
+To execute the program, we explicitly introduce another source to read from the vector, as in \cref{l:bench:partitionAppend2Source}.
+The two filters now apply to different input sources, and even though they are backed by the same vector, there is no need to coordinate the two uses.
 All of \Hs@evens@ can be read by \Hs@append@, independently of \Hs@odds@.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppend2Source,caption=Partition / append with two sources]
 partitionAppend2Source xs = do
-  (ys,()) <- vectorSize xs $ \snkYs ->
+  (apps,()) <- vectorSize xs $ \snkApps ->
     $$(fuse $ do
         x0    <- source [|sourceOfVector xs|]
         x1    <- source [|sourceOfVector xs|]
         evens <- filter [|even             |] x0
         odds  <- filter [|odd              |] x1
         apps  <- append evens odds
-        sink asbs       [|snkYs            |]$$)
-  return ys
+        sink apps       [|snkApps          |]$$)
+  return apps
 \end{lstlisting}
 
 We can implement this program another way, if we are willing to introduce two intermediate arrays.
@@ -580,10 +609,9 @@ partitionAppend2Loop xs = do
 The Vector implementations (\cref{l:a:bench:partitionAppendVector}) follow the same structure: the two-loop version uses an intermediate array to store the filtered arrays in before appending them; the other indexes the input array twice, thus computing the predicate twice.
 The two-loop Vector version uses the \Hs@partition@ primitive, which is itself a hand-fused implementation of two filters.
 The Vector \Hs@partition@ cannot fuse with any consumers and always constructs manifest output vectors.
-The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the true parts filling the start of the array, and the false parts filling from the back of the array.
-The length of both partitions must equal the length of the original array.
-Once the end is reached, the false parts which were filled backwards can be reversed in-place.
-Unfortunately, the Vector program still splits this array in two and appends it back together: which should be the same as not splitting the array in the first place.
+The fact that it constructs a manifest vector does allow an optimisation that Folderol cannot perform: if the size is known, the output can be filled at both ends, with the elements that satisfy the predicate filling the start of the array, and the elements that do not satisfy the predicate filling from the back of the array.
+Once the end of the input is reached, the second half, which was filled back-to-front, can be reversed in-place.
+Unfortunately, in this example, the Vector program still splits this array in two before appending it back together.
 
 \begin{table}
 \begin{center}
@@ -600,14 +628,14 @@ Vector   & 2-loop   & 0.15s &    88\% & 1.6e8 &  67\% \\
 \label{table:bench:part2app2}
 \end{table}
 
-\Cref{table:bench:part2app2} shows the runtimes for partitioning and appending an input file with $10^7$ lines.
+\Cref{table:bench:part2app2} shows the runtimes for partitioning and appending an input vector with $10^7$ elements.
 In the results table, the Vector version with two loops is the fastest, but the difference between it and Folderol with two loops is fairly small.
-The Folderol version with two sources uses the least memory - a third of the two loop Folderol, and a half of the Vector versions.
-Sometimes, we are willing to sacrifice lower throughput for lower memory usage, and this decision really depends on the context.
-By giving a compilation error when fusion fails, we are able to maintain a high level of abstraction, while at the same time forcing the author to make these scheduling decisions.
-The author must explicitly choose when is the right time to reuse an array, when is the right time to introduce a new loop, and when is the right time to introduce intermediate buffers.
-This way, the result of fusion should not be magic or surprising.
-The author can be confident that if it compiles, it will have the desired streaming behaviour.
+The Folderol version with two sources uses the least memory - a third of the two-loop Folderol, and a half of the Vector versions.
+Sometimes, we are willing to sacrifice lower throughput for lower memory usage, and this decision depends on the context.
+By giving a compile-time warning when fusion fails, we are able to maintain a high level of abstraction, while empowering the author to make these scheduling decisions.
+% The author must explicitly choose when is the right time to reuse an array, when is the right time to introduce a new loop, and when is the right time to introduce intermediate buffers.
+% This way, the result of fusion should not be magic or surprising.
+% The author can be confident that if it compiles, it will have the desired streaming behaviour.
 
 % -----------------------------------------------------------------------------
 \section{Result Size}
@@ -615,17 +643,17 @@ The author can be confident that if it compiles, it will have the desired stream
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
 \Cref{fig:bench:outputsize} shows the maximum number of output states in the result when a particular number of processes are fused together in a pipelined-manner.
-To produce this graph we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the \Hs@map@, \Hs@filter@, \Hs@scan@, \Hs@group@ and \Hs@join@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
+To produce this graph, we programmatically generated dataflow networks for \emph{all possible} pipelined combinations of the \Hs@map@, \Hs@filter@, \Hs@scan@, \Hs@group@ and \Hs@join@ combinators, and tried all possible fusion orders consiting of adjacent pairs of processes.
 The \Hs@join@ combinator itself has two inputs, so only works at the very start of the pipeline --- we present result for pipelines with and without a \Hs@join@ at the start.
 The same graph shows the number of states in the result when the various combinations of combinators are fused in parallel, for example, we might have a \Hs@map@ and a \Hs@filter@ processing the same input stream.
-In both cases the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are fewer than 100 states in the result process. 
+In both cases, the number of states in the result process grows linearly with the number of processes. In all combinations, with up to 7 processes there are fewer than 100 states in the result process. 
 
 
 \input{copy/03-body/02-process/figures/process-size.tex}
 
 The size of the result process is roughly what one would get when inlining the definitions of each of the original source processes. This is common with other systems based on inlining and/or template meta-programming, and is not prohibitive.
 
-On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N join processes, N+1 input streams, and a single output stream. The output of each join process is the input of the next, forming a chain of joins. In source notation the network for N = 3 is \Hs@sOut = join sIn1 (join sIn2 (join sIn3 sIn4))@.
+On the other hand, \cref{fig:bench:exponential} shows the results for a pathological case where the size of the output program is exponential in the number of input processes. The source dataflow networks consists of N join processes, N+1 input streams, and a single output stream. The output of each join process is the input of the next, forming a chain of joins. In source notation the network for N = 3 is (\Hs@sOut = join sIn1 (join sIn2 (join sIn3 sIn4))@).
 
 When fusing two processes, the fusion algorithm essentially compares every state in the first process with every state in the second, computing a cross product. During the fusion transform, as states in the result process are generated they are added to a finite map --- the \Hs@instrs@ field of the process definition. The use of the finite map ensures that identical states are always combined, but genuinely different states always make it into the result. 
 
@@ -636,8 +664,8 @@ In the particular case of \Hs@join@, the implementation has two occurrences of t
 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
-For array computations there is a bit of boilerplate required to convert between vectors and streams, and vice versa.
-There is also some extra visual noise for the Template Haskell, but this is fairly minor, and the required changes are more or less mechanical and type-driven.
+For array computations there is some extra code required to convert between vectors and streams.
+There is also some extra wrapping with Template Haskell splices and quasiquotes, but this is fairly minor, and the required changes are more or less mechanical and type-driven.
 
 Another benefit, aside from performance, is not having to read through Core programs to know whether whether fusion has worked or failed.
 If fusion succeeds, we know it has succeeded.

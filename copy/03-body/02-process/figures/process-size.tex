@@ -5,7 +5,7 @@
 \begin{axis}[
 % Hide the label on the second graph
 	ylabel=Process states,
-	xlabel=Pipelined combinators,
+	xlabel=Number of combinators,
   ymin=0, ymax=100,
   xmin=1, xmax=7,
   xtick=data,
@@ -16,11 +16,11 @@
 \addplot coordinates {(1,9) (2,17) (3,27) (4,37) (5,47) (6,57) (7,67) };
 \addplot coordinates {(1,4) (2,9) (3,14) (4,19) (5,24) (6,29) (7,34)  };
 
-\legend{Pipelined with 1 merge, Parallel with 1 merge, Pipe/parallel without merge};
+\legend{Pipelined with 1 \Hs/join/, Parallel with 1 \Hs/join/, Pipe/parallel without \Hs/join/};
 \end{axis}
 \end{tikzpicture}
 
-\caption{Maximum output process size for fusing all combinations of up to $n$ combinators.}
+\caption{Maximum output process size for fusing all combinations of up to $n$ combinators}
 \label{fig:bench:outputsize}
 \end{figure}
 
@@ -31,7 +31,7 @@
 \begin{tikzpicture}
 \begin{axis}[
 	ylabel=Process states,
-	xlabel=Number of merges,
+	xlabel=Number of \Hs/join/ combinators,
 %  ymode=log,
   ymin=0, ymax=1500,
 	enlargelimits=0.01,
@@ -50,7 +50,7 @@
 \end{axis}
 \end{tikzpicture}
 
-\caption{Exponential blowup occurs when splitting or chaining merges together.}
+\caption{Exponential blowup occurs when splitting or chaining \Hs/join/ combinators together}
 \label{fig:bench:exponential}
 \end{figure}
 

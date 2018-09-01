@@ -17,6 +17,7 @@ digraph G {
 
   subgraph cluster_priceOverTime  {
     lblstyle="right";
+    label="priceOverTime";
     texlbl="\Hs/priceOverTime/";
     pot_tps [texlbl="\Hs/map_o/"];
     pot_dup_ooo [texlbl="\Hs/dup_ooo/"];
@@ -29,6 +30,7 @@ digraph G {
 
   subgraph cluster_priceAgainstMarket {
     lblstyle="left";
+    label="priceOverMarket";
     texlbl="\Hs/priceOverMarket/";
     pom_join [texlbl="\Hs/join_ii/"];
     pom_price [texlbl="\Hs/map_i/"];
@@ -42,7 +44,7 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption{Polarised dependency graph for the queries \Hs/priceOverTime/ and \Hs/priceOverMarket/}
+\caption{Polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/}
 \label{figs/polar/priceOverTime-priceOverMarket}
 \end{figure}
 

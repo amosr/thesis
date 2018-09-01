@@ -38,6 +38,7 @@ digraph G {
     graph [bgcolor="0.0 0.0 0.9"];
     subgraph cluster_priceAgainstMarket {
       lblstyle="right";
+      label="priceOverMarket";
       texlbl="\Hs/priceOverMarket/";
       graph [bgcolor="0.0 0.0 0.8"];
       pom_join [texlbl="\Hs/join/"];
@@ -58,6 +59,7 @@ digraph G {
 
     subgraph cluster_priceOverTime  {
       lblstyle="left";
+      label="priceOverTime";
       texlbl="\Hs/priceOverTime/";
       graph [bgcolor="0.0 0.0 0.8"];
       subgraph cluster_x1 {

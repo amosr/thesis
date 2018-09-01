@@ -830,7 +830,8 @@ digraph G {
   graph [style="rounded corners"];
 
   subgraph cluster_priceOverTime  {
-    lblstyle="left";
+    lblstyle="left,xshift=0.2cm";
+    label="priceOverTime_c";
     texlbl="\Hs/priceOverTime_c/";
     pot_dup [texlbl="\Hs/dup_ioi/"];
     pot_time [texlbl="\Hs/map_i time/"];
@@ -839,9 +840,10 @@ digraph G {
     pot_dup -> pot_price[style="o-o"];
 
     subgraph cluster_correlation {
-    // lblstyle="below=4cm";
+      // lblstyle="below=4cm";
       lblstyle="above";
-      texlbl="\Hs/correlation";
+      label="correlation";
+      texlbl="\Hs/correlation/";
       potc_zip [texlbl="\Hs/zip_ioo/"];
       pot_cor [texlbl="\Hs/foldl_o/"];
       potc_zip -> pot_cor[style="o-o"];
@@ -851,7 +853,7 @@ digraph G {
   };
 }
 \end{dot2tex}
-\caption{Polarised dependency graph for \Hs/priceOverTime/ correlation using \Hs/zip/}
+\caption{Polarised dependency graph with diamond}
 \label{figs/polar/correlation-zip}
 \end{figure}
 

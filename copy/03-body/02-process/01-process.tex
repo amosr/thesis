@@ -37,7 +37,8 @@ Recall the @priceAnalyses@ example from \cref{taxonomy/gold-panning}, which perf
 \begin{dot2tex}[dot]
 digraph G {
   node [shape="none"];
-  stock; index;
+  stock [texlbl="\Hs/stock/"];
+  index [texlbl="\Hs/index/"];
 
   stock -> pom_join;
   index -> pom_join;
@@ -47,21 +48,23 @@ digraph G {
 
   subgraph cluster_priceOverTime  {
     lblstyle="right";
-    label="priceOverTime";
-    pot_tps [label="map"];
-    pot_cor [label="correlation"];
-    pot_reg [label="regression"];
+    texlbl="\Hs/priceOverTime/";
+    label="  priceOverTime";
+    pot_tps [texlbl="\Hs/timeprices/"];
+    pot_cor [texlbl="\Hs/correlation/"];
+    pot_reg [texlbl="\Hs/regression/"];
     pot_tps -> pot_cor;
     pot_tps -> pot_reg;
   };
 
   subgraph cluster_priceAgainstMarket {
-    lblstyle="left";
+    lblstyle="left,xshift=0.2cm";
+    texlbl="\Hs/priceOverMarket/";
     label="priceOverMarket";
-    pom_join [label="join"];
-    pom_price [label="map"];
-    pom_cor [label="correlation"];
-    pom_reg [label="regression"];
+    pom_join [texlbl="\Hs/joined/"];
+    pom_price [texlbl="\Hs/prices/"];
+    pom_cor [texlbl="\Hs/correlation/"];
+    pom_reg [texlbl="\Hs/regression/"];
     pom_join -> pom_price;
     pom_price -> pom_cor;
     pom_price -> pom_reg;

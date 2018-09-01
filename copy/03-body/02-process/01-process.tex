@@ -357,7 +357,7 @@ node[shape=none,texmode="raw"];
   M0F0 -> M3F0 [label="closed stock",style="procFstD,thick"];
 }
 \end{dot2tex}
-\caption{Fusing pull instructions; the left process can pull from an unshared stream, while the right process must wait for the first to produce a value.}
+\caption[Fusing pull instructions for an unshared stream]{Fusing pull instructions for an unshared stream; the left process can pull from the unshared stream, while the right process must wait for the first process to produce a value}
 \label{figs/fsm/fuse-pulls}
 \end{figure}
 
@@ -418,7 +418,7 @@ node[shape=none,texmode="raw"];
   M2F0 -> M2F1 [style="procSndD,thick"];
 }
 \end{dot2tex}
-\caption{Fusing push with pull; the left process produces a value, which the right process consumes.}
+\caption[Fusing push with pull]{Fusing push with pull; the left process produces a value, which the right process consumes}
 \label{figs/fsm/fuse-pushpull}
 \end{figure}
 

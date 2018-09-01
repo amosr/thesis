@@ -840,10 +840,10 @@ digraph G {
     pot_dup -> pot_price[style="o-o"];
 
     subgraph cluster_correlation {
-      // lblstyle="below=4cm";
-      lblstyle="above";
-      label="correlation";
-      texlbl="\Hs/correlation/";
+      lblstyle="below=4.5cm";
+      // lblstyle="above";
+      label="correlation_io";
+      texlbl="\Hs/correlation_io/";
       potc_zip [texlbl="\Hs/zip_ioo/"];
       pot_cor [texlbl="\Hs/foldl_o/"];
       potc_zip -> pot_cor[style="o-o"];
@@ -882,7 +882,7 @@ The @zip_ioo@ combinator, implemented in \cref{figs/polar/impl/zip_ioo}, is simi
 When the input push stream receives a value, @zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
 
 Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
-The polarised diagram shows \emph{elements} flowing down, but the \emph{control} flow for push streams is upwards.
+The polarised diagram shows \emph{elements} flowing down, but the \emph{control flow} for push streams is upwards.
 With downward arrows for pull streams and upward arrows for push streams, there is a cycle between @dup_ioi@, @zip_ioo@ and the two maps.
 This cycle complicates translating the graph to an implementation.
 
@@ -998,7 +998,7 @@ The @execute@ function takes a process network description containing the result
 
 
 
-\begin{haskell}[float,caption=Implementations of priceAnalyses queries as a Kahn process network,label=figs/kpn/impl/priceAnalyses]
+\begin{haskell}[float,caption=Implementation of \Hs/priceAnalyses/ queries as a Kahn process network,label=figs/kpn/impl/priceAnalyses]
 correlation :: Channel (Double,Double) -> Network (Result Double)
 regression  :: Channel (Double,Double) -> Network (Result Line)
 

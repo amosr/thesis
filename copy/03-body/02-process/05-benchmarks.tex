@@ -140,7 +140,7 @@ Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex 
 At its core is the \Hs@filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
 The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an \Hs@IO@ monad.
 
-\begin{lstlisting}[float,label=l:bench:filterMaxFolderol,caption=Folderol implementation of filterMax]
+\begin{lstlisting}[float,label=l:bench:filterMaxFolderol,caption=Folderol implementation of \Hs/filterMax/]
 filterMaxFolderol :: Line -> Vector Point -> IO (Point, Vector Point)
 filterMaxFolderol l ps = do
   (maxim,(above,())) <- scalar          $ \snkMaxim ->
@@ -375,7 +375,7 @@ Vector &            & 1.78s &   191\% & 8.0e8 & 100\%\\
 Before applying dynamic range compression to an audio signal, we may wish to perform some pre-processing on it.
 For this benchmark, we want to apply a low-pass filter to the input signal.
 
-\begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of compressor with low-pass]
+\begin{lstlisting}[float,label=l:bench:compressorLopFolderol,caption=Folderol implementation of \Hs/compressor/ with low-pass]
 compressorLop :: Vector Double -> IO (Vector Double)
 compressorLop vecIns = do
   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
@@ -428,7 +428,7 @@ We do not compare against `Vector'.
 % These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
 
-\begin{lstlisting}[float,label=l:bench:append2Folderol,caption=Folderol implementation of append2]
+\begin{lstlisting}[float,label=l:bench:append2Folderol,caption=Folderol implementation of \Hs/append2/]
 append2 :: FilePath -> FilePath -> FilePath -> IO Int
 append2 fpIn1 fpIn2 fpOut = do
   (count,()) <- scalarIO $ \snkCount ->
@@ -466,7 +466,7 @@ In Conduit (\cref{l:a:bench:append2Conduit}) and Pipes (\cref{l:a:bench:append2P
 
 
 
-\begin{lstlisting}[float,label=l:bench:part2Folderol,caption=Folderol implementation of part2]
+\begin{lstlisting}[float,label=l:bench:part2Folderol,caption=Folderol implementation of \Hs/part2/]
 part2 :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
 part2 fpIn1 fpOut1 fpOut2 = do
   (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->

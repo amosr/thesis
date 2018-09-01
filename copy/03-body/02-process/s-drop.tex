@@ -78,7 +78,7 @@ The dependency graph for @priceOverTime@ is shown in \cref{figs/procs/drop/price
 
 
 \end{sequencediagram}
-\caption{sequence diagram for a possible linearised execution of the correlation and regression of priceOverTime, showing drop synchronisation. }
+\caption[Sequence diagram of execution with drop synchronisation]{Sequence diagram of a possible linearised execution of \Hs/priceOverTime/, showing drop synchronisation}
 \label{figs/swim/drop/priceOverTime}
 \end{figure}
 
@@ -146,7 +146,7 @@ In this execution, both consumer processes transform the same element at roughly
 \mess{cor}{close}{corout}
 
 \end{sequencediagram}
-\caption{sequence diagram for a possible linearised execution of the correlation and regression of priceOverTime, using a hypothetical semantics without drop synchronisation. }
+\caption[Sequence diagram of execution without drop synchronisation]{Sequence diagram for a possible linearised execution of \Hs/priceOverTime/, using a hypothetical semantics without drop synchronisation}
 \label{figs/swim/drop/priceOverTime-nosync}
 \end{figure}
 

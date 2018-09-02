@@ -19,7 +19,7 @@ To fuse the entire process network at compile-time, as well as to inform the pro
 % For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
 As well as the ``gold panning'' example from \cref{taxonomy/gold-panning}, we present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
-In the benchmarks, we compare Folderol variously against hand-fused implementations, the array library `Vector'\footnote{\url{http://hackage.haskell.org/package/vector}}, as well as streaming libraries `Conduit'\footnote{\url{https://hackage.haskell.org/package/conduit}}, `Pipes'\footnote{\url{https://hackage.haskell.org/package/pipes}} and `Streaming'\footnote{\url{https://hackage.haskell.org/package/streaming}}.
+In the benchmarks, we compare Folderol variously against hand-fused implementations, the array library `Vector'\cite{hackage:vector}, as well as streaming libraries `Conduit'\cite{hackage:conduit}, `Pipes'\cite{hackage:pipes} and `Streaming'\cite{hackage:streaming}.
 
 The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
 It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system called \emph{stream fusion}, introduced by \citet{coutts2007stream}.

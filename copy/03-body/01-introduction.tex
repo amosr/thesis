@@ -31,12 +31,12 @@ This thesis makes the following contributions:
 \begin{description}
 \item[Modal types to ensure efficiency and correctness:]
 if, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
-The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, and that the stream query has the same semantics as if it were operating over arrays.
+The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, as well as ensuring that the stream query has the same semantics as if it were operating over arrays.
 Icicle is described in \cref{part:icicle}.
 
-\item[A method for fusing stream combinators:]
-a method for fusing stream combinators; the first that satisfies all three criteria: multiple inputs, multiple queries, and user-defined combinators.
-This is achieved by treating each combinator as a sequential process, and the combinators together as a concurrent process network.
+\item[Process fusion:]
+a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple queries, and user-defined combinators.
+In this streaming model, each combinator in each query is implemented as a sequential process, and together, the combinators of all queries form a concurrent process network.
 Processes are then fused together using an extension of synchronised product.
 The fusion algorithm is described in \cref{chapter:process:processes}.
 
@@ -46,6 +46,8 @@ The proof states that when two processes are fused together, the fused process c
 The proof is described in \cref{s:Proofs}.
 
 \end{description}
+
+Before delving into these contributions, the next chapter introduces some background on different streaming models, as well as more concretely motivating why we want to execute multiple streaming queries concurrently.
 
 % \subsection{Extension of clustering algorithm to filters}
 %   \REF{clustering}:

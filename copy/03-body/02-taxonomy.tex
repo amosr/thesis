@@ -1,9 +1,9 @@
 \chapter{A brief taxonomy of streaming models}
 \label{taxonomy}
 
-In this thesis we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
+In this thesis, we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
 Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and need only store a limited number of elements at a time as local state.
-A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read a particular index.
+A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read from a particular index.
 These restrictions mean that a streaming program cannot, for example, sort all the input data in a single pass, because single-pass sorting requires storing all the elements in memory.
 The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- no matter how large the input stream is.
 In general, input streams may be infinite; in this thesis we focus on finite streams.
@@ -27,7 +27,7 @@ Choosing a streaming model requires making a trade-off between the performance o
 % \ED{A pedantic note on terminology: the distinction between \emph{model} and \emph{representation} is that the model includes information about how the overhead is removed.}
 We must compare different streaming models to make an informed decision.
 We start our initial comparison by focussing on two low-overhead streaming models to illustrate how different streaming models support different operations, and to motivate the use of Kahn process networks as a streaming model.
-In \cref{s:Benchmarks} we will compare with some more expressive but less efficient streaming models.
+In \cref{s:Benchmarks}, we will compare with some more expressive but less efficient streaming models.
 
 \section{Gold panning}
 \label{taxonomy/gold-panning}
@@ -47,7 +47,7 @@ data Record = Record
 \end{haskell}
 
 We wish to evaluate this stock to see whether it was, historically, a worthy investment.
-One quality of a good investment is that its price increases over time, and we can quantify this by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
+One quality of a good investment is that its price increases over time; we can quantify any increase by computing the linear regression of the price over time, using the coefficient of the line to approximate increase or decrease over time.
 It is very convenient to be able to summarise growth with one number, but stock prices rarely act as lines.
 While a line might be a good approximation for a stable stock with few dips and bumps, it is a poor approximation for an unstable stock.
 Fortunately, we can use a statistical tool called the \emph{Pearson correlation coefficient} to determine how linear the relationship is, and therefore how good the approximation is --- which may be valuable information about the stock price in itself, as well as denoting the confidence of our analyses.
@@ -99,19 +99,16 @@ We can implement a one-pass correlation algorithm, and although the details are 
 The fold uses an initial state, \Hs/correlation_z/, and for each element updates the state with a worker function \Hs/correlation_k/.
 The one-pass correlation algorithm keeps track of the running means and standard deviations of both axes, which are used to compute the correlation.
 As such, the fold state contains more than just the correlation.
-After the fold has completed we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
+After the fold has completed, we perform an \emph{extraction} function, \Hs/correlation_x/, to extract the correlation from the state.
+
+\Cref{figs/impl/correlation} contains the implementations of the fold worker functions for computing the correlation: \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
+With these worker functions, we can compute the correlation as follows:
 
 \begin{haskell}
 correlation :: [(Double,Double)] -> Double
 correlation = correlation_x (foldl correlation_k correlation_z)
-
-type State = (Double, Double, Double, Double, Double, Double)
-correlation_z :: State
-correlation_k :: State -> (Double,Double) -> State
-correlation_x :: State -> Double
 \end{haskell}
 
-\Cref{figs/impl/correlation} contains the implementations of the fold worker functions for computing the correlation: \Hs/correlation_x/, \Hs/correlation_k/ and \Hs/correlation_z/.
 
 We can implement a function to compute the regression similarly; we omit the definitions of the regression worker functions.
 The definition of the fold uses the fold worker functions \Hs/regression_x/ for extracting the final result, \Hs/regression_z/ for the initial state, and \Hs/regression_k/ to update the state for every input element:
@@ -123,6 +120,7 @@ regression = regression_x (foldl regression_k regression_z)
 
 Now that we have functions to compute the linear regression and the correlation, we can compute both at the same time.
 The following program returns a pair containing the correlation and regression:
+\newpage
 
 \begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
@@ -133,8 +131,8 @@ priceOverTime stock =
 
 Both \Hs/regression/ and \Hs/correlation/ functions take a list of pairs of numbers, so we first convert the \Hs/Record/ values to pairs of numbers using \Hs/map/.
 Although this is a single program, it computes two values.
-Whether we think of this program as one query or two is inconsequential; the important part is that the program as we have written it requires two traversals over the \Hs/timeprices/ list.
-List programs can traverse the same list many times; in \cref{taxonomy/pull} we shall see how this is a problem for streaming programs.
+Whether we think of this program as one query or two is inconsequential; the important part is that this program, as it is written, requires two traversals over the \Hs/timeprices/ list.
+List programs can traverse the same list many times; in \cref{taxonomy/pull} we shall see how multiple traversals is a problem for streaming programs.
 
 Stock prices rarely follow linear functions of time; even the best stocks go down once in a while, and sometimes the market as a whole can go down.
 Furthermore, even though this stock appears to be doing quite well if we consider it in isolation, we do not know whether it is an exceptional stock or an exceptional market.
@@ -146,11 +144,12 @@ We want to compare each day's price for our stock against the average price for 
 
 \input{figs/stock-bc.tex}
 
-\Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price from \cref{fig:stock:it:stock-over-time} compared to the index price.
-We can see in the comparison of stock price to index price that the stock has grown faster than the index.
+\Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the market index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price from \cref{fig:stock:it:stock-over-time} compared to the market index price.
+In the comparison of stock price to index price, we can see that the stock has grown faster than the index.
 
 
 We can compute the comparison of stock over market with the following program:
+\newpage
 
 \begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
@@ -160,14 +159,15 @@ priceOverMarket stock index =
   in (regression prices, correlation prices)
 \end{haskell}
 
-To match day against day and discard any days missing from either input, we join the stock with the index based on the date.
+To match each stock day against the corresponding market index day, and discard any days missing from either input, we join the stock with the index based on the date.
 We then extract both prices from the joined result and compute the regression and correlation.
-Again, this function requires two traversals of the \Hs/prices/ list.
+As with \Hs/priceOverTime/, this function requires two traversals of the \Hs/prices/ list.
 
-Since both of the analyses we wrote, \Hs/priceOverTime/ and \Hs/priceOverMarket/, provide useful information, we will perform both.
+Since the analyses \Hs/priceOverTime/ and \Hs/priceOverMarket/ both provide useful information, we will perform both.
 It is just as easy to combine these queries together as it was to compute both the correlation and the regression.
 The following program computes both:
 
+\newpage
 \begin{haskell}
 priceAnalyses :: [Record] -> [Record] -> ((Line, Double), (Line, Double))
 priceAnalyses stock index =
@@ -185,7 +185,7 @@ The large boxes bisecting most of the nodes denote which nodes are defined insid
 This dependency graph is a directed acyclic graph: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
 Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.
 
-Although a sequential evaluation of this program requires multiple traversals of the input, we \emph{can} rewrite it to be a single-pass streaming program.
+Although a sequential evaluation of this list program requires multiple traversals of the input, we \emph{can} rewrite it to be a single-pass streaming program.
 Our choice of streaming model dictates how difficult this rewrite will be.
 
 \section{Pull streams}
@@ -274,7 +274,7 @@ Both input streams are sorted by some key, which the comparison function extract
 If the keys are equal, \Hs/join/ returns the pair.
 Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if one stream has a higher key than the other, it means the stream with the higher key does not have a corresponding value for the smaller key.
 % if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
-In our @priceOverMarket@ example the files are sorted by date and the comparison function compares the dates.
+In our @priceOverMarket@ example, the files are sorted by date and the comparison function compares the dates.
 We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
 % The join function takes the two input streams, as well as functions to extract the key from each input record.
@@ -303,6 +303,7 @@ Rewinding would allow this program to compute the correct result, but the file w
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time:
+\newpage
 
 \begin{haskell}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
@@ -321,7 +322,7 @@ priceOverTime_pull stock = do
 
 This program computes the correct value.
 % The semantic meaning of this program is no more complicated than the list version, but the complexity is not as well hidden as in the list version.
-To write this version we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
+To write this version, we have had to manually look inside the definitions of \Hs/correlation/ and \Hs/regression/ and duplicate them.
 This was relatively easy because both use-sites were folds.
 This process of combining two folds into one is a simple instance of a transform known as \emph{tupling}.
 Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/ or \Hs/append/.
@@ -343,9 +344,9 @@ priceOverMarket_pull stock index =
   regressionCorrelation_pull prices
 \end{haskell}
 
-We now have pull implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in the list implementation of \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
+We now have pull stream implementations of both \Hs/priceOverTime/ and \Hs/priceOverMarket/, but when we wish to compute both at the same time, we cannot simply pair them together as we did in the list implementation of \Hs/priceAnalyses/ --- this time because the \Hs/stock/ stream is mentioned multiple times.
 
-When we implemented the pull version of \Hs/priceOverTime/, we had to look at the two occurences where the \Hs/timeprices/ stream had been used.
+When we implemented the pull stream version of \Hs/priceOverTime/, we had to look at the two occurences where the \Hs/timeprices/ stream had been used.
 We had to inline both places where the stream was used and manually write a new function to do the work of both.
 Both were fairly simple folds.
 Doing the same for \Hs/priceAnalyses/ is more complicated: we would need to implement a special version of the \Hs/join/ combinator used inside \Hs/priceOverMarket/, which not only joins the two input streams together, but also computes the regression and correlation of its stock stream at the same time.
@@ -414,7 +415,7 @@ map2 f g (Pull pull_a) = Pull pull_c
 
 The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
 We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression:
-
+\newpage
 
 \begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
@@ -499,6 +500,7 @@ Unlike with pull streams, a push consumer has no way of choosing among multiple 
 The producer is in control while the consumer passively waits for its next input value.
 
 We \emph{do} in fact have a regular (covariant) map function for push streams, but this transforms the stream result rather than the input elements:
+\newpage
 
 \begin{haskell}
 map_result :: (r -> r') -> Push a r -> Push a r'
@@ -672,6 +674,7 @@ drain_io (Pull pull_a) push_a = loop
 \end{haskell}
 
 We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@:
+\newpage
 
 \begin{haskell}
 dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
@@ -685,13 +688,11 @@ Recall that the @join@ combinator required both inputs to be pull streams, and c
 With the polarised naming convection, this version of @join@ is called @join_iii@.
 Because the input streams have result values, we ensure that the joined stream's result contains the results of both inputs.
 To compute both results, when one stream ends before the other we drain the unfinished stream until we reach the result.
-Other than this draining, the implementation of @join_iii@ follows the implementation of @join@:
+Other than this draining, the implementation of @join_iii@ shown in \cref{figs/impl/polar/join_iii} follows the implementation of @join@.
 
-\begin{haskell}
-join_iii :: (a -> b -> Ordering)
-         -> PullResult a r
-         -> PullResult b r'
-         -> PullResult (a,b) (r,r')
+\begin{haskell}[float,caption=Polarised implementation of \Hs/join_iii/,label=figs/impl/polar/join_iii]
+join_iii :: (a -> b -> Ordering) -> PullResult a r
+         -> PullResult b r'      -> PullResult (a,b) (r,r')
 join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
    a <- pull_a
    b <- pull_b
@@ -715,38 +716,35 @@ join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
     go (Right a) b'
 \end{haskell}
 
-
-We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
-Conceptually, this combinator has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
-The definition for @join_ioo@ follows.
-The output push stream is given as an argument while the input push stream is the return value:
-
-\begin{haskell}
-join_ioo :: (a -> b -> Ordering)
-         -> PullResult a r
-         -> Push (a,b) r'
-         -> Push b (r,r')
+\begin{haskell}[float,caption=Polarised implementation of \Hs/join_ioo/,label=figs/impl/polar/join_ioo]
+join_ioo :: (a -> b -> Ordering) -> PullResult a r
+         -> Push (a,b) r'        -> Push b (r,r')
 join_ioo comparekey (PullResult pull_a) push_ab = Push push_b done_b
  where
   push_b b = do
     a <- pull_a
     case a of
      Left a' -> case comparekey a b of
-      EQ -> push push_ab (a,b)
-      LT -> push_b b
-      GT -> return ()
+      EQ     -> push push_ab (a,b)
+      LT     -> push_b b
+      GT     -> return ()
      Right _ -> return () 
-
   done_b = do
     a <- pull_a
     case a of
-     Left _ -> done_b
+     Left _   -> done_b
      Right a' -> do
       b <- done push_ab
       return (a,b)
 \end{haskell}
 
-The returned push stream accepts values of type @b@.
+
+We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
+Conceptually, this combinator has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
+The definition for @join_ioo@ is given in \cref{figs/impl/polar/join_ioo}.
+The output push stream is given as an argument while the input push stream is the return value.
+
+In the implementation of \Hs/join_ioo/, the returned push stream accepts values of type @b@.
 When a new value is pushed, it repeatedly reads values from the input pull stream until the pulled value is equal to or greater than the pushed value using the given ordering function to compare the keys.
 When the ordering function says the two keys are equal, it pushes the pair to the output stream.
 When the pull stream ends before the push stream, this implementation reads the end of the pull stream multiple times; the pull stream always returns the stream result after the end of the stream.
@@ -840,7 +838,7 @@ digraph G {
     pot_dup -> pot_price[style="o-o"];
 
     subgraph cluster_correlation {
-      lblstyle="below=4.5cm";
+      lblstyle="below=4.4cm";
       // lblstyle="above";
       label="correlation_io";
       texlbl="\Hs/correlation_io/";
@@ -886,10 +884,7 @@ The polarised diagram shows \emph{elements} flowing down, but the \emph{control 
 With downward arrows for pull streams and upward arrows for push streams, there is a cycle between @dup_ioi@, @zip_ioo@ and the two maps.
 This cycle complicates translating the graph to an implementation.
 
-The following incomplete implementation also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
-The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result:
-
-\begin{haskell}
+\begin{haskell}[float,caption={Incomplete polarised implementation of \Hs/priceOverTime_c/},label=figs/polar/impl/priceOverTime_c]
 priceOverTime_c :: PullResult Record r -> IO (Double, r)
 priceOverTime_c stock =
   let stock' :: PullResult Record (Double,r)
@@ -900,13 +895,15 @@ priceOverTime_c stock =
               = map_o price cor
       cor    :: Push Record Double
               = correlation_io times
-  in ???
+  in _ -- incomplete: no way to run computation
 
 correlation_io :: PullResult Double r -> Push Double (Double, r)
 correlation_io stream_a = zip_ioo stream_a correlation_o
 \end{haskell}
 
-This incomplete implementation constructs a stream transformer, but does not directly compute the stream result.
+The incomplete implementation in \cref{figs/polar/impl/priceOverTime_c} also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
+The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result.
+The incomplete implementation constructs a stream transformer, but does not directly compute the stream result.
 All the combinators are \emph{passive combinators}, constructing a stream transformer that responds to push or pull requests rather than actively pulling or pushing.
 \emph{Active combinators} like \Hs/drain_io/ and \Hs/foldl_i/ actively consume pull streams rather than transforming them, and return an \Hs/IO/ action containing the stream result.
 Without an active combinator, the query will not execute.
@@ -939,16 +936,16 @@ In polarised streams, the active combinator, which may be a pull consumer and a 
 All these systems have one place controlling the computation.
 When we have multiple queries to execute, it can be hard to choose just one combinator to control the entire computation.
 
-An alternate streaming model, which allows executing multiple queries at the same time is to use multiple processes of control, as in a \emph{Kahn process network}.
+An alternate streaming model, which allows many places to control the computation and supports executing multiple queries, is a \emph{Kahn process network}.
 A Kahn process network is a concurrent process network with restrictions to ensure deterministic execution.
 Each combinator inside each query becomes a communicating process in the network.
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
 Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
 
 Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies how processes are interleaved during execution, depends on the environment.
-Because the environment is not controlled by the processes, we say the schedule is chosen \emph{non-deterministically}.
+Because the environment is not controlled by the processes themselves, we say the schedule is chosen \emph{non-deterministically}.
 Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
-Kahn process networks are a restricted form of static process network that ensures processes compute the same result across different schedules \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
+Kahn process networks are a restricted form of static process network that ensures that processes compute the same result across different schedules \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
 Kahn process networks ensure deterministic results by imposing restrictions on how processes communicate so that scheduling decisions cannot be observed.
 % The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels are written to by a single process, broadcasting each value to all consumers of the channel.
 All communication between processes is through first-in-first-out channels.
@@ -1061,7 +1058,7 @@ The combined process performs the task of multiple individual processes, but com
 In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
 For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
 A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
-Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than the number of processors a scalable parallel implementation required to achieve similar performance~\cite{mcsherry2015scalability}.
+Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than a parallel implementation~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}
 % "We find that even though there can be a lot of parallelism at the fine grain level, synchronization and scheduling strategies determine the ultimate performance of the system."

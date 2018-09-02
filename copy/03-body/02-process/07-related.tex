@@ -1,22 +1,21 @@
 %!TEX root = ../Main.tex
-\chapter{Related and future work}
+\chapter{Related work}
 \label{related}
 
-This chapter discusses related work on streaming and fusion, as well as listing some directions for future work, before concluding the thesis.
-Some of these points have been touched upon previously.
-We now expand upon them.
+This chapter discusses related work on streaming and fusion.
+Some of these points have been touched on previously; we now expand upon them.
 
 \section{Fusion}
 \label{related/fusion}
 \label{related/stream-fusion}
 
-This work aims to address the limitations of combinator-based stream fusion systems to execute multiple queries concurrently.
+This thesis aims to address the limitations of combinator-based stream fusion systems to execute multiple queries concurrently.
 As explained in \cref{taxonomy}, neither pull-based or push-based streams are sufficient to execute multiple queries.
 Some combinators are inherently push-based, particularly those with multiple outputs such as @unzip@; while others are inherently pull-based, such as @zip@.
 
-The listlessness transform, an early form of fusion described by \citet{wadler1984listlessness}, can execute multiple queries concurrently under some circumstances; however, the transform sometimes diverges on relatively simple programs \citep{caspi1996synchronous}.
+The listlessness transform, an early form of fusion described by \citet{wadler1984listlessness}, can execute multiple queries concurrently under some circumstances; however, the transform is not guaranteed to terminate, and is known to diverge on relatively simple programs \citep{caspi1996synchronous}.
 Deforestation \citep{wadler1990deforestation}, an extension of listlessness to support arbitrary recursive data types, addressed the problem of divergence by requiring the input to be \emph{linear} in the input data structures.
-This linearity constraint is analogous to disallowing sharing of streams.
+This linearity constraint equates to disallowing sharing of streams.
 
 Shortcut fusion is an attractive idea, as it allows fusion systems to be specified by a single rewrite rule.
 However, shortcut fusion relies on local inlining which, like pull-based streams, only occurs when there is a single consumer.
@@ -27,7 +26,7 @@ Recent work on stream fusion by \citet{kiselyov2016stream} uses staged computati
 For effectful inputs such as reading from the network, duplicating work changes the semantics.
 % I could write more about this eg only supporting a single output, but the other points probably apply to push streams in general
 
-Our previous work on data flow fusion~\cite{lippmeier2013data} is neither pull-based nor push-based, and supports arbitrary splits and joins.
+Our previous work on data flow fusion~\cite{lippmeier2013data} is neither pull-based nor push-based, and supports stream sharing and combinators with multiple inputs.
 It supports standard combinators such as @map@, @filter@ and @fold@, and converts each stream to a series with explicit rate types, similar to the clock types of Lucid Synchrone \cite{benveniste2003synchronous}.
 These rate types ensure that well-typed programs can be fused without introducing unbounded buffers.
 This allows unfusable programs to be caught at compile time.
@@ -46,9 +45,10 @@ These systems require manual polarity analysis of the entire dependency graph, a
 % Here the distinction is made for the purpose of code generation for GPUs rather than fusion, as operations such as appending pull arrays require conditionals inside the loop, whereas using push arrays moves these conditionals outside the loop.
 
 Streaming IO libraries have blossomed in the Haskell ecosystem, generally based on Iteratees \cite{kiselyov2012iteratees}.
-Libraries such as Conduit \cite{hackage:conduit}, Enumerator \cite{hackage:enumerator}, Machines \cite{hackage:machines} and Pipes \cite{hackage:pipes} are all designed to write stream computations with bounded buffers.
+Libraries such as Conduit \cite{hackage:conduit}, Enumerator \cite{hackage:enumerator}, Machines \cite{hackage:machines}, Pipes \cite{hackage:pipes} and Streaming \cite{hackage:streaming} are all designed to write stream computations with bounded buffers.
 However, while these libraries provide boundedness guarantees, they provide no fusion guarantees, and as such programs tend to be written over chunks of data to make up for the communication overhead.
-For the most part they support only straight-line computations, with only limited forms of branching.
+For the most part they support only straight-line computations with only limited forms of branching, while Streaming supports explicit duplication in a similar way to polarised streams.
+We compared the runtime performance of these earlier, in \cref{s:Benchmarks}.
 
 The benefits of fusion have been known about for a long time, since at least the 1970s.
 Jackson Structured Programming \citep{jackson2002jsp} is a design methodology where the structure of a program is derived using the structure of the input files to process.
@@ -59,7 +59,7 @@ While these methods were generally performed by hand, the concept is similar to 
 \section{Synchronised product}
 \label{related/synchronised-product}
 
-In relation to process calculi, synchronised product has been suggested as a method for fusing Kahn process networks together~\cite{fradet2004network}, but does not appear to have been implemented or evaluated.
+In relation to process calculi, synchronised product has been suggested as a method for fusing Kahn process networks together~\cite{fradet2004network}, but there is no evidence that this has been implemented or evaluated.
 The synchronised product of two processes allows either process to take independent or local steps at any time, but shared actions, such as when both processes communicate on the same channel, must be taken in both processes at the same time.
 This is a much simpler fusion method than ours, but is also much stricter.
 When two processes share multiple channels, synchronised product will fail unless both processes read the channels in exactly the same order.
@@ -155,48 +155,4 @@ Just as push-based shortcut fusion supports neither @zip@ nor @unzip@ \cite{sven
 % The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
 % Like pull streams, the Neumann push model does not support executing multiple queries concurrently; unlike pull streams, the Neumann push model does not support combinators with multiple inputs except append.
 % For now, we are interested in executing multiple queries; we defer further discussion of the Neumann push model to \cref{related/push-model}.
-
-\section{Future work}
-\label{related/future}
-
-In \cref{ss:Fusing:a:network}, we saw that the order in which we perform fusion can affect whether fusion succeeds or fails.
-We propose to solve this in the future by modifying the fusion algorithm to be commutative and associative.
-These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
-
-The fusion algorithm is not commutative because when two processes are trying to execute instructions which could occur in either order, the algorithm must choose only one instruction.
-The fusion algorithm applies some heuristics to decide which instruction to execute first, but when evaluating the processes as a process network, the choice is non-deterministic.
-Fusion commits too early to a particular interleaving of the instructions from each process, when there are many possible interleavings that would work.
-By explicitly introducing non-determinism in the fused process, we could represent all possible interleavings, and do not have to commit to one too early.
-We are moving the non-determinism from the fusion algorithm deciding which process to execute, and reifying it in the result process itself.
-
-Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.
-Different orders will not affect the result, or whether things fuse.
-Different orders do affect the size of the intermediate process, after performing some fusion but before all processes are fused together.
-Fusing two unconnected processes which read from different streams introduces a lot of non-determinism: at each step of the fused process, either of the original processes can take a step.
-The two processes do not constrain each other, and the result process will have a lot of states.
-Fusing connected processes, for example a producer and a consumer, introduce less non-determinism because there are points when only one of the processes can run.
-When the consumer is waiting for a value, only the producer can run.
-We suspect that, in general, fusing connected processes will produce a smaller process than fusing unconnected processes.
-The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
-Larger intermediate programs generally take longer to compile, so some heuristic order which fuses connected processes is likely to be useful, even if the order does not affect the result.
-
-\section{Conclusion}
-
-This thesis has presented four different ways to execute multiple queries concurrently, each with a different set of trade-offs.
-
-In \cref{taxonomy/push} we saw how \emph{push streams} can be used to execute multiple queries, so long as the queries all operate over the same input.
-These queries were written back-to-front and the input stream was manually duplicated whenever the input was used multiple times.
-
-In \cref{part:icicle} we gave the contribution of \emph{Icicle}, an alternate presentation of push streams, using modal types to ensure that all queries can be executed in a single pass.
-Here, values from the input stream can be shared among multiple consumers without explicitly duplicating the stream.
-
-In \cref{taxonomy/polarised} we saw \emph{polarised streams}, which are a careful combination of push streams and pull streams, that can be used execute multiple queries concurrently.
-Writing a group of queries as polarised streams required manual analysis of the entire dataflow graph, so that push or pull polarities could be assigned to each edge of the dataflow grpah.
-
-In \cref{chapter:process:processes} we gave the contribution of \emph{process fusion}, where a Kahn process network is used to execute multiple queries; the processes are then fused together to execute without communication overhead.
-Here, the queries require no polarity analysis, and fusion is performed automatically.
-
-In \cref{s:Proofs} we gave the contribution of \emph{proof of soundness of fusion}, which gives us confidence in the correctness of the fusion transform.
-
-Finally, in \cref{s:Benchmarks} we evaluated the runtime performance of the fusion algorithm and saw that it compared favourably with existing fusion systems.
 

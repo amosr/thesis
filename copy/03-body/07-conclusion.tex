@@ -1,0 +1,82 @@
+\chapter{Conclusion}
+\label{conclusion}
+
+This final chapter discusses some directions for future work, before concluding the thesis.
+This thesis has presented four different ways to execute multiple queries concurrently, each with a different set of trade-offs.
+
+In \cref{taxonomy/push} we saw how \emph{push streams} can be used to execute multiple queries, so long as the queries all operate over the same input.
+These queries were written back-to-front and the input stream must be manually duplicated whenever the input was used multiple times.
+
+In \cref{part:icicle} we introduced \emph{Icicle}, an alternate presentation of push streams, using modal types to ensure that all queries over a single shared input table can be fused together and executed in a single pass.
+Here, values from the input stream can be shared among multiple consumers without explicitly duplicating the stream.
+
+In \cref{taxonomy/polarised} we saw \emph{polarised streams}, which are a careful combination of push streams and pull streams, that can be used execute multiple queries concurrently.
+Writing a group of queries as polarised streams requires putting all the queries together in a single dataflow graph, then performing a manual polarity analysis on the graph, so that push or pull polarities can be assigned to each edge of the dataflow grpah.
+
+In \cref{chapter:process:processes} we introduced \emph{process fusion}, where a Kahn process network is used to execute multiple queries; the processes are then fused together so the queries can be executed as a single process, without communication overhead.
+Here, the queries require no polarity analysis, and fusion is performed automatically.
+The advantage of process fusion over Icicle is that it supports multiple input streams.
+However, by supporting multiple input streams, we lose the guarantee that all queries over the same input can be fused together.
+
+In \cref{s:Proofs} we gave an overview of the \emph{mechanised proof of soundness of fusion}, which gives us confidence in the correctness of the fusion transform.
+
+Finally, in \cref{s:Benchmarks} we evaluated the runtime performance of process fusion and saw that the fused program was always at least two times faster than the compared streaming implementations, and usually slightly faster than the compared array fusion implementation.
+
+If, in the future of computing, interest in \emph{big data} does not wither and fade; if datasets continue to grow faster than hard drives or memory; if data analysis is required to answer questions; then, the concurrent execution of streaming queries will only become more important.
+
+\section{Future work}
+\label{related/future}
+
+In this last section, we take a brief look at the limitations and possible extensions of our work.
+
+\subsection{Network fusion order and non-determinism}
+
+In the discussion of process fusion in \cref{ss:Fusing:a:network}, we saw that the order in which we fuse the processes in a network can affect whether fusion succeeds or fails.
+We propose to solve this in the future by modifying the fusion algorithm to be commutative and associative.
+These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
+
+The fusion algorithm is not commutative because when two processes are trying to execute instructions which could occur in either order, the algorithm must choose only one instruction.
+The fusion algorithm applies some heuristics to decide which instruction to execute first, but when evaluating the processes as a process network, the choice is non-deterministic.
+Fusion commits too early to a particular interleaving of the instructions from each process, when there are many possible interleavings that would work.
+By explicitly introducing non-determinism in the fused process, we could represent all possible interleavings, and do not have to commit to one too early.
+We are moving the non-determinism from the fusion algorithm deciding which process to execute, and reifying it in the result process itself.
+
+Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.
+Different orders will not affect the result, or whether things fuse.
+Different orders do affect the size of the intermediate process, after performing some fusion but before all processes are fused together.
+Fusing two unconnected processes which read from different streams introduces a lot of non-determinism: at each step of the fused process, either of the original processes can take a step.
+The two processes do not constrain each other, and the result process will have a lot of states.
+Fusing connected processes, for example a producer and a consumer, introduce less non-determinism because there are points when only one of the processes can run.
+When the consumer is waiting for a value, only the producer can run.
+We suspect that, in general, fusing connected processes will produce a smaller process than fusing unconnected processes.
+The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
+Larger intermediate programs generally take longer to compile, so some heuristic order which fuses connected processes is likely to be useful, even if the order does not affect the result.
+
+The advantage of Kahn process networks is that they guarantee a deterministic result, despite the non-deterministic evaluation order.
+To retain deterministic results, non-determinism must be restricted to only occur in the processes generated by the fusion algorithm, and not in the input processes defined by the user.
+Because the fusion algorithm is essentially a static application of the runtime evaluation rules, any non-determinism introduced by the fusion algorithm will still compute a deterministic result.
+
+\subsection{Conditional branching and fusion}
+In the process fusion algorithm, @case@ instructions, which perform conditional branching, are simply copied to the result process.
+However, if both input processes branch on the same condition, we should be able to statically infer that, for example, if the first process takes the true branch, the second process should also take the true branch.
+
+Consider the following list program, which filters the input list twice, with both filters using the same predicate:
+
+\begin{haskell}
+filter2 :: [Int] -> [(Int,Int)]
+filter2 input =
+ let xs  = filter (\i -> i > 5) input
+     ys  = filter (\i -> i > 5) input
+     xys = zip xs ys
+ in  xys
+\end{haskell}
+
+If we interpret this program as a process network and try to perform fusion, the fusion algorithm fails, erroneously suggesting that the process network requires an unbounded buffer or multiple passes over the input list.
+This failure would be legitimate if the two filter predicates were different.
+However, when the predicates are the same, it \emph{is} possible to execute with a single loop and no buffers: if the input value used by \Hs/xs/ is greater than five, then the input value used by \Hs/ys/ is also greater than five.
+
+Rather than extend the fusion algorithm to track which case conditions are true at each given label, we propose to implement a separate post-processing pass to perform branch simplification on the fused process.
+In the \Hs/filter2/ example, the fusion algorithm returns a fusion failure instead of a fused process.
+Implementing this extension as a separate pass would require modifying the fusion algorithm to still return the complete fused process when it detects a potential deadlock; potential deadlocks could be recorded in the result process with a new instruction.
+After fusing all the processes together, simplifying the result process, and removing unreachable instructions, we would check whether any deadlock instructions are reachable; if so, we trigger a fusion failure as before.
+

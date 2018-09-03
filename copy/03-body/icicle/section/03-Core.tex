@@ -12,25 +12,25 @@ $\mi{PlanX}$
 \\
 $\mi{PlanP}$
 \GrammarDefTab
-  $\mi{Prim}~|~@mapUpdate@~|~@mapEmpty@~|~@mapMap@~|~@mapZip@$
+  $\mi{Prim}~|~\IcC@mapUpdate@~|~\IcC@mapEmpty@~|~\IcC@mapMap@~|~\IcC@mapZip@$
 \\
 $\mi{PlanF}$
 \GrammarDefTab
- $@fold@$ \> $~~x~:~T~=~\mi{PlanX}~@then@~\mi{PlanX};$
+ $\IcC@fold@$ \> $~~x~:~T~=~\mi{PlanX}~\IcC@then@~\mi{PlanX};$
 \GrammarAlt
- $@filter@$ \> $\mi{PlanX}$ \> $\{~\ov{\mi{PlanF}}~\}$
+ $\IcC@filter@$ \> $\mi{PlanX}$ \> $\{~\ov{\mi{PlanF}}~\}$
 \GrammarAlt
-  $@group@$ \> $\mi{PlanX}$ \> $\{~\ov{\mi{PlanF}}~\}$
+  $\IcC@group@$ \> $\mi{PlanX}$ \> $\{~\ov{\mi{PlanF}}~\}$
 \\
 \\
 $\mi{Plan}$
 \GrammarDefTab
-  $@plan@~x$ \> $\{~\ov{x~:~T;}~\}$
+  $\IcC@plan@~x$ \> $\{~\ov{x~:~T;}~\}$
 \\
-  \> \> $@before@$ \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
-  \> \> $@folds@$  \> $\{~\ov{\mi{PlanF}}~\}$ \\
-  \> \> $@after@$  \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
-  \> \> $@return@$ \> $\{~\ov{x~:~T~=~x;}~\}$ \\
+  \> \> $\IcC@before@$ \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
+  \> \> $\IcC@folds@$  \> $\{~\ov{\mi{PlanF}}~\}$ \\
+  \> \> $\IcC@after@$  \> $\{~\ov{x~:~T~=~\mi{PlanX};}~\}$ \\
+  \> \> $\IcC@return@$ \> $\{~\ov{x~:~T~=~x;}~\}$ \\
 \end{tabbing}
 
 
@@ -52,13 +52,13 @@ Folds are defined in $\mi{PlanF}$ and can be nested inside a filter, in which ca
 Folds nested inside a group are performed separately for each key; the nested fold binds a key-value map instead of a single value.
 The $\mi{Plan}$ itself is split into a five stage \emph{loop anatomy}~\cite{shivers2005anatomy}.
 First we have the name of the table and the names and element types of each column.
-The @before@ stage then defines pure values which do not depend on any table data.
-The @folds@ stage defines element computations and how they are converted to aggregate results.
-The @after@ stage defines aggregate computations that combine multiple aggregations after the entire table has been processed.
-Finally, the @return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusion can have many outputs.
+The \IcC@before@ stage then defines pure values which do not depend on any table data.
+The \IcC@folds@ stage defines element computations and how they are converted to aggregate results.
+The \IcC@after@ stage defines aggregate computations that combine multiple aggregations after the entire table has been processed.
+Finally, the \IcC@return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusion can have many outputs.
 
 
-Before we discuss an example query plan we first define the @count@ and @sum@ functions used in earlier sections.
+Before we discuss an example query plan we first define the \IcC@count@ and \IcC@sum@ functions used in earlier sections.
 Both functions are simple folds:
 \begin{icicle}
 function count
@@ -80,7 +80,7 @@ query
 \end{icicle}
 
 Each query is converted to a query plan separately.
-When we convert the @more@ query, we define the count inside a filter, and use it in the return section.
+When we convert the \IcC@more@ query, we define the count inside a filter, and use it in the return section.
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
@@ -89,9 +89,9 @@ folds { filter open > close {
 return { more : Int = c; }
 \end{icicle-core}
 
-We convert the @less@ and @mean@ queries similarly.
-For the @mean@ query, the sum and the count are both defined inside a filter.
-The division is performed in the @after@ section because it is an aggregate operation.
+We convert the \IcC@less@ and \IcC@mean@ queries similarly.
+For the \IcC@mean@ query, the sum and the count are both defined inside a filter.
+The division is performed in the \IcC@after@ section because it is an aggregate operation.
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
@@ -109,7 +109,7 @@ return { mean : Int = sc; }
 
 To fuse the three query plans together we freshen the names of each binding, then simply concatenate the corresponding parts of the anatomy.
 The single-pass restriction on queries makes the fusion process so simple, because it ensures that there are no fusion-preventing dependencies between any two query plans. 
-After concatenating the plans, we merge the filter blocks for @more@ and @mean@, as both use the same predicate.
+After concatenating the plans, we merge the filter blocks for \IcC@more@ and \IcC@mean@, as both use the same predicate.
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
 Now the queries are interspersed but the stages are expressed separately, we are free to rearrange each stage without affecting the other stages.
 
@@ -128,8 +128,8 @@ return { more    : Int = more_c;
          mean    : Int = mean_sc; }
 \end{icicle-core}
 
-We can now use common subexpression elimination to remove the duplicate count, @mean_c@, as its binding is alpha-equivalent to the binding for @more_c@.
-In the after section, the reference to @mean_c@ is replaced by @more_c@.
+We can now use common subexpression elimination to remove the duplicate count, \IcC@mean_c@, as its binding is alpha-equivalent to the binding for \IcC@more_c@.
+In the after section, the reference to \IcC@mean_c@ is replaced by \IcC@more_c@.
 
 \begin{haskell}[float,caption=Push implementation of queries after inlining combinators,label=icicle:fig:core:push_query]
 queries :: IO (Push Record (Int,Int,Int))
@@ -160,7 +160,7 @@ queries = do
 %  \TODO{this is in @IO@, and has a different type from the earlier version. need to modify push representation to \Hs/Push a r = (IO (a -> IO (), IO r))/ so reference construction can be done as part of stream}
 
 To demonstrate the relative difficulty of removing the duplicate work in the general case, \cref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
-In this version, the @more_c@ and @mean_c@ references both hold the same value, but this fact is only evident with non-local reasoning about the program.
+In this version, the \IcC@more_c@ and \IcC@mean_c@ references both hold the same value, but this fact is only evident with non-local reasoning about the program.
 The reference initialisations and updates are located in different parts of the program, with potentially interfering writes in-between.
 We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms are generally polynomial time.
 With the intermediate representation of Icicle we can use a common subexpression elimination algorithm~\cite{chitil1997common}, which requires $O(n \log n)$ time.
@@ -177,14 +177,14 @@ That query, again, is:
               in  lookup k avgs
 \end{icicle}
 
-We first define the @mean@ and @last@ functions used in the query.
-The @mean@ function divides the @sum@ by the @count@:
+We first define the \IcC@mean@ and \IcC@last@ functions used in the query.
+The \IcC@mean@ function divides the \IcC@sum@ by the \IcC@count@:
 \begin{icicle}
 function mean (e : Element Int)
  = sum e / count;
 \end{icicle}
 
-The @last@ function uses a @fold@ that initialises the accumulator to the empty date value @NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream:
+The \IcC@last@ function uses a \IcC@fold@ that initialises the accumulator to the empty date value \IcC@NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream:
 \begin{icicle}
 function last (d : Element Date)
  = fold l = NO_DATE then d;
@@ -210,16 +210,16 @@ query avg
 \end{icicle}
 
 To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
-The @lst@ binding becomes a single fold, initialised to @NO_DATE@ and updated with the current @key@:
+The \IcC@lst@ binding becomes a single fold, initialised to \IcC@NO_DATE@ and updated with the current \IcC@key@:
 \begin{icicle-core}
 plan kvs {      key : Date; value : Int;       }
 folds    { fold fL  : Date = NO_DATE then key  }
 after    {      lst : Date = fL                }
 \end{icicle-core}
 
-For the @map@ binding, each fold accumulator inside the body of the @group@ construct is nested within a @group@ in the intermediate language.
-Inside the context of the @group@, the binding for @s@ refers to the @Int@ value for the current key; outside the @group@, in the @after@ section, @s@ refers to a value of (@Map Date Int@) containing the values of all keys.
-Each time we receive a row from the table the accumulator associated with the @key@ is updated, using the default value @0@ if an entry for that key is not yet present.
+For the \IcC@map@ binding, each fold accumulator inside the body of the \IcC@group@ construct is nested within a \IcC@group@ in the intermediate language.
+Inside the context of the \IcC@group@, the binding for \IcC@s@ refers to the \IcC@Int@ value for the current key; outside the \IcC@group@, in the \IcC@after@ section, \IcC@s@ refers to a value of (\IcC@Map Date Int@) containing the values of all keys.
+Each time we receive a row from the table the accumulator associated with the \IcC@key@ is updated, using the default value @0@ if an entry for that key is not yet present.
 After we have processed the entire table we join the maps and divide each sum by its corresponding count to yield a map of means for each key.
 \begin{icicle-core}
 folds  { group key
@@ -234,7 +234,7 @@ after  { map : Map Date Int
 % Keeping this as two separate maps rather than a map of pairs exposes more opportunities for common subexpression elimination when fusion occurs.
 % For example, another query @group key of count@ can reuse the already constructed @gC@ map.
 
-Finally, the @ret@ binding from the original query is evaluated in the @after@ stage. In the @return@ stage we specify that the result of the overall query @avg@ is the result of the @ret@ binding.
+Finally, the \IcC@ret@ binding from the original query is evaluated in the \IcC@after@ stage. In the \IcC@return@ stage we specify that the result of the overall query \IcC@avg@ is the result of the \IcC@ret@ binding.
 \begin{icicle-core}
   after  { ret : Int = lookup lst map }
   return { avg : Int = ret }
@@ -243,8 +243,8 @@ Finally, the @ret@ binding from the original query is evaluated in the @after@ s
 
 We then combine the plans from each binding.
 This query plan is then fused with any other queries that process the same input; the fused query plan is then translated to an imperative loop nest in a similar way to our prior work on flow fusion~\cite{lippmeier2013data}.
-When translating folds nested inside @filter@s, the update statements are nested inside @if@ statements.
-When translating folds nested inside @group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
-As with @filter@s, @group@s with the same key can be merged together.
-The nested structure of @group@s allows us to share the same set of keys across multiple accumulators, further reducing duplicate work.
+When translating folds nested inside \IcC@filter@s, the update statements are nested inside \IcC@if@ statements.
+When translating folds nested inside \IcC@group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
+As with \IcC@filter@s, \IcC@group@s with the same key can be merged together.
+The nested structure of \IcC@group@s allows us to share the same set of keys across multiple accumulators, further reducing duplicate work.
 

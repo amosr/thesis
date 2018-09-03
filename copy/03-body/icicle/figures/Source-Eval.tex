@@ -19,7 +19,7 @@ $$
 \end{array}
 $$
 
-  \scriptsize
+  \footnotesize
 
 
 $$
@@ -47,7 +47,7 @@ $$
   \SourceStepX
     {n}
     {\Sigma}
-    {@let@~(x~:~n'~\tau')~=~e~@in@~e'}
+    {\Ic@let@~(x~:~n'~\tau')~=~e~\Ic@in@~e'}
     {v'}
 }{ELet}
 $$
@@ -100,11 +100,11 @@ $$
 {
   \SourceStepXA{\Sigma}
     {p~\{ e_i \} }
-    {\VFold
-      {(z_0 \times \cdots \times z_i)}
-      {(\lam{\store~(v_0 \times \cdots \times v_i)}
-        k_0~\store~v_0 \times \cdots \times k_i~\store~v_i)}
-      {(\lam{(v_0 \times \cdots \times v_i)}
+    { \VFold
+      {(\prod_i z_i)}
+      {(\lam{\store~v}
+        \prod_i (k_i~\store~v_i))}
+      {(\lam{(\prod_i v_i)}
         p~\{j_i~v_i\})}}
 }{EPrimFold}
 $$
@@ -118,7 +118,7 @@ $$
 }
 {
   \SourceStepXA{\Sigma}
-    {@filter@~e~@of@~e'}
+    {\Ic@filter@~e~\Ic@of@~e'}
     {\VFold
       {z}
       {(\lam{\store~v}
@@ -127,7 +127,7 @@ $$
 }{EFilter}
 $$
 
-$$
+\begin{gather*}
 \ruleIN
 {
   \SourceStepXE{\Sigma}{e}{\VStream{f}}
@@ -136,33 +136,49 @@ $$
 }
 {
   \SourceStepXA{\Sigma}
-    {@group@~e~@of@~e'}
+    {\Ic@group@~e~\Ic@of@~e'}
     {\VFold
       {\{\_~\Rightarrow~z\}}
-      {(\lam{\store~m}
-% \{ k_i~\Rightarrow~k~\store~v_i ~|~ k_i \Rightarrow v_i~\in~m~\wedge~k_i~=~f~\store \} \cup m)}
-        m[f~\store~\Rightarrow~k~\store~(m[f~\store])])}
-      {(\lam{m}
-        \{k_i~\Rightarrow~j~v_i~|~k_i~\Rightarrow~v_i~\in~m\})}}
+      {k'}
+      {j'}}
 }{EGroup}
-$$
+\\
+\begin{aligned}
+\mbox{where }
+k' & = \lam{\store~m}
+(f~\store~\Rightarrow~k~\store~(m[f~\store])) \cup m
+% \{ k_i~\Rightarrow~k~\store~v_i ~|~ k_i \Rightarrow v_i~\in~m~\wedge~k_i~=~f~\store \} \cup m)
+%        m[f~\store~\Rightarrow~k~\store~(m[f~\store])]
+\\
+j' & = \lam{m}
+        \{k_i~\Rightarrow~j~v_i~|~k_i~\Rightarrow~v_i~\in~m\}
+\end{aligned}
+\end{gather*}
 
-$$
+\begin{gather*}
 \ruleIN
 {
   \SourceStepXP{\Sigma}{z}{\VValue{z'}}
   \quad
-  \SourceStepXE{\{x_i~=~\VStream{(f_i \cdot @snd@)}~|~x_i=\VStream{f_i}~\in~\Sigma\},~x~=~\VStream{@fst@},~\Sigma}{k}{\VStream{k'}}
+  \SourceStepXE{\Sigma'}{k}{\VStream{k'}}
 }
 {
   \SourceStepXA{\Sigma}
-    {@fold@~x~=~z~@then@~k}
+    {\Ic@fold@~x~=~z~\Ic@then@~k}
     {\VFold
       {z'}
       {(\lam{\store~v} k'~(v,~\store))}
       {(\lam{v} v)}}
 }{EFold}
-$$
+ \\
+\begin{aligned}
+  \mbox{where } \Sigma' = &
+    (x~=~\VStream{@fst@}),
+\\ & \{x_i~=~\VStream{(f_i \cdot @snd@)}~|~x_i=\VStream{f_i}~\in~\Sigma\},
+\\ & \{x_i~=~\VFold{z_i}{(k_i \cdot @snd@)}{j_i}~|~x_i=\VFold{z_i}{k_i}{j_i}~\in~\Sigma\},
+\\ & \{x_i~=~\VValue{v_i}~|~x_i=\VValue{v_i}~\in~\Sigma\}
+\end{aligned}
+\end{gather*}
 
 $$
 \boxed{\{x~\Rightarrow~\ov{V}\}~|~e~\Downarrow~V}

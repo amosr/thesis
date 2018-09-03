@@ -5,16 +5,18 @@
 This chapter discusses related work on streaming and fusion.
 Some of these points have been touched on previously; we now expand upon them.
 
-\section{Fusion}
+\section{Fusion and streams for functional programs}
 \label{related/fusion}
 \label{related/stream-fusion}
 
 This thesis aims to address the limitations of combinator-based stream fusion systems to execute multiple queries concurrently.
 As explained in \cref{taxonomy}, neither pull-based or push-based streams are sufficient to execute multiple queries.
-Some combinators are inherently push-based, particularly those with multiple outputs such as @unzip@; while others are inherently pull-based, such as @zip@.
+To execute multiple queries, we need to be able to share streams among multiple consumers, which push streams support, but pull streams do not.
+However, for queries containing combinators with multiple inputs such as \Hs/zip/ and \Hs/join/, we can use pull streams, but not push streams.
+% Some combinators are inherently push-based, particularly those with multiple outputs such as @unzip@; while others are inherently pull-based, such as @zip@.
 
 The listlessness transform, an early form of fusion described by \citet{wadler1984listlessness}, can execute multiple queries concurrently under some circumstances; however, the transform is not guaranteed to terminate, and is known to diverge on relatively simple programs \citep{caspi1996synchronous}.
-Deforestation \citep{wadler1990deforestation}, an extension of listlessness to support arbitrary recursive data types, addressed the problem of divergence by requiring the input to be \emph{linear} in the input data structures.
+Deforestation \citep{wadler1990deforestation}, an extension of listlessness to support arbitrary recursive data types, addressed the problem of divergence by requiring the program to use each input data structure only once.
 This linearity constraint equates to disallowing sharing of streams.
 
 Shortcut fusion is an attractive idea, as it allows fusion systems to be specified by a single rewrite rule.
@@ -29,7 +31,7 @@ For effectful inputs such as reading from the network, duplicating work changes 
 Our previous work on data flow fusion~\cite{lippmeier2013data} is neither pull-based nor push-based, and supports stream sharing and combinators with multiple inputs.
 It supports standard combinators such as @map@, @filter@ and @fold@, and converts each stream to a series with explicit rate types, similar to the clock types of Lucid Synchrone \cite{benveniste2003synchronous}.
 These rate types ensure that well-typed programs can be fused without introducing unbounded buffers.
-This allows unfusable programs to be caught at compile time.
+Unfusable programs trigger a compile-time error.
 However, it only supports a limited set of combinators, and adding more combinators requires changing the fusion system itself.
 
 One way to address the difference between pull and push streams is to explicitly support both separately using the polarised streams we saw in \cref{taxonomy/polarised}, as described by \citet{bernardy2015duality} and \citet{lippmeier2016polarized}.
@@ -48,7 +50,7 @@ Streaming IO libraries have blossomed in the Haskell ecosystem, generally based 
 Libraries such as Conduit \cite{hackage:conduit}, Enumerator \cite{hackage:enumerator}, Machines \cite{hackage:machines}, Pipes \cite{hackage:pipes} and Streaming \cite{hackage:streaming} are all designed to write stream computations with bounded buffers.
 However, while these libraries provide boundedness guarantees, they provide no fusion guarantees, and as such programs tend to be written over chunks of data to make up for the communication overhead.
 For the most part they support only straight-line computations with only limited forms of branching, while Streaming supports explicit duplication in a similar way to polarised streams.
-We compared the runtime performance of these earlier, in \cref{s:Benchmarks}.
+We compared the runtime performance of some of these libraries earlier, in \cref{s:Benchmarks}.
 
 The benefits of fusion have been known about for a long time, since at least the 1970s.
 Jackson Structured Programming \citep{jackson2002jsp} is a design methodology where the structure of a program is derived using the structure of the input files to process.
@@ -56,17 +58,78 @@ Here, a method called ``program inversion'' performs a similar role to fusion, b
 This method is similar to converting a pull computation into a push computation.
 While these methods were generally performed by hand, the concept is similar to mechanised fusion.
 
-\section{Synchronised product}
+\section{Tupling}
+\label{related/tupling}
+% This process of combining two folds into one is a simple instance of a transform known as \emph{tupling}.
+% Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/ or \Hs/append/.
+% We discuss tupling further in \cref{related/tupling}.
+
+\emph{Tupling} combines multiple traversals over a data structure into a single traversal.
+Tupling is more general than stream fusion: it supports simplifying traversals of trees and other data structures, rather than just streams.
+Two types of tupling are \emph{fold/unfold tupling} and \emph{hylomorphism-based tupling}.
+
+Fold/unfold tupling, such as \citet{chiba2010program}, works by repeatedly unfolding or inlining a definition into its use site, performing some local rewrite-based optimisations, then re-folding the definition.
+The unfolding may expose some simplification opportunities, which the local rewrite rules simplify away.
+However, because the definitions to be unfolded are recursive, significant effort must be taken to ensure only \emph{finite} unfoldings are generated; for this reason, \citet{hu1997tupling} declare fold/unfold tupling to be impractical.
+
+Hylomorphism-based tupling, such as \citet{hu1996cheap}, works by expressing traversals of the data structure as a \emph{hylomorphism}.
+A hylomorphism describes how to generate some intermediate structure based on the input structure, as well as describing how to fold over the intermediate structure to compute the result.
+The hylomorphism allows us to compute the result without generating the intermediate structure in full.
+If two traversals of an input data structure can be expressed as folds over the same intermediate strucutre, both traversals can be computed together.
+Automatic tupling algorithms attempt to automatically derive a hylomorphism for a given input data structure and traversal function, but these algorithms only work for a limited set of functions.
+The algorithm in \citet{launchbury1995warm} is not total and cannot fuse a @zip@ combinator with both of its consumers.
+The language in \citet{hu1996deriving} is restricted to ensure totality of the algorithm, but cannot express the data-dependent access pattern of the @join@ combinator.
+
+% [talk about tupling: \cite{hu1996deriving,hu1996cheap,hu1996extension,bransen2014exploiting,launchbury1995warm}]
+
+\section{Neumann push model}
+\label{related/push-model}
+
+The push streams described in \cref{taxonomy} are different from the push model used for database execution, as introduced in \citet{neumann2011efficiently}.
+In an attempt to avoid confusion, we call this the \emph{Neumann push model}.
+In the Neumann push model, a stream producer is represented as a continuation which takes a sink, or push function, to push values into:
+
+\begin{haskell}
+data PushModel a = PushModel ((a -> IO ()) -> IO ())
+\end{haskell}
+
+The consumer provides a sink by calling the continuation, then the producer repeatedly pushes all its values to the provided sink.
+In this model, the consumer tells the producer when to start producing the entire stream: this is in contrast with pull streams, where the consumer asks for a single element at a time, and push streams, where the producer provides a single element at a time.
+\citet{neumann2011efficiently} originally claimed that the Neumann push model was inherently more efficient than the pull model, but this claim used an unfair comparison between a compiled Neumann push model and an un-optimised pull model \cite{shaikhha2018push}.
+
+The control-flow for the Neumann push model is the same as that of \emph{push arrays}, as described in \citet{claessen2012expressive} and \citet{svensson2014defunctionalizing}.
+Here, push arrays are used as a code generation technique, with the main advantage of generating \emph{branchless} code to append two arrays.
+The branchless version of append executes as two loops, one to read from each array, rather than one loop with a conditional branch inside to choose which input array to read from.
+
+The control-flow is also the same as push-based shortcut fusion \cite{gill1993short}, as the consumer initiates the production loop.
+Just as push-based shortcut fusion supports neither @zip@ nor @unzip@ \cite{svenningsson2002shortcut}; neither does the Neumann push model support combinators with multiple inputs except append; nor does it support executing multiple queries concurrently.
+
+\citet{biboudis2017expressive} describes the advantage of this model when targeting the Java just-in-time (JIT) compiler, as it allows the producer to be implemented as a simple for-loop repeatedly calling the consumer function, which makes the JIT optimiser more likely to inline the consumer.
+
+
+% The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
+% Like pull streams, the Neumann push model does not support executing multiple queries concurrently; unlike pull streams, the Neumann push model does not support combinators with multiple inputs except append.
+% For now, we are interested in executing multiple queries; we defer further discussion of the Neumann push model to \cref{related/push-model}.
+
+
+\section{Synchronised product and process calculi}
 \label{related/synchronised-product}
 
 In relation to process calculi, synchronised product has been suggested as a method for fusing Kahn process networks together~\cite{fradet2004network}, but there is no evidence that this has been implemented or evaluated.
 The synchronised product of two processes allows either process to take independent or local steps at any time, but shared actions, such as when both processes communicate on the same channel, must be taken in both processes at the same time.
-This is a much simpler fusion method than ours, but is also much stricter.
+This fusion method is much simpler than ours, but is also much stricter.
 When two processes share multiple channels, synchronised product will fail unless both processes read the channels in exactly the same order.
 Our system can be seen as an extension of synchronised product that allows some leeway in when processes must take shared steps: they do not have to take shared steps at the same time, but if one process lags behind the other, it must catch up before the other one gets too far ahead.
 
 It may be possible, in future work, to simplify our fusion system by preprocessing input processes to automatically insert some leeway for shared channels, before using synchronised product for fusion.
-We believe that this leeway can, in fact, be inserted using synchronised product itself, but our experiments on this have been limited.
+We believe that this leeway can, in fact, be inserted using synchronised product itself, but our experiments in this direction have been limited.
+
+Like synchronised product and our process fusion, \emph{filter fusion}~\citep{proebsting1996filter} also statically interleaves the code of producer and consumer processes.
+In filter fusion, each process can have at most a single input and output channel; common operators like \Hs@zip@, \Hs@unzip@, \Hs@append@, \Hs@partition@ and so on are not supported.
+Given an adjacent producer and consumer pair, filter fusion alternately assigns control to the code of each.
+When the consumer needs input, control is passed to the producer; when the producer produces its value, control is passed back to the consumer.
+This simple scheduling algorithm works only for straight line pipelines of processes.
+Both synchronised product and process fusion provide a finer-grained interleaving of code, which is necessary to support combinators with multiple input streams and multiple output streams.
 
 \section{Synchronous languages}
 \label{related/synchronous-languages}
@@ -102,57 +165,4 @@ This does appear to be able to express value-dependent operations such as @merge
 % Schedulable parametric dataflow (SPDF),  \cite{fradet2012spdf}
 
 % Recent work on stream fusion by \citet{kiselyov2016stream} uses staged computation to ensure all combinators are inlined, but for splits this causes excessive inlining which duplicates work, due to values of the source arrays being read multiple times.
-
-\section{Tupling}
-\label{related/tupling}
-% This process of combining two folds into one is a simple instance of a transform known as \emph{tupling}.
-% Transforms such as \cite{hu1997tupling,hu2005program,chiba2010program} can automatically perform tupling for some programs, but do not support combinators with multiple input streams such as \Hs/join/ or \Hs/append/.
-% We discuss tupling further in \cref{related/tupling}.
-
-Automatic tupling combines multiple traversals over a data structure into a single traversal.
-Tupling is more general than stream fusion: it supports simplifying traversals of trees and other data structures, rather than just streams.
-Two types of tupling are \emph{fold/unfold tupling} and \emph{hylomorphism-based tupling}.
-
-Fold/unfold tupling, such as \citet{chiba2010program}, works by repeatedly unfolding or inlining a definition into its use site, performing some local rewrite-based optimisations, then re-folding the definition.
-The unfolding may expose some simplification opportunities, which the local rewrite rules simplify away.
-However, because the definitions to be unfolded are recursive, significant effort must be taken to ensure only \emph{finite} unfoldings are generated; for this reason, \citet{hu1997tupling} declare fold/unfold tupling to be impractical.
-
-Hylomorphism-based tupling, such as \citet{hu1996cheap}, works by expressing traversals of the data structure as a \emph{hylomorphism}.
-A hylomorphism describes how to generate some intermediate structure based on the input structure, as well as describing how to fold over the intermediate structure to compute the result.
-The hylomorphism allows us to compute the result without generating the intermediate structure in full.
-If two traversals of an input data structure can be expressed as folds over the same intermediate strucutre, both traversals can be computed together.
-Automatic tupling algorithms attempt to automatically derive a hylomorphism for a given input data structure and traversal function, but these algorithms only work for a limited set of functions.
-The algorithm in \citet{launchbury1995warm} is not total and cannot fuse a @zip@ combinator with both of its consumers.
-The language in \citet{hu1996deriving} is restricted to ensure totality of the algorithm, but cannot express the data-dependent access pattern of the @join@ combinator.
-
-% [talk about tupling: \cite{hu1996deriving,hu1996cheap,hu1996extension,bransen2014exploiting,launchbury1995warm}]
-
-\section{Neumann push model}
-\label{related/push-model}
-
-The push streams described in \cref{taxonomy} are different from the push model used for database execution, as introduced in \citet{neumann2011efficiently}.
-In an attempt to avoid confusion, we call this the \emph{Neumann push model}.
-In the Neumann push model, a stream producer is represented as a continuation which takes a sink, or push function, to push values into:
-
-\begin{haskell}
-data PushModel a = PushModel ((a -> IO ()) -> IO ())
-\end{haskell}
-
-The consumer provides a sink by calling the continuation, then the producer repeatedly pushes all its values to the provided sink.
-In this model, the consumer tells the producer when to start producing the entire stream: this is in contrast with pull streams, where the consumer asks for a single element at a time, and push streams, where the producer provides a single element at a time.
-\citet{neumann2011efficiently} originally claimed that the Neumann push model was inherently more efficient than the pull model, but this was an unfair comparison between a compiled Neumann push model and an un-optimised pull model \cite{shaikhha2018push}.
-
-This control-flow is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive} and \citet{svensson2014defunctionalizing}.
-Here, push arrays are used as a code generation technique, with the main advantage of generating \emph{branchless} code to append two arrays.
-The branchless version of append executes as two loops, one to read from each array, rather than one loop with a conditional branch inside to choose which input array to read from.
-
-The control-flow is also the same as push-based shortcut fusion \cite{gill1993short}, as the consumer initiates the production loop.
-Just as push-based shortcut fusion supports neither @zip@ nor @unzip@ \cite{svenningsson2002shortcut}; neither does the Neumann push model support combinators with multiple inputs except append; nor does it support executing multiple queries concurrently.
-
-\citet{biboudis2017expressive} describes how this model is better for Java JIT compilation, as it allows the producer to be implemented as a simple for-loop repeatedly calling the consumer function, which makes the JIT optimiser more likely to inline the consumer.
-
-
-% The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
-% Like pull streams, the Neumann push model does not support executing multiple queries concurrently; unlike pull streams, the Neumann push model does not support combinators with multiple inputs except append.
-% For now, we are interested in executing multiple queries; we defer further discussion of the Neumann push model to \cref{related/push-model}.
 

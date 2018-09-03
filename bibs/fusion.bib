@@ -281,6 +281,15 @@
 
 % -- P --
 
+% Like our own process fusion, Filter Fusion~\cite{proebsting1996filter} also statically interleaves the code of producer and consumer processes. Each process must have a single input and output channel, so common operators like @zip@, @unzip@, @append@, @partition@ and so on are not supported. Given an adjacent producer and consumer pair, Filter Fusion alternately assigns control to the code of each. When the consumer needs input, control is passed to the producer, and when the producer produces its value control is passed back to the consumer. This simple scheduling algorithm works only for straight line pipelines of processes. Machine fusion provides a finer grained interleaving of code, which is nessesary to support branching dataflows that contain both splits and joins.
+@inproceedings{proebsting1996filter,
+  title={Filter fusion},
+  author={Proebsting, Todd A and Watterson, Scott A},
+  booktitle={POPL},
+  year={1996},
+}
+
+
 % -- Q --
 
 % -- R --

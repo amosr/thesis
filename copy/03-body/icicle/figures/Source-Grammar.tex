@@ -7,11 +7,13 @@
 MMMM \= MM \= MMM \= MM \= MMMMMM \= \kill
 $\mi{T}$
 \GrammarDefTab
-  $@Int@~|~@Bool@~|~@Map@~T~T~|~(T~\times~T)$
+  $\Ic@Int@~|~\Ic@Bool@~|~\Ic@Map@~T~T~|~(T~\times~T)$
+\\
 \\
 $\mi{\TauMode}$
 \GrammarDefTab
-  $T~|~@Element@~T~|~@Aggregate@~T$
+  $T~|~\Ic@Element@~T~|~\Ic@Aggregate@~T$
+\\
 \\
 $\mi{\TauFun}$
 \GrammarDefTab
@@ -21,7 +23,7 @@ $\mi{\TauFun}$
 
 $\mi{Table}$
 \GrammarDefTab
-  $@table@~x~@{@~\ov{(x~:~T;)}~@}@$
+  $\Ic@table@~x~@{@~\ov{(x~:~T;)}~@}@$
 \\
 \\
 
@@ -29,13 +31,13 @@ $\mi{Exp}$, $e$
 \GrammarDefTab
   $x~|~V~|~\mi{Prim}~\ov{\mi{Exp}}~|~x~\ov{\mi{Exp}}$
 \GrammarAlt
-  $@let@$   \> $x~=$ \> $\mi{Exp}~@  in@~\mi{Exp}$
+  $\Ic@let@$   \> $x~=$ \> $\mi{Exp}~\Ic@  in@~\mi{Exp}$
 \GrammarAlt
-  $@fold@$  \> $x~=$ \> $\mi{Exp}~@then@~\mi{Exp}$
+  $\Ic@fold@$  \> $x~=$ \> $\mi{Exp}~\Ic@then@~\mi{Exp}$
 \GrammarAlt
-  $@filter@$\> \> $\mi{Exp}~@  of@~\mi{Exp}$
+  $\Ic@filter@$\> \> $\mi{Exp}~\Ic@  of@~\mi{Exp}$
 \GrammarAlt
-  $@group@$ \> \> $\mi{Exp}~@  of@~\mi{Exp}$
+  $\Ic@group@$ \> \> $\mi{Exp}~\Ic@  of@~\mi{Exp}$
 \\
 \\
 
@@ -43,7 +45,7 @@ $\mi{Prim}$, $p$
 \GrammarDefTab
   $(@+@)~|~(@-@)~|~(@*@)~|~(@/@)~|~(@==@)~|~(@/=@)~|~(@<@)~|~(@>@)~|~(@,@)$
 \GrammarAlt
-  $@lookup@~|~@fst@~|~@snd@$
+  $\Ic@lookup@~|~\Ic@fst@~|~\Ic@snd@$
 \\
 \\
 
@@ -56,9 +58,9 @@ $V$, $v$
 
 $\mi{Def}$
 \GrammarDefTab
-  $@function@~f~\ov{(x~:~\TauMode)}~=~\mi{Exp}$
+  $\Ic@function@~f~\ov{(x~:~\TauMode)}~=~\mi{Exp}$
 \GrammarAlt
-  $@query@~x~=~\mi{Exp}$
+  $\Ic@query@~x~=~\mi{Exp}$
 \\
 \\
 $\mi{Top}$

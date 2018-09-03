@@ -2,25 +2,25 @@
 \label{icicle:s:Introduction}
 
 This chapter presents Icicle, a domain-specific language for writing queries as push streams.
-This work was first published as \citep{robinson2016icicle} and was performed during an internship at a machine-learning company called Ambiata.
-At Ambiata, we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018 this was a lot of data.}
-For such applications we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
+This work was first published as \citet{robinson2016icicle}, and was performed in collaboration with a machine-learning company called Ambiata.
+At Ambiata, we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018, this was a lot of data.}
+For such applications, we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
 Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion nor incremental update then the cost of the computation would begin to exceed the salaries of the developers.
 
 The contributions of this chapter are:
 \begin{itemize}
 \item
-  We motivate the use of Icicle by extending the previous ``gold-panning'' queries (\cref{icicle/gold-panning});
+  We motivate the use of Icicle by extending the previous ``gold panning'' queries (\cref{icicle/gold-panning});
 
 \item
-  We present Icicle, a domain specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
+  We present Icicle, a domain-specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
 
 \item
   We present a fold-based intermediate language, which allows the query fusion transformation to be a simple matter of appending two intermediate programs, and exposes opportunities for common subexpression elimination (\cref{icicle:s:IcicleCore});
 
 \item
-  We present production benchmarks of Icicle compiled code (\cref{icicle:s:Benchmarks}). 
+  We present benchmarks of Icicle compiled code running in production (\cref{icicle:s:Benchmarks}). 
 \end{itemize}
 
 \section{Gold panning with Icicle}
@@ -30,7 +30,7 @@ In the following example queries, we extend the daily stock price records from \
 As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle cannot express the @priceOverMarket@ example, which contains multiple input streams.
 Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
 We also want the mean of the open price for days in which the open price exceeded the close price.
-In Icicle we write the three queries as follows:
+In Icicle, we write the three queries as follows:
 
 \begin{icicle}
 table stocks { open : Int, close : Int }
@@ -40,7 +40,7 @@ query
   mean = filter open > close of sum open / count;
 \end{icicle}
 
-In the above code, @open > close@ and @close < open@ are filter predicates, and @count@ counts how many times the predicate is true.
+In the above code, (@open > close@) and (@close < open@) are filter predicates, and @count@ counts how many times the predicate is true.
 The input table, @stocks@, defines the open and close prices as @Int@s.
 In Icicle, input tables have an implicit time field and the input stream is sorted chronologically.
 
@@ -63,19 +63,18 @@ queries = do
   let mean = filter (\r -> open r > close r)
                     (div <$> contramap open mean_sum <*> mean_count)
   return ((,,) <$> more <*> less <*> mean)
- where
 \end{haskell}
 
 Despite the syntactic differences, the two programs have roughly the same structure in terms of the three queries.
 The three instances of \Hs@count@ are constructed as monadic \Hs@IO@ operations, because each count uses a separate mutable reference.
 The applicative functor syntax is used to divide the sum by the count in the @mean@ query, because the division is performed on the result of the push stream.
-Icicle does not use the applicative syntax as it uses a modal type system to infer which computations are performed on the result of the stream, as described in \cref{icicle:s:ElementsAndAggregates:TypeSystem}.
+Icicle does not use the applicative syntax, as it uses a modal type system to infer which computations are performed on the result of the stream, as described in \cref{icicle:s:ElementsAndAggregates:TypeSystem}.
 
 In this example, both @more@ and @mean@ compute the count with the same filter predicate.
 When the same computation is used by multiple queries, we would like to compute the value only once and share the result among all the queries that use it.
 Common subexpression elimination (CSE) removes some duplicate computations but, as its name suggests, it is limited to structural subexpressions~\cite{chitil1997uncommon}.
-Neither of the filtered counts is a subexpression of the other, so CSE will not remove the duplicate computation.
-In Icicle we remove this duplicate work by first converting queries to an intermediate language, described in \cref{icicle:s:IcicleCore}.
+Neither of the filtered counts is a subexpression of the other, so common subexpression elimination will not remove the duplicate computation.
+In Icicle, we remove this duplicate work by first converting queries to an intermediate language, described in \cref{icicle:s:IcicleCore}.
 This intermediate language decomposes the query into individual folds, exposing the opportunities for common subexpression elimination.
 
 If we were using an existing database implementation, we could convert all three queries to a single query in a back-end language like SQL, but doing so by hand is tedious and error prone.
@@ -114,4 +113,4 @@ Icicle is related to stream processing languages such as Lucy~\cite{mandel2010lu
 Icicle is also related to work on continuous queries~\cite{arasu2003cql}, where query results are updated as rows are inserted into the source table, except we can also compute arbitrary reductions and do not need to handle deleted source rows.
 We discuss these points in more detail in \cref{icicle:s:Conclusion}.
 Our implementation is available at \url{https://github.com/amosr/icicle}.
-This implementation is used in the production machine-learning pipeline at Ambiata.
+As of 2018, this implementation is still running in production in the machine-learning pipeline at Ambiata.

@@ -1,6 +1,7 @@
 \usepackage{listings}
 \usepackage{lstlinebgrd}
 \usepackage{etoolbox}
+\usepackage{letltxmacro}
 
 \colorlet{TemplateStage}{Blue}
 
@@ -185,6 +186,21 @@
 % \AfterEndEnvironment{coq}{\par}
 % \AfterEndEnvironment{process}{\par}
 
+\newcommand*{\SavedLstInline}{}
+\LetLtxMacro\SavedLstInline\lstinline
+\DeclareRobustCommand*{\lstinline}{%
+  \ifmmode
+    \let\SavedBGroup\bgroup
+    \def\bgroup{%
+      \let\bgroup\SavedBGroup
+      \hbox\bgroup
+    }%
+  \fi
+  \SavedLstInline
+}
+
 \newcommand\Hs{\lstinline}
 
 \def\lstiproc{\lstinline[language=process]}
+\def\Ic{\lstinline[language=icicle]}
+\def\IcC{\lstinline[language=icicle-core]}

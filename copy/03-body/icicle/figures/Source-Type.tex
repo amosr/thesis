@@ -1,7 +1,7 @@
 %!TEX root = ../Main.tex
 
 \begin{figure}
-  \scriptsize
+  \footnotesize
 
 $$
 \boxed{\Typecheck{\Gamma}{e}{\TauMode}}
@@ -26,8 +26,11 @@ $$
   \{ \Typecheck{\Gamma}{v_i'}{T'} \}
 }
 { 
-    \Typecheck{\Gamma}{\{v_i \Rightarrow v_i'\}}{@Map@~T~T'}
+    \Typecheck{\Gamma}{\{v_i \Rightarrow v_i'\}}{\Ic@Map@~T~T'}
 }{TcMap}
+$$
+
+$$
 \ruleIN
 {
   \Typecheck{\Gamma}{v}{T}
@@ -37,9 +40,6 @@ $$
 { 
     \Typecheck{\Gamma}{v~\times~v'}{T~\times~T'}
 }{TcPair}
-$$
-
-$$
 \ruleIN
 {
     (x~:~T)~\in~\Gamma
@@ -47,11 +47,14 @@ $$
 { 
     \Typecheck{\Gamma}{x}{T}
 }{TcVar}
+$$
+
+$$
 \ruleIN
 {
   \Typecheck{\Gamma}{e}{T}
   \quad
-  m~\in~\{@Element@,~@Aggregate@\}
+  m~\in~\{\Ic@Element@,~\Ic@Aggregate@\}
 }
 { 
     \Typecheck{\Gamma}{e}{m~T}
@@ -69,7 +72,10 @@ $$
 }
 { 
     \Typecheck{\Gamma}{p~\{e_i\}}{M'}
-}{TcPrimApp}~~~~
+}{TcPrimApp}
+$$
+
+$$
 \ruleIN
 {
     (x~:~F)~\in~\Gamma
@@ -81,9 +87,6 @@ $$
 { 
     \Typecheck{\Gamma}{x~\{e_i\}}{M'}
 }{TcFunApp}
-$$
-
-$$
 \ruleIN
 {
   \Typecheck{\Gamma}{e}{M}
@@ -91,37 +94,43 @@ $$
   \Typecheck{\Gamma,~x:M}{e'}{M'}
 }
 {
-  \Typecheck{\Gamma}{@let@~x~=~e~@in@~e'}{M'}
-}{TcLet}~~~~
+  \Typecheck{\Gamma}{\Ic@let@~x~=~e~\Ic@in@~e'}{M'}
+}{TcLet}
+$$
+
+$$
 \ruleIN
 {
   \Typecheck{\Gamma}{e_z}{T}
   \quad
-  \Typecheck{\Gamma,~x:@Element@~T}{e_k}{@Element@~T}
+  \Typecheck{\Gamma,~x:\Ic@Element@~T}{e_k}{\Ic@Element@~T}
 }
 {
-  \Typecheck{\Gamma}{@fold@~x~=~e_z~@then@~e_k}{@Aggregate@~T}
+  \Typecheck{\Gamma}{\Ic@fold@~x~=~e_z~\Ic@then@~e_k}{\Ic@Aggregate@~T}
 }{TcFold}
 $$
 
 $$
 \ruleIN
 {
-  \Typecheck{\Gamma}{e}{@Element@~\BB}
+  \Typecheck{\Gamma}{e}{\Ic@Element@~\BB}
   \quad
-  \Typecheck{\Gamma}{e'}{@Aggregate@~T}
+  \Typecheck{\Gamma}{e'}{\Ic@Aggregate@~T}
 }
 {
-  \Typecheck{\Gamma}{@filter@~e~@of@~e'}{@Aggregate@~T}
-}{TcFilter}~~~~
+  \Typecheck{\Gamma}{\Ic@filter@~e~\Ic@of@~e'}{\Ic@Aggregate@~T}
+}{TcFilter}
+$$
+
+$$
 \ruleIN
 {
-  \Typecheck{\Gamma}{e}{@Element@~T}
+  \Typecheck{\Gamma}{e}{\Ic@Element@~T}
   \quad
-  \Typecheck{\Gamma}{e'}{@Aggregate@~T'}
+  \Typecheck{\Gamma}{e'}{\Ic@Aggregate@~T'}
 }
 {
-  \Typecheck{\Gamma}{@group@~e~@of@~e'}{@Aggregate@~(@Map@~T~T')}
+  \Typecheck{\Gamma}{\Ic@group@~e~\Ic@of@~e'}{\Ic@Aggregate@~(\Ic@Map@~T~T')}
 }{TcGroup}
 $$
 
@@ -144,17 +153,20 @@ $$
 {
   \TypecheckP{p}{(\NN,~\NN)~\to~\BB}
 }{PrimRel}
-\ruleAx
-{
-  \TypecheckP{(@,@)}{(T,~T')~\to~(T~\times~T')}
-}{PrimTuple}
 $$
 
 $$
 \ruleAx
 {
-  \TypecheckP{@lookup@}{(@Map@~T~T',~T)~\to~T'}
+  \TypecheckP{(@,@)}{(T,~T')~\to~(T~\times~T')}
+}{PrimTuple}
+\ruleAx
+{
+  \TypecheckP{@lookup@}{(\Ic@Map@~T~T',~T)~\to~T'}
 }{PrimLookup}
+$$
+
+$$
 \ruleAx
 {
   \TypecheckP{@fst@}{(T~\times~T')~\to~T}
@@ -197,14 +209,17 @@ $$
   F~=~\{M_i\}~\to~M'
 }
 {
-  \TypecheckS{\Gamma}{@function@~x~\{x_i~:~M_i\}~=~e}{\Gamma,~x:F}
-}{CheckFun}~~~~
+  \TypecheckS{\Gamma}{\Ic@function@~x~\{x_i~:~M_i\}~=~e}{\Gamma,~x:F}
+}{CheckFun}
+$$
+
+$$
 \ruleIN
 {
-  \Typecheck{\Gamma}{e}{@Aggregate@~T}
+  \Typecheck{\Gamma}{e}{\Ic@Aggregate@~T}
 }
 {
-  \TypecheckS{\Gamma}{@query@~x~=~e}{\Gamma,~x:~@Aggregate@~T}
+  \TypecheckS{\Gamma}{\Ic@query@~x~=~e}{\Gamma,~x:~\Ic@Aggregate@~T}
 }{CheckQuery}
 $$
 
@@ -215,7 +230,7 @@ $$
 $$
 \ruleIN
 {
-  \Gamma_0~=~\{x_i:@Element@~T_i\}
+  \Gamma_0~=~\{x_i:\Ic@Element@~T_i\}
   \quad
   \{~\TypecheckS{\Gamma_{j-1}}{d_j}{\Gamma_j}~\}
 }
@@ -223,7 +238,7 @@ $$
   \TypecheckS
     {}
     {
-      @table@
+      \Ic@table@
       ~x~\{x_i~:~T_i\};
       ~\{~d_j~\}
     }

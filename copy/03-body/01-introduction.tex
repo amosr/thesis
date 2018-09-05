@@ -13,16 +13,35 @@ We focus on two streaming models: push streams (\cref{taxonomy/push}), and Kahn 
 
 Push streams can execute multiple queries at a time, but these queries can be unwieldy to write as they must be constructed ``back-to-front''.
 In \cref{part:icicle} we introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar array-based semantics, while retaining the execution strategy of push streams.
-The type system of Icicle guarantees that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together.
+The type system of Icicle guarantees that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together in a single pass.
 % \TODO{talk about duplicate work in push streams as well, rather than focussing on fairly trivial syntax changes}
 % Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 
 However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams, and in some circumstances appending streams, as we shall see in \cref{taxonomy/push}.
 As an alternative to push streams, Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant runtime overhead.
-In \cref{s:Fusion} we introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
+In \cref{s:Fusion} we introduce \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
 This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and synchronised product of processes (\cref{related/synchronised-product}), which is generally used as a proof technique rather than an optimisation.
+
+Streaming programs are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
+We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
+For programs requiring multiple passes over the input, there are generally many different ways to divide the work among the passes.
+We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each stream operation among the different passes.
+The choice of clustering affects runtime performance.
+To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of passes.
+Finding this clustering is NP-hard \cite{darte1999complexity}.
+
+In \cref{clustering}, we find the clustering by generating an Integer Linear Program, which can be solved by an external solver.
+The clustering algorithm of \citet{megiddo1998optimal} computes the clustering for an imperative loop nest, rather than a set of stream transformers.
+Individual loops in the loop nest are assigned to clusters, and all loops in the same cluster are fused together.
+Here, as with many imperative loop fusion systems, loops can only be fused together if their loop bounds are identical.
+In such systems, a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
+With process fusion, we \emph{can} fuse a filter with its consumer, so a clustering algorithm for imperative loop nests would introduce more passes than necessary.
+Our clustering algorithm is an extension \citet{megiddo1998optimal} to cluster stream transformers, and to support size-changing operations such as filter.
+% As such, clustering algorithms designed for imperative loop fusion ignore the opportunities for fusing filters together, and may assign more clusters than necessary.
+% By working with high-level combinators rather than loop nests, we extend this clustering algorithm to recognise that filters can be fused with their consumer or their producer.
+\TODO{refine clustering}
 
 \section{Contributions}
 
@@ -44,6 +63,12 @@ The fusion algorithm is described in \cref{chapter:process:processes}.
 a proof of correctness for the above-mentioned fusion system, mechanised in the proof assistant Coq.
 The proof states that when two processes are fused together, the fused process computes the same result as the original processes.
 The proof is described in \cref{s:Proofs}.
+
+\item[Clustering for rewindable streams:]
+a clustering algorithm for streaming transformers, which supports size-changing operations such as filter.
+This algorithm converts a set of streaming transformers to an Integer Linear Program to be solved externally.
+The clustering algorithm is described in \cref{clustering}.
+\TODO{refine}
 
 \end{description}
 

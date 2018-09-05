@@ -1,14 +1,45 @@
-\chapter{Clustering}
-\label{part:clustering}
+\chapter{Clustering for rewindable streams}
+\label{clustering}
 
 \input{copy/03-body/clustering/style/utils.tex}
 
-The key to compiling functional, collection oriented array programs into efficient code is to minimise memory traffic.
-Simply fusing subsequent array operations into a single computation is not sufficient; we also need to cluster \emph{separate} traversals of the same array into a single traversal.
-Previous work demonstrated how Integer Linear Programming (ILP) can be used to cluster the operators in a general data-flow graph into subgraphs, which can be individually fused.
-However, these approaches can only handle operations which preserve the size of the array, thereby missing out on some optimisation opportunities.
-This paper addresses this shortcoming by extending the ILP approach with support for size-changing operations, using an external ILP solver to find good clusterings.
+This chapter presents a clustering algorithm for scheduling streaming programs that require multiple passes over input streams.
+This work was first published as \citet{robinson2014fusing}.
+So far, in this thesis, we have assumed that all input streams are \emph{ephemeral}: that is, once the elements have been read, they cannot be recovered.
+This property is certainly the case for reading from a network socket, but 
+To support rewindable streams --- such as reading from a disk --- as well as ephemeral streams --- such as reading from a network socket --- the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
+When we know that all the input streams are rewindable, we can execute larger programs which require multiple passes over the input, by executing each pass as its own streaming program.
+Given such a multiple pass program, we perform \emph{clustering} to determine how many passes to perform, and how to schedule each stream operation among the different passes.
+The choice of clustering affects runtime performance.
+To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of passes.
+Finding this clustering is NP-hard \cite{darte1999complexity}.
 
+The contributions of this chapter are:
+\begin{itemize}
+\item   
+We extend the clustering algorithm of \citet{megiddo1998optimal} and \citet{darte2002contraction}, with support for size-changing operators.
+Size-changing operators can be clustered with operations on both their source stream and output stream, and compiled naturally with process fusion (\cref{clustering:s:ILP});
+
+\item
+We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:
+constraints between two nodes need not be generated if there is a fusion-preventing path between the two (\cref{clustering:s:OptimisedConstraints});
+
+\item
+Our constraint system encodes the cost model as a total ordering on the cost of clusterings, expressed using weights on the integer linear program.
+For example, we encode that memory traffic is more expensive than loop overheads, so given a choice between the two, memory traffic will be reduced (\cref{clustering:s:ObjectiveFunction});
+
+\item
+We present benchmarks of our algorithm applied to several common programming patterns.
+Our algorithm is complete and the chosen cost model yields good results in practice, though an optimal cost model is infeasible in general (\cref{clustering:s:Benchmarks}).
+\end{itemize}
+
+An implementation of our clustering algorithm is available at \url{https://github.com/amosr/clustering}.
+
+% The key to compiling functional, collection oriented array programs into efficient code is to minimise memory traffic.
+% Simply fusing subsequent array operations into a single computation is not sufficient; we also need to cluster \emph{separate} traversals of the same array into a single traversal.
+% Previous work demonstrated how Integer Linear Programming (ILP) can be used to cluster the operators in a general data-flow graph into subgraphs, which can be individually fused.
+% However, these approaches can only handle operations which preserve the size of the array, thereby missing out on some optimisation opportunities.
+% This paper addresses this shortcoming by extending the ILP approach with support for size-changing operations, using an external ILP solver to find good clusterings.
 
 
 \input{copy/03-body/clustering/section/01-Introduction.tex}

@@ -23,6 +23,7 @@ Shortcut fusion is an attractive idea, as it allows fusion systems to be specifi
 However, shortcut fusion relies on local inlining which, like pull-based streams, only occurs when there is a single consumer.
 Thus, shortcut fusion is inherently biased towards pull fusion.
 Push-based shortcut fusion systems \emph{do} exist \cite{gill1993short}, but support neither @zip@ nor @unzip@ \cite{svenningsson2002shortcut,lippmeier2013data}.
+We discussed the Vector library's use of stream fusion shortcut fusion system~\cite{coutts2007stream} earlier, in \cref{s:Benchmarks}.
 
 Recent work on stream fusion by \citet{kiselyov2016stream} uses staged computation in a pull-based system to ensure all combinators are inlined, but when streams are used multiple times this causes excessive inlining, which duplicates work.
 For effectful inputs such as reading from the network, duplicating work changes the semantics.
@@ -140,6 +141,7 @@ In this case, the passive process has no control over the rate of input coming i
 In contrast, the processes we describe are \emph{active} processes that have control over the input that is coming in.
 This is necessary for combinators such as mergesort-style @merge@, as well as @append@.
 Note that in the synchronous language literature, it is common to refer to a different merge operation, also known as @default@, which computes a stream that is defined whenever either input is defined.
+We discussed the relationship between synchronous languages and Icicle earlier, in \cref{icicle:s:Conclusion}.
 
 \section{Synchronous dataflow}
 \label{related/synchronous-dataflow}

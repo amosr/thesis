@@ -24,7 +24,7 @@ This section discusses three representative benchmarks, and gives the full ILP p
 
 For each benchmark we report the runtimes of hand-fused C code based on the clustering determined by each algorithm. Although we also have an implementation of our Data Flow Fusion system in terms of a GHC plugin~\cite{lippmeier2013data}, we report on hand-fused C code to provide a fair comparison to related work. As mentioned in~\cite{lippmeier2013data}, the current Haskell stream fusion mechanism introduces overhead in terms of a large number of duplicate loop counters, which increases register pressure unnecessarily. Hand fusing all code and compiling it with the same compiler (GCC) isolates the true cost of the various clusterings from low level differences in code generation.
 
-We have used both GLPK and CPLEX as external ILP solvers. For small programs such as @normalizeInc@, both solvers produce solutions in under 100ms. For a larger randomly generated example with twenty-five combinators, GLPK took over twenty minutes to produce a solution while the commercial CPLEX solver was able to produce a solution in under one second --- which is still quite usable. We will investigate the reason for this wide range in performance in future work.
+We have used both GLPK and CPLEX as external ILP solvers. For small programs such as \Hs@normalizeInc@, both solvers produce solutions in under 100ms. For a larger randomly generated example with twenty-five combinators, GLPK took over twenty minutes to produce a solution while the commercial CPLEX solver was able to produce a solution in under one second --- which is still quite usable. We will investigate the reason for this wide range in performance in future work.
 
 % We use GLPK as an external solver, which is not particularly fast, but has readily-available Haskell bindings. For these small programs with few combinators, it produces results in under one hundred milliseconds.
 % For larger programs with twenty or more combinators to be clustered, GLPK is inadequate.
@@ -33,14 +33,14 @@ We have used both GLPK and CPLEX as external ILP solvers. For small programs suc
 
 The benchmark programs are at \url{https://github.com/amosr/papers/tree/master/2014betterfusionforfilters/benches}.
 
-% The three benchmarks are the @normalize2@ example, finding the closest pair of points, and quadtree. The benchmark programs are all hand-written, hand-fused C code based on the clustering. Each program was run with the same input five times, and the minimum runtime was used. Runtimes and the number of loops for each clustering are shown in \cref{clustering:f:BenchResults}. In all cases, our clustering performs better than or as good as Megiddo's, and better than stream fusion and unfused. Interestingly, stream fusion's clustering for @normalize2@ performs better than Megiddo's, despite having more loops, as stream fusion is able to remove the intermediate array.
+% The three benchmarks are the \Hs@normalize2@ example, finding the closest pair of points, and quadtree. The benchmark programs are all hand-written, hand-fused C code based on the clustering. Each program was run with the same input five times, and the minimum runtime was used. Runtimes and the number of loops for each clustering are shown in \cref{clustering:f:BenchResults}. In all cases, our clustering performs better than or as good as Megiddo's, and better than stream fusion and unfused. Interestingly, stream fusion's clustering for \Hs@normalize2@ performs better than Megiddo's, despite having more loops, as stream fusion is able to remove the intermediate array.
 
 
 % -----------------------------------------------------------------------------
 \pagebreak
 \subsection{Normalize2}
-To demonstrate the ILP formulation we will use the @normalize2@ example from \cref{clustering:s:Introduction}, repeated here:
-\begin{code}
+To demonstrate the ILP formulation we will use the \Hs@normalize2@ example from \cref{clustering:s:Introduction}, repeated here:
+\begin{haskell}
   normalize2 :: Array Int -> Array Int
   normalize2 xs
    = let sum1 = fold   (+)  0   xs
@@ -49,7 +49,7 @@ To demonstrate the ILP formulation we will use the @normalize2@ example from \cr
          ys1  = map    (/ sum1) xs
          ys2  = map    (/ sum2) xs
      in (ys1, ys2)
-\end{code}
+\end{haskell}
 
 We use the final ILP formulation from \cref{clustering:s:OptimisedConstraints}. First, we calculate $possible$ -- that is, the nodes which have no fusion-preventing path between them.
 \[ \{ \{sum1, gts, sum2\}
@@ -144,13 +144,13 @@ The QuadTree benchmark recursively builds a 2-dimensional space partitioning tre
 \subsection{QuickHull}
 The core of the QuickHull algorithm is shown below: given a line and an array of points, we filter the points to those above the line, and also find the point farthest from that line.
 
-\begin{code}
+\begin{haskell}
 hull :: (Point,Point) -> Array Point -> Array Point
 hull line@(l,r) pts
  = let pts' = filter (above   line) pts
        ma   = fold   (maxFrom line) pts'
    in (hull (l, ma) pts') ++ (hull (ma, r) pts')
-\end{code}
+\end{haskell}
 
-Stream fusion cannot fuse the @pts'@ and @ma@ bindings because @pts'@ is referred to multiple times and thus cannot be inlined. Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different. If the @ma@ binding was rewritten to operate over the @pts@ array instead of @pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result. However, this performance behavior is counter intuitive because @pts'@ is likely to be smaller than @pts@, so in an unfused program the original version would be faster. Our system fuses both versions.
+Stream fusion cannot fuse the \Hs@pts'@ and \Hs@ma@ bindings because \Hs@pts'@ is referred to multiple times and thus cannot be inlined. Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different. If the \Hs@ma@ binding was rewritten to operate over the \Hs@pts@ array instead of \Hs@pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result. However, this performance behavior is counter intuitive because \Hs@pts'@ is likely to be smaller than \Hs@pts@, so in an unfused program the original version would be faster. Our system fuses both versions.
 

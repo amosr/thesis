@@ -1,18 +1,28 @@
-\chapter{Clustering for rewindable streams}
+\chapter{Clustering for array-backed streams}
 \label{clustering}
 
 \input{copy/03-body/clustering/style/utils.tex}
 
+\TODO{this chapter is very rough}
+
 This chapter presents a clustering algorithm for scheduling streaming programs that require multiple passes over input streams.
 This work was first published as \citet{robinson2014fusing}.
 So far, in this thesis, we have assumed that all input streams are \emph{ephemeral}: that is, once the elements have been read, they cannot be recovered.
-This property is certainly the case for reading from a network socket, but 
-To support rewindable streams --- such as reading from a disk --- as well as ephemeral streams --- such as reading from a network socket --- the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
+This property is certainly the case for reading from a network socket, but input streams stored on disk or in memory are persistent and can be re-read any number of times.
+To support ephemeral streams and rewindable streams, and treat both types of streams the same, the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
 When we know that all the input streams are rewindable, we can execute larger programs which require multiple passes over the input, by executing each pass as its own streaming program.
+
+In this chapter, we look at a slightly different class of programs, where all input streams are rewindable, and any intermediate streams --- streams produced by one pass and consumed by another --- can be temporarily stored on disk.
 Given such a multiple pass program, we perform \emph{clustering} to determine how many passes to perform, and how to schedule each stream operation among the different passes.
 The choice of clustering affects runtime performance.
-To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of passes.
-Finding this clustering is NP-hard \cite{darte1999complexity}.
+To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of traversals of the input.
+
+We look at array programs.
+The choice of combinators dictates the required representation for inputs and outputs.
+In our presentation of clustering, we include the \Hs@gather@ operation, which performs lifted array indexing and requires random access; we also support \Hs@cross@, which computes the cross-product and requires one iteration over its second input for every element in the first input.
+
+To compile the clusters found by our clustering technique into a sequential streaming program, we use process fusion from \cref{chapter:process:processes}.
+% It improved on existing array fusion approaches~\cite{coutts2007stream, keller2010repa} as it guarantees fusion into a single loop for programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. 
 
 The contributions of this chapter are:
 \begin{itemize}
@@ -26,14 +36,14 @@ constraints between two nodes need not be generated if there is a fusion-prevent
 
 \item
 Our constraint system encodes the cost model as a total ordering on the cost of clusterings, expressed using weights on the integer linear program.
-For example, we encode that memory traffic is more expensive than loop overheads, so given a choice between the two, memory traffic will be reduced (\cref{clustering:s:ObjectiveFunction});
+For example, we encode that memory traffic is more expensive than the overhead of performing a separate pass, so given a choice between the two, memory traffic will be reduced (\cref{clustering:s:ObjectiveFunction});
 
 \item
 We present benchmarks of our algorithm applied to several common programming patterns.
-Our algorithm is complete and the chosen cost model yields good results in practice, though an optimal cost model is infeasible in general (\cref{clustering:s:Benchmarks}).
+Our algorithm is complete and optimising for the chosen cost model yields good results in practice, though a cost model which maps exactly to program runtime is infeasible in general (\cref{clustering:s:Benchmarks}).
 \end{itemize}
 
-An implementation of our clustering algorithm is available at \url{https://github.com/amosr/clustering}.
+Our clustering algorithm is implemented at \url{https://github.com/amosr/clustering}.
 
 % The key to compiling functional, collection oriented array programs into efficient code is to minimise memory traffic.
 % Simply fusing subsequent array operations into a single computation is not sufficient; we also need to cluster \emph{separate} traversals of the same array into a single traversal.

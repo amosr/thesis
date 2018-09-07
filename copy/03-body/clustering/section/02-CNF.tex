@@ -1,30 +1,49 @@
 %!TEX root = ../Main.tex
 
-\begin{figure*}[ht!]
-\begin{center}
-\includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex1-compare.pdf}
-\end{center}
-\caption{Clusterings for normalize2 example: with stream fusion; our system; best imperative system}
-\label{clustering:f:normalize2-clusterings}
-\end{figure*}
-
 
 % -----------------------------------------------------------------------------
-\section{Combinator Normal Form}
+\section{Combinator normal form}
 \label{clustering:s:CombinatorNormalForm}
-Input programs are expressed in \emph{Combinator Normal Form} (CNF), which is a textual description of the data flow graph. The grammar for CNF is given in \cref{clustering:f:CombinatorNormalForm}. The @normalize2@  example on the previous page is in CNF,  as is the matching data flow graph for @normalize2@ in \cref{clustering:f:normalize2-clusterings}. Our data flow graphs are similar to Loop Communication Graphs (LCGs) from related work in imperative array fusion~\cite{gao1993collective}. We name edges after the corresponding variable from the CNF form, and edges which are fusion preventing are drawn with a dash through them (as per the edge labeled @sum1@ in \cref{clustering:f:normalize2-clusterings}). In data flow graphs, we tend to elide the worker functions to combinators when they are not important to the discussion --- so we don't show the @(+)@ operator on each use of @fold@.
-
-Clusters of operators that are fused into single imperative loops are indicated by dotted lines, and we highlight materialized arrays by drawing them in boxes. In \cref{clustering:f:normalize2-clusterings}, the variables @xs@, @ys1@ and @ys2@ are always in boxes, as these are the material input and output arrays of the program. However, in the graph on the far right hand side, @gts@ has also been materialized because in this version, the producing and consuming operators (@filter@ and @fold@) have not been fused. In \cref{clustering:f:CombinatorNormalForm}, note that the bindings have been split into those that produce scalar values ($sbind$), and those that produce array values ($abind$). These groupings are represented as open and closed arrow-heads in \cref{clustering:f:normalize2-clusterings}.
-
-%What's a 'suggestive' type???
-Most of our array combinators are standard, and suggestive types are given at the bottom of \cref{clustering:f:CombinatorNormalForm}. The $@map@_n$ combinator takes a worker function, $n$ arrays of the same length, and applies the worker function to all elements at the same index. As such, it is similar to Haskell's @zipWith@, with an added length restriction on the argument arrays. The @generate@ combinator takes an array length and a worker function, and creates a new array by applying the worker to each index. The @gather@ combinator takes an array of elements, an array of indices, and produces the array of elements that are positioned at each index. In Haskell, this would be @gather arr ixs = map (index arr) ixs@. The @cross@ combinator returns the cartesian product of two arrays. 
-
-The exact form of the worker functions is left unspecified, as it is not important for the discussion. We assume workers are pure, can at least compute arithmetic functions of their scalar arguments, and index into arrays in the environment. We also assume that each CNF program considered for fusion is embedded in a larger host program which handles file IO and the like. Workers are additionally restricted so they can only directly reference the \emph{scalar} variables bound by the local CNF program, though they may reference array variables bound by the host program. All access to locally bound array variables is via the formal parameters of array combinators, which ensures that all data dependencies we need to consider for fusion are explicit in the data flow graph.
-
-The @external@ binding invokes a host library function that can produce and consume arrays, but not be fused with other combinators. All arrays passed to and returned from host functions are fully materialised. External bindings are explicit \emph{fusion barriers}, which force arrays and scalars to be fully computed before continuing. 
-
-Finally, note that @filter@ is only one representative size changing operator. We can handle more complex functions such as @unfold@ in our framework, but we stick with simple filtering to aid the discussion.
-
+Input programs are expressed in \emph{combinator normal form} (CNF), which is a textual description of the dependency graph.
+The grammar for CNF is given in \cref{clustering:f:CombinatorNormalForm}.
+Syntactically, a CNF program is a restricted Haskell program consisting of a list of array combinator bindings.
 
 \input{copy/03-body/clustering/figures/Program.tex}
+
+The \Hs@normalize2@ example from \cref{clustering:s:Introduction} is already in CNF;
+its corresponding cluster diagrams are shown in \cref{clustering:f:normalize2-clusterings}.
+Our cluster diagrams are similar to Loop Dependence Graphs (LDGs) from related work in imperative array fusion~\cite{gao1993collective}.
+We name edges after the corresponding variable from the CNF form, and edges which are fusion preventing are drawn with a dash through them (as per the edge labeled \Hs@sum1@ in \cref{clustering:f:normalize2-clusterings}).
+In cluster diagrams, as with dependency graphs, we tend to elide the worker functions to combinators when they are not important to the discussion --- so we don't show the @(+)@ operator on each use of \Hs@fold@.
+
+
+Clusters of operators, which are to be fused into a single pass by process fusion, are indicated by dotted lines, and we highlight materialized arrays by drawing them in boxes.
+In \cref{clustering:f:normalize2-clusterings}, the variables \Hs@xs@, \Hs@ys1@ and \Hs@ys2@ are always in boxes, as these are the material input and output arrays of the program.
+In the rightmost cluster diagram, \Hs@gts@ has also been materialized because in this version, the producing and consuming operators (\Hs@filter@ and \Hs@fold@) have not been fused together.
+In the grammar given in \cref{clustering:f:CombinatorNormalForm}, the bindings have been split into those that produce scalar values ($sbind$), and those that produce array values ($abind$).
+In the cluster diagrams of \cref{clustering:f:normalize2-clusterings}, scalar values are represented by open arrowheads, and array values are represented by closed arrowheads.
+
+%What's a 'suggestive' type???
+Most of our array combinators are standard.
+Although not part of the grammar, we give the type of each combinator at the bottom of \cref{clustering:f:CombinatorNormalForm}.
+The $\Hs@map@_n$ combinator takes a worker function, $n$ arrays of the same length, and applies the worker function to all elements at the same index.
+As such, it is similar to Haskell's \Hs@zipWith@, with an added length restriction on the argument arrays.
+The \Hs@generate@ combinator takes an array length and a worker function, and creates a new array by applying the worker to each index.
+The \Hs@gather@ combinator takes an array of elements, an array of indices, and produces the array of elements that are positioned at each index.
+In Haskell, this would be implemented as (\Hs@gather arr ixs = map (index arr) ixs@).
+The \Hs@cross@ combinator returns the cartesian product of two arrays. 
+
+The exact form of the worker functions is left unspecified, as it is not important for the discussion.
+We assume that workers are pure, can at least compute arithmetic functions of their scalar arguments, and index into arrays in the environment.
+We also assume that each CNF program considered for fusion is embedded in a larger host program which handles file IO and the like.
+Workers are additionally restricted so they can only directly reference the \emph{scalar} variables bound by the local CNF program, though they may reference array variables bound by the host program.
+All access to locally bound array variables is via the formal parameters of array combinators, which ensures that all data dependencies we need to consider for fusion are explicit in the dependency graph.
+
+The \Hs@external@ binding invokes a host library function that can produce and consume arrays, but not be fused with other combinators.
+All arrays passed to and returned from host functions are fully materialised.
+External bindings are explicit \emph{fusion barriers}, which force arrays and scalars to be fully computed before continuing. 
+
+Finally, note that \Hs@filter@ is only one representative size changing operator.
+We can handle more complex functions, such as \Hs@unfold@, in our framework, but we stick with simple filtering to aid the discussion.
+
 

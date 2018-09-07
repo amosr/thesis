@@ -1,35 +1,63 @@
 %!TEX root = ../Main.tex
 \section{Introduction}
 \label{clustering:s:Introduction}
-A collection-oriented programming model is ideal for expressing data-parallel computations, as it exposes the communication patterns to the compiler without requiring complicated loop analysis.
-It is essential, however, that the compiler combines these operations into a small number of efficient loops, as a naive translation leads to high memory traffic and poor performance.
-This is a well known problem, and techniques to fuse subsequent array operations together have been presented in~\cite{gill1993short, coutts2007stream, keller2010repa}, to name just a few.
-This type of fusion alone is not generally sufficient to minimise memory traffic.
-% : first, we often need to re-arrange the array operations and cluster those that iterate over the same structures.
-As shown in Megiddo~\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}, Integer Linear Programming can be used to find good clusterings.
-Unfortunately, they cannot handle operations like filter, where the output size differs from the input size.
-We present a technique that can handle both multi-loop fragments as well as size-altering operations. 
+% A collection-oriented programming model is ideal for expressing data-parallel computations, as it exposes the communication patterns to the compiler without requiring complicated loop analysis.
+% It is essential, however, that the compiler combines these operations into a small number of efficient loops, as a naive translation leads to high memory traffic and poor performance.
+% This is a well known problem, and techniques to fuse subsequent array operations together have been presented in~\cite{gill1993short, coutts2007stream, keller2010repa}, to name just a few.
+% This type of fusion alone is not generally sufficient to minimise memory traffic.
+% % : first, we often need to re-arrange the array operations and cluster those that iterate over the same structures.
+% As shown in Megiddo~\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}, Integer Linear Programming can be used to find good clusterings.
+% Unfortunately, they cannot handle operations like filter, where the output size differs from the input size.
+% We present a technique that can handle both multi-loop fragments as well as size-altering operations. 
 
-To compile the clusters found by our clustering technique into sequential loops, we use data flow fusion~\cite{lippmeier2013data}.
-It improved on existing array fusion approaches~\cite{coutts2007stream, keller2010repa} as it guarantees fusion into a single loop for programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. 
+% To compile the clusters found by our clustering technique into sequential loops, we use data flow fusion~\cite{lippmeier2013data}.
+% It improved on existing array fusion approaches~\cite{coutts2007stream, keller2010repa} as it guarantees fusion into a single loop for programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. 
 % Our clustering technique is also applicable to parallel loops.
 
 
 % To compile collection-oriented array functional array programs, which play a particular important role in parallel programming, into efficient code, it is essential that we can compile the array operations to a small number of imperative loops. Data flow fusion~\cite{lippmeier2013data} addressed this problem by presenting a technique to compile a specific class of data flow programs into single, efficient imperative loops. It improved on existing related array fusion approaches (~\cite{coutts2007stream}, ~\cite{keller2010repa} as it 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) guarantees complete fusion into a single loop for all programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. However, it can only fuse code fragments into one loop that produce a single output array. Approaches based on Integer Linear Programming (\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}) do not suffer from this shortcoming. On the other hand, they cannot handle operations like filter, which produce arrays whose size differs from the input arrays.  The technique we present in this paper can handle both multi-loop fragments as well as size-altering operations. 
 
-To see the effect of clustering, consider the following program:
-\begin{code}
- normalize2 :: Array Int -> (Array Int, Array Int)
- normalize2 xs
-  = let sum1 = fold   (+)  0   xs
-        gts  = filter (>   0)  xs
-        sum2 = fold   (+)  0   gts
-        ys1  = map    (/ sum1) xs
-        ys2  = map    (/ sum2) xs
-    in (ys1, ys2)
-\end{code}
+To see the effect of clustering, consider how we might execute the following array program as a stream program:
 
-The function @normalize2@ computes two sums, one of all the elements of @xs@, the other of only elements greater than zero. Since we need to fully evalute the sums to proceed with the maps, it is clear that we need at least two separate loops. These folds are examples of fusion-preventing dependencies, as fold cannot be fused with subsequent operations. \Cref{clustering:f:normalize2-clusterings} shows the data-flow graph of @normalize2@. In the leftmost diagram we can see the effect of applying stream fusion to the program: we end up with four loops (denoted by the dotted lines): only the filter operation is combined with the subsequent fold. The best existing ILP approach results in the rightmost graph: it combines the @sum1@ fold and @sum2@ filter in one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations. Our approach, in the middle, produces the optimal solution in this case: one loop for the sums, another for the maps.
+\begin{haskell}
+normalize2 :: Array Int -> (Array Int, Array Int)
+normalize2 xs
+ = let sum1 = fold   (+)  0   xs
+       gts  = filter (>   0)  xs
+       sum2 = fold   (+)  0   gts
+       ys1  = map    (/ sum1) xs
+       ys2  = map    (/ sum2) xs
+   in (ys1, ys2)
+\end{haskell}
+
+The function \Hs@normalize2@ computes two sums: one of all the elements of \Hs@xs@, the other of only elements greater than zero.
+The two maps then divide each element in the input \Hs@xs@ by either \Hs/sum1/ or \Hs/sum2/.
+Since we need to fully evalute the sums before we can start to execute either map, we need at least two separate passes over the input.
+These folds are examples of \emph{fusion-preventing dependencies}, as fold cannot be fused with subsequent operations.
+For a streaming program, a fusion-preventing dependency between two combinators means that the program will require multiple passes.
+
+\begin{figure}
+\begin{center}
+\includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex1-compare.pdf}
+\end{center}
+\caption{Clusterings for \Hs/normalize2/ example: with stream fusion; our system; best imperative system}
+\label{clustering:f:normalize2-clusterings}
+\end{figure}
+
+
+\Cref{clustering:f:normalize2-clusterings} shows three cluster diagrams of \Hs@normalize2@, with each diagram applied to a different clustering algorithm.
+A cluster diagram is an extended version of the dependency graphs we have already seen; we explain the details in \cref{clustering:s:CombinatorNormalForm}.
+The leftmost diagram shows how we have to break this program up to execute each part with the pull streams from \cref{taxonomy/pull}.
+The pull streams cannot compute the sums or the maps concurrently, so we end up with four loops, denoted by dotted lines in the diagram; only the filter operation is combined with the subsequent fold.
+If we wrote this program using pull-based stream fusion \citep{coutts2007stream}, we would end up with the same clustering.
+% We benchmarked our process fusion against the Vector library earlier, in \cref{s:Benchmarks}.
+
+The rightmost diagram in \cref{clustering:f:normalize2-clusterings} shows the clustering determined by the best existing ILP approach for imperative array-based loop fusion.
+This clustering combines the \Hs@sum1@ fold and \Hs@sum2@ filter into one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations.
+
+Our approach, shown in the middle of \cref{clustering:f:normalize2-clusterings}, produces the optimal clustering in this case: one loop for the sums, another for the maps.
+For this example, we could execute each cluster as either push streams (\cref{taxonomy/push}) or as a process network fused by process fusion (\cref{chapter:process:processes}).
+In general, a single cluster produced by our algorithm may contain combinators with multiple inputs as well as multiple queries, so we execute each cluster as a fused process network.
 
 % Data flow fusion~\cite{lippmeier2013data} is a technique to compile a specific class of data flow programs into single, efficient imperative loops. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators. This process of ``compilation'' is equivalent to performing array fusion on a combinator based functional array program, as per related work on stream fusion~\cite{coutts2007stream} and delayed arrays~\cite{keller2010repa}. The key benefits of data flow fusion over this prior work are: 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) complete fusion into a single loop is guaranteed for all programs that operate on the same size input data, and contain no fusion-preventing dependencies between operators.
 

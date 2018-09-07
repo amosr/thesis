@@ -11,11 +11,11 @@ In the case of Data Parallel Haskell, the actual combinators to be clustered are
 
 One obvious shortcoming of this work is the limited selection of combinators.
 Other combinators can currently be used as external computations, but this is not ideal as they will not be fused.
-Combinators such as @append@, @scan@ and @slice@ would be simple to add.
+Combinators such as \Hs@append@, \Hs@scan@ and \Hs@slice@ would be simple to add.
 
-Implementing @length@ is particularly interesting, as it does not require the array to be manifest, but does require some array with the same rate to be manifest.
+Implementing \Hs@length@ is particularly interesting, as it does not require the array to be manifest, but does require some array with the same rate to be manifest.
 For example, finding the length of the output of a filter can only be done after the filter is computed.
-Once @length@ is implemented, more interesting functions such as @reverse@ can be implemented as a @generate@ followed by a @gather@.
+Once \Hs@length@ is implemented, more interesting functions such as \Hs@reverse@ can be implemented as a \Hs@generate@ followed by a \Hs@gather@.
 
 For this work to be useful for Data Parallel Haskell, more combinators are required such as segmented fold and segmented map, which operate on segmented representations of nested arrays.
 Rate inference will have to be adapted to handle segmented arrays, possibly using an inner and outer rates.

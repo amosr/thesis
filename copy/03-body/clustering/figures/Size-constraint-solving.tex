@@ -1,7 +1,5 @@
 %!TEX root = ../Main.tex
 
-\newcommand\ins{\textit{ins}}
-\newcommand\inty{\textit{inty}}
 \begin{figure*}
 \footnotesize
 $$
@@ -17,7 +15,7 @@ $$
 \qquad
   (\Gamma_2,C_2) = \textrm{SOLVE}(\Gamma_1,~ C_1)
   \qquad
-          \forall k \in \textrm{fv}(\ov{s}).~
+          \forall k \in \fv(\ov{s}).~
           (\exists k) \notin \Gamma_2
         }
         {
@@ -43,10 +41,10 @@ $$
   & \ov{t} & = \{ t_j ~|~ j \in 1..m  ~\wedge~ (k_j' = t_j ) \in C_2 \}
 \\
 \\
- & \ov{k_a} & = \{ k ~|~ k         \in \Gamma_2 ~\wedge~ k \in \textrm{fv}(\ov{s}) \}  
+ & \ov{k_a} & = \{ k ~|~ k         \in \Gamma_2 ~\wedge~ k \in \fv(\ov{s}) \}  
 %                        ~\cap~ (\bigcup_{i \gets 1 .. n}\textrm{fv}(s_i))
 \\
- & \ov{k_e} & = \{ k ~|~ \exists k \in \Gamma_2 ~\wedge~ k \in \textrm{fv}(\ov{t}) \}
+ & \ov{k_e} & = \{ k ~|~ \exists k \in \Gamma_2 ~\wedge~ k \in \fv(\ov{t}) \}
 %                        ~\cap~ (\bigcup_{j \gets 1 .. m}\textrm{fv}(t_j))
 \end{array}
 \end{array}

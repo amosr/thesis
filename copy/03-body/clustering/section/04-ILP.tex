@@ -10,7 +10,7 @@
 
 
 % -----------------------------------------------------------------------------
-\section{Integer Linear Programming}
+\section{Integer linear programming}
 \label{clustering:s:ILP}
 It is usually possible to cluster a program graph in multiple ways.
 For example, consider the following simple function:
@@ -34,95 +34,84 @@ The first clustering in \cref{clustering:f:normalizeInc} requires two reads from
 The second clustering requires a single fused read from \Hs@xs@, one write to \Hs@incs@, a read back from \Hs@incs@ and a final write to \Hs@ys@.
 From the size constraints of the program, we know that all intermediate arrays have the same size, so we expect the first clustering will peform better as it only needs three array accesses instead of four. 
 
-For small programs such as \Hs@normalizeInc@ it is possible to naively enumerate all possible clusterings, select just those that are \emph{valid} with respect to fusion preventing edges, and choose the one that maximises a cost metric such as the number of array accesses needed. However, as the program size increases the number of possible clusterings becomes too large to naively enumerate. For example, Pouchet et al~\cite{pouchet2010combined} present a fusion system using the polyhedral model~\cite{pouchet2011polyhedral} and report that some simple numeric programs have over 40,000 possible clusterings, with one particular example having $10^{12}$. 
+For small programs such as \Hs@normalizeInc@, it is possible to naively enumerate all possible clusterings, select just those that are \emph{valid} with respect to fusion preventing edges, and choose the one that maximises a cost metric such as the number of array accesses needed.
+However, as the program size increases the number of possible clusterings becomes too large to naively enumerate.
+For example, \citet{pouchet2010combined,pouchet2011polyhedral} present a fusion system using the polyhedral model and report that some simple numeric programs have over 40,000 possible clusterings, with one particular example having $10^{12}$ clusterings.
 
-To deal with the combinatorial explosion in the number of potential clusterings, we instead use an Integer Linear Programming (ILP) formulation. ILP problems are defined as a set of variables, an objective linear function and a set of linear constraints. The integer linear solver finds an assignment to the variables that minimises the objective function, while satisfying all constraints. For the clustering problem we express our constraints regarding fusion preventing edges as linear constraints on the ILP variables, then use the objective function to encode our cost metric. This general approach was first fully described by Megiddo and Sarkar~\cite{megiddo1998optimal}, and our main contribution is to extend it to work with size-changing operators such as \Hs@filter@. 
+To deal with the combinatorial explosion in the number of potential clusterings, we instead use an integer linear programming (ILP) formulation.
+ILP problems are defined as a set of variables, an objective linear function and a set of linear constraints.
+The integer linear solver finds an assignment to the variables that minimises the objective function, while satisfying all constraints.
+For the clustering problem, we express our constraints regarding fusion preventing edges as linear constraints on the ILP variables, then use the objective function to encode our cost metric.
+This general approach was first fully described by \citet{megiddo1998optimal}; the main contribution of this chapter is to extend their formulation to work with size-changing operators such as \Hs@filter@. 
 
 
 % -----------------------------------------------------------------------------
-\subsection{Dependency Graphs}
-A dependency graph represents the data dependencies of the program to be fused, and we use it as an intermediate stage when producing linear constraints for the ILP problem. The dependency graph contains enough information to determine the possible clusterings of the input program, while abstracting away from the exact operators used to compute each intermediate array. The rules for producing dependency graphs are in \cref{clustering:f:DependencyGraph}.
+\subsection{Dependency graphs}
+A dependency graph represents the data dependencies of the program to be fused, and we use it as an intermediate stage when producing linear constraints for the ILP problem. The dependency graph contains enough information to determine the possible clusterings of the input program, while abstracting away from the exact operators used to compute each intermediate array. The rules for producing dependency graphs are shown in \cref{clustering:f:DependencyGraph}.
 
-Each binding in the source program becomes a node in the dependency graph. For each intermediate variable, we add a directed edge from the binding that produces a value to all bindings that consume it. Each edge is also marked as either \emph{fusible} or \emph{fusion preventing}. Fusion preventing edges are used when the producer must finish its execution before the consumer node can start. For example, a \Hs@fold@ operation must complete execution before it can produce the scalar value needed by its consumers. Conversely, the \Hs@map@ operation produces an output value for each value it consumes, so is marked as fusible. 
+\input{copy/03-body/clustering/figures/ILP-dependency-graph.tex}
+
+Each binding in the source program becomes a node in the dependency graph.
+For each intermediate variable, we add a directed edge from the binding that produces a value to all bindings that consume it.
+Each edge is also marked as either \emph{fusible} or \emph{fusion-preventing}.
+Fusion-preventing edges are used when the producer must finish its execution before the consumer node can start.
+For example, a \Hs@fold@ operation must complete execution before it can produce the scalar value needed by its consumers.
+Conversely, the \Hs@map@ operation produces an output value for each value it consumes, so is marked as fusible. 
 
 The \Hs@gather@ operation is a hybrid: it takes an indices array and an elements array, and for each element in the indices array returns the corresponding data element. This means that gather can be fused with the operation that produces its indices, but not the operation that produces its elements --- because those are accessed in a random-access manner. 
 
 % Each node may simply be the name of its output binding (or bindings, in the case of \Hs@external@); as we require names to only be bound once, this is assured to be unique. Creating edges between these nodes is simply when one binding references an earlier one. The only complication is designating edges as \emph{fusible} or \emph{fusion-preventing}.
 
-\begin{figure}
-\begin{tabbing}
-MMMMM       \= M  \= \kill
-$nodes$     \> @:@ \> $\program \to V$                          \\
-$edges$     \> @:@ \> $\program \to E$                          \\
-$edge$      \> @:@ \> $\{bind\} \times bind \to E$              \\
-$inedge$    \> @:@ \> $\{bind\} \times name \times name \to E$
-\\[1ex]
-$nodes(bs)$ \> $= \{(name(b), \iiter_{\Gamma,C}(b)) | b \in bs\}$
-\\[1ex]
-$edges(bs)$ \> $= \bigcup_{b \in bs}edge(bs, b)$
-\\[1ex]
-MM             \= M \= \kill
-$edge(bs, out = \Hs@fold@~f~in)$ \\
-    \> $=$    \> $\{inedge(bs,out,s) | s \in fv(f)\} \cup \{inedge(bs, out, in) \}$
-\\
-$edge(bs, out = \Hs@map@~f~in)$  \\
-    \> $=$    \> $\{inedge(bs,out,s) | s \in fv(f)\} \cup \{inedge(bs, out, in) \}$
-\\
-$edge(bs, out = \Hs@filter@~f~in)$ \\
-    \> $=$    \> $\{inedge(bs,out,s) | s \in fv(f)\} \cup \{inedge(bs, out, in) \}$
-\\
-$edge(bs, out = \Hs@gather@~data~indices)$ \\
-    \> $=$    \> $\{(out,data, \fusionpreventing) \} \cup \{inedge(bs, out, indices) \}$      
-\\
-$edge(bs, out = \Hs@cross@~a~b)$ \\
-    \> $=$    \> $\{inedge(bs, out, a) \}           \cup      \{(out, b, \fusionpreventing) \}$
-\\
-$edge(bs, outs = \Hs@external@~ins)$  \\
-    \> $=$    \> $\{(outs,i, \fusionpreventing) | i \in ins \}$
-\\[1ex]
-$inedge(bs,to,\from)$ \\
-    \> $|$ \> $(\from = \Hs@fold@~f~s) \in bs$     \\
-    \> $=$ \> $(to, \from, \fusionpreventing)$  \\
-    \> $|$ \> $(outs = \Hs@external@ \ldots) \in bs     \wedge \from \in outs$     \\
-    \> $=$ \> $(to, outs, \fusionpreventing)$  \\
-    \> $|$ \> $otherwise$                      \\
-    \> $=$ \> $(to, \from, \fusible)$
-\end{tabbing}
-
-\caption{Dependency Graphs from Programs}
-\label{clustering:f:DependencyGraph}
-\end{figure}
 
 
 % -----------------------------------------------------------------------------
 \subsection{ILP Variables}
-After generating the dependency graph, the next step is to produce a set of linear constraints from this graph. The variables involved in these constraints are split into three groups:
+After generating the dependency graph, the next step is to produce a set of linear constraints from this graph.
+The variables involved in these constraints are split into three groups, labelled $x$, $\pi$, and $c$.
+The first group of variables, $x$, is parameterised by a pair of input nodes:
+
 \begin{tabbing}
 M   \= MM \= MMMMMMM \= MM \= \kill
 $x$   \> @:@  \> $node \times node$ \> $\to$ \> $\mathbb{B}$
 \end{tabbing}
 
-For each pair of nodes with indices $i$ and $j$ we use a boolean variable $x_{i,j}$ which indicates whether those two nodes are fused. We use $x_{i,j} = 0$ when the nodes are fused and $x_{i,j} = 1$ when they are not. Using $0$ for the fused case means that the objective function can be a weighted function of the $x_{i,j}$ variables, and minimizing it tends to increase the number of nodes that are fused. The values of these variables are used to construct the final clustering, such that $\forall i,j.\ x_{i,j} = 0 \iff cluster(i) = cluster(j)$.
+For each pair of nodes with indices $i$ and $j$, we use a boolean variable $x_{i,j}$, which indicates whether those two nodes are fused.
+We use $x_{i,j} = 0$ when the nodes are fused and $x_{i,j} = 1$ when they are not.
+Using $0$ for the fused case means that the objective function can be a weighted function of the $x_{i,j}$ variables, and minimizing it tends to increase the number of nodes that are fused.
+The values of these variables are used to construct the final clustering, such that $\forall i,j.\ x_{i,j} = 0 \iff \mathit{cluster}(i) = \mathit{cluster}(j)$.
+
+The second group of variables, $\pi$, is parameterised by a single node:
+
 \begin{tabbing}
 M   \= MM \= MMMMMMM \= MM \= \kill
 $\pi$ \> @:@  \> $node$             \> $\to$ \> $\mathbb{R}$
 \end{tabbing}
 
-The second group of variables is used to ensure that the clustering is acyclic. This means that for each node in the graph, the dependencies of that node can be executed before the node itself. For each node $i$, we associate a real $\pi_i$ such that every node $j$ that depends on $i$ we have $\pi_j > \pi_i$. Our linear constraints will ensure that if two nodes are fused into the same cluster then their $\pi$ values will be identical --- though nodes in different clusters can also have the same $\pi$ value. Here is an example of a cyclic clustering:
+This group of variables is used to ensure that the clustering is acyclic.
+An acyclic clustering is necessary to be able to execute the resulting clustering: we need to ensure that for each node in the graph, the dependencies of that node can be executed before the node itself.
+For each node $i$, we associate a real $\pi_i$ such that every node $j$ that depends on $i$ we have $\pi_j > \pi_i$.
+Our linear constraints will ensure that if two nodes are fused into the same cluster then their $\pi$ values will be identical --- though nodes in different clusters can also have the same $\pi$ value.
+Here is an example of a cyclic clustering, with the cluster (C1) or (C2) specified on the right:
 \begin{haskell}
-  cycle xs  = let ys  = map (+1) xs     (C1)
-                  sum = fold ys         (C2)
-                  zs  = map (+sum) ys   (C1)
+  cycle xs  = let ys  = map (+1) xs     -- (C1)
+                  sum = fold ys         -- (C2)
+                  zs  = map (+sum) ys   -- (C1)
               in  zs
 \end{haskell}
 
-There is no fusion-preventing edge directly between the \Hs@xs@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@. If the \Hs@xs@ and \Hs@zs@ bindings were in the same cluster \Hs@C1@ and \Hs@sum@ was in cluster \Hs@C2@, there would be a dependency cycle between \Hs@C1@ and \Hs@C2@, and neither could be executed before the other.
+There is no fusion-preventing edge directly between the \Hs@xs@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@.
+If the \Hs@xs@ and \Hs@zs@ bindings were in the same cluster (C1) and \Hs@sum@ was in cluster (C2), there would be a dependency cycle between (C1) and (C2), and neither could be executed before the other.
+
+The third, and final, group of variables is parameterised by a single node:
 \begin{tabbing}
 M   \= MM \= MMMMMMM \= MM \= \kill
 $c$   \> @:@  \> $node$             \> $\to$ \> $\mathbb{B}$
 \end{tabbing}
 
-The final group of variables is used to help define the cost model encoded by the objective function. Each node is assigned a variable $c_i$ that indicates whether the array the associated binding produces is \emph{fully contracted}. When an array is fully contracted it means that all consumers of that array are fused into the same cluster, so we have $c_i = 0 \iff \forall (i',j) \in E.\ i = i' \implies x_{i,j} = 0$. In the final program, each successive element of a fully contracted array can be stored in a scalar register, rather than requiring an array register or memory storage. 
+This final group of variables is used to help define the cost model encoded by the objective function.
+As in \citet{darte2002contraction}, each node is assigned a variable $c_i$ that indicates whether the array the associated binding produces is \emph{fully contracted}.
+When an array is fully contracted, it means that all consumers of that array are fused into the same cluster, so we have $c_i = 0 \iff (\forall (i',j) \in E.\ i = i' \implies x_{i,j} = 0)$.
+In the final program, each successive element of a fully contracted array can be stored in a scalar register, rather than requiring an array register or memory storage. 
 
 
 % -----------------------------------------------------------------------------

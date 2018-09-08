@@ -3,7 +3,7 @@
 Before performing clustering, we infer the relative sizes of each array in the program.
 We now present a simple constraint-based inference algorithm.
 Size inference has been previously described in the context of array fusion by Chatterjee~\cite{chatterjee1991size}.
-In constrast to our algorithm, \cite{chatterjee1991size} does not support size changing functions such as filter.
+In constrast to our algorithm, \cite{chatterjee1991size} does not support size-changing functions such as filter.
 If size inference fails, the programs may still be compiled, but fusion is not performed.
 
 Although our constraint based formulation of size inference is reminiscent of type inference for HM(X)~\cite{odersky1999type}, there are important differences.
@@ -47,7 +47,7 @@ MMMMMMMMM \= MM  \= MM \= MMMMMM \= \kill
 
 
 % -----------------------------------------------------------------------------
-\subsection{Size Types, Constraints and Schemes}
+\subsection{Size types, constraints and schemes}
 \label{clustering:s:SizeTypes}
 \Cref{clustering:f:constraints} shows the grammar for size types, constraints and schemes. A size scheme is like a type constraint from Hindley-Milner type systems, except that it only mentions the size of each input array, and ignores the element types.
 
@@ -144,25 +144,34 @@ normalize2 xs
 
 In this example, the input array \Hs/xs/ and its corresponding size type $k_{xs}$ are passed as part of the input environment to the constraint generation judgment.
 For each binding, we generate a constraint and add any required array and size bindings to the environment.
-The \Hs/sum1/ binding does not bind any array variables and works for any input size, so we leave the environment as-is and produce a $\true$ constraint.
-For the \Hs/gts/ binding, the size of the output array is unknown.
+The \Hs/sum1/ binding, a \Hs/fold/, does not bind any array variables and works for any input size, so we leave the environment as-is and produce a $\true$ constraint.
+For the \Hs/gts/ binding, a \Hs/filter/, the size of the output array is unknown.
 We record the size of the output array by introducing a new size-type variable $k_{gts}$, as well as an existential variable $k_1$; we also generate the constraint ($k_{gts} = k_1$).
-For the \Hs/ys1/ binding, the size of the output array is the same as the input array.
+For the \Hs/ys1/ binding, a \Hs/map/, the size of the output array is the same as the input array.
 We introduce a new size variable $k_{ys1}$ to record the size of the output array, and introduce a new unification variable $k_2$.
-In the constraints, we require all three variables to be equal, ensuring that array size variables occur on the left-hand side and unification variables on the right.
+In the constraints, we require both variables to be equal to the input size variable $k_{xs}$, ensuring that array size variables occur on the left-hand side and unification variables on the right.
 Constraint generation for the remaining bindings proceeds similarly.
 
 
 % -------------------------------------------------------------------
 \subsection{Constraint solving and generalization}
-The top-level judgment form ($\SizeF{\program}{\sigma}$) assigns a size scheme to a program by extracting size constraints and then solving them.
-The top-level rule in \cref{clustering:f:ConstraintSolving} assigns a size scheme to a program by first extracting size constraints, before solving them and generalizing the result.
-In the rule, the solving process is indicated by $\textrm{SOLVE}$, and takes an environment and a constraint set, and produces a solved environment and constraint set.
-As the constraint solving process is both standard and straightforward, we only describe it informally.
+\Cref{clustering:f:ConstraintSolving} shows the rule for assigning a size scheme to a program.
+The top-level judgment form ($\SizeF{\program}{\sigma}$) assigns size scheme $\sigma$ to $\program$.
 
 \input{copy/03-body/clustering/figures/Size-constraint-solving.tex}
 
-Recall from the previous section that in our generated constraints all the size variables named after program variables are on the left of atomic equality constraints, while all the unification and existential variables are on the right.
+Rule (SProgram) assigns a size scheme to a program by first extracting size constraints, before solving them and generalizing the result.
+In the rule, $\Gamma_0$ is used as the input environment to constraint generation, and is constructed by generating a fresh size variable ($k_i$) for each input array ($xs_i$).
+The environment and constraints produced by constraint generation are named $\Gamma_1$ and $C_1$; these constraints are then solved using the $\textrm{SOLVE}$ function, which we describe soon.
+The constraints, after being solved, are stored in $C_2$, and the environment in $\Gamma_2$.
+We use the solved constraints to find the size types of the input arrays ($\ov{s}$), and the size types of the output arrays ($\ov{t}$).
+We perform generalization by adding universal quantifiers for the unification variables mentioned by the types of input arrays ($\ov{k_a}$), and adding existential quantifiers for the existential variables mentioned by the types of output arrays ($\ov{k_e}$).
+Finally, we require that the types of input arrays do not mention any existential variables; an example of this restriction is shown in \cref{clustering:s:RigidSizes}.
+
+In the rule, the solving process is indicated by $\textrm{SOLVE}$, and takes an environment and a constraint set, and produces a solved environment and constraint set.
+As the constraint solving process is both standard and straightforward, we only describe it informally.
+
+During constraint generation in the previous section, we were careful to ensure that all the size variables named after program variables are on the left of atomic equality constraints, while all the unification and existential variables are on the right.
 To solve the constraints, we keep finding pairs of atomic equality constraints where the same variable appears on the left, unify the right of both of these constraints, and apply the resulting substitution to both the environment and original constraints.
 When there are no more pairs of constraints with the same variable on the left, the constraints are in solved form and we are finished.
 
@@ -179,15 +188,15 @@ $$
 \vdash & \true 
         ~\wedge~  k_{gts} = k_1 ~\wedge~ \true
 \\     &~~~~~~~\; 
-          \wedge~  k_{xs}  ~= k_2
+          \wedge~  \colorbox{green!10}{$k_{xs}  ~= k_2$}
           \wedge~  k_{ys1}  = k_2 
 \\     &~~~~~~~\; 
-        ~ \wedge~  k_{xs}   = k_3
+        ~ \wedge~  \colorbox{green!10}{$k_{xs}   = k_3$}
         ~ \wedge~  k_{ys2}  = k_3
 \end{array}
 $$
 
-Note that $k_{xs}$ is mentioned twice on the left of an atomic equality constraint, so we can substitute $k_2$ for $k_3$. Eliminating the duplicates, as well as the trivially $\true$ terms then yields:
+In the highlighted constraints, $k_{xs}$ is mentioned twice on the left of an atomic equality constraint, so we can substitute $k_2$ for $k_3$. Eliminating the duplicates, as well as the trivially $\true$ terms then yields:
 $$
 \begin{array}{ll}
    & @xs @ : k_{xs},~
@@ -213,6 +222,7 @@ Rule~(SProgram) also characterises the programs we accept: a program is \emph{va
 
 % -----------------------------------------------------------------------------
 \subsection{Rigid sizes}
+\label{clustering:s:RigidSizes}
 When the environment of our size constraints contains rigid variables (indicated by $\exists k$), we introduce existential quantifiers instead of universal quantifiers into the size scheme.
 Consider the \Hs@filterLeft@ program from \cref{clustering:s:SizeTypes}:
 \begin{haskell}
@@ -235,11 +245,11 @@ $$
 
 As variable $k_1$ is marked as rigid, we introduce an existential quantifier for it, producing the size scheme stated earlier:
 
-\begin{haskell}
-filterLeft %\(:\sb{s}\,\forall k\sb{2}.\ \exists k\sb{1}.\ (xs\,:\,k\sb{2})\;\to\;(ys\sb{1}\,:\,k\sb{2},\,ys\sb{2}\,:\,k\sb{1})\)%
-\end{haskell}
+$$
+@filterLeft@ :\sb{s}\,\forall k\sb{2}.\ \exists k\sb{1}.\ (xs\,:\,k\sb{2})\;\to\;(ys\sb{1}\,:\,k\sb{2},\,ys\sb{2}\,:\,k\sb{1})
+$$
 
-Note that, although rule~(SProgram) from \cref{clustering:f:ConstraintSolving} performs a \emph{generalisation} process, there is no corresponding instantiation rule. The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another. To say this another way, all subgraphs are fully inlined. Recall from \cref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program. We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
+Note that, although rule~(SProgram) from \cref{clustering:f:ConstraintSolving} performs a \emph{generalization} process, there is no corresponding instantiation rule. The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another. To say this another way, all subgraphs are fully inlined. Recall from \cref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program. We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
 
 When producing size schemes, we do not permit the arguments of an operator graph to have existentially quantified sizes.
 This restriction is necessary to reject programs that we cannot statically guarantee will be well-sized.
@@ -279,7 +289,7 @@ $$
 
 In this case, rule~(SProgram) does not apply, because the parameter variable $xs$ has size $k_1$, but $k_1$ is marked as rigid in the environment (with $\exists k_1$). 
 
-As a final example, the following program is ill-sized, because the two filter operators are not guaranteed to produce the same number of elements:
+As a final example, the following program is ill-sized because the two filter operators are not guaranteed to produce the same number of elements:
 \begin{haskell}
 bad2 xs
  = let flt1 = filter p1 xs
@@ -289,31 +299,34 @@ bad2 xs
 \end{haskell}
 
 The initial size constraints for this program are:
+\newcommand\flt{\textit{flt}}
 $$
 \begin{array}{ll}
-       & xs : k_{xs},~ flt1 : k_{flt1},~ \exists k_1,~ flt2 : k_{flt2},~ \exists k_2,~ ys : k_{ys},~ k_3
+       & xs : k_{xs},~ \flt1 : k_{\flt1},~ \exists k_1,~ \flt2 : k_{\flt2},~ \exists k_2,~ ys : k_{ys},~ k_3
 \\
-\vdash &          k_{flt1}   = k_1
-        ~\wedge~  k_{flt2}   = k_2
-        ~\wedge~  k_{flt1}   = k_3
-        ~\wedge~  k_{flt2}   = k_3
+\vdash &          k_{\flt1}   = k_1
+        ~\wedge~  k_{\flt2}   = k_2
+        ~\wedge~  k_{\flt1}   = k_3
+        ~\wedge~  k_{\flt2}   = k_3
         ~\wedge~  k_{ys}   = k_3
 \end{array}
 $$
 
-To solve these, we note that $k_{flt1}$ is used twice on the left of an atomic equality constraint, so we substitute $k_1$ for $k_3$:
+To solve these, we note that $k_{\flt1}$ is used twice on the left of an atomic equality constraint, so we substitute $k_1$ for $k_3$:
 $$
 \begin{array}{ll}
-       & xs : k_{xs},~ flt1 : k_{flt1},~ \exists k_1,~ flt2 : k_{flt2},~ \exists k_2,~ ys : k_{ys},~ k_1
+       & xs : k_{xs},~ \flt1 : k_{\flt1},~ \exists k_1,~ \flt2 : k_{\flt2},~ \exists k_2,~ ys : k_{ys},~ k_1
 \\
-\vdash &          k_{flt1}   = k_1
-        ~\wedge~  k_{flt2}   = k_2
-        ~\wedge~  k_{flt2}   = k_1
+\vdash &          k_{\flt1}   = k_1
+        ~\wedge~  k_{\flt2}   = k_2
+        ~\wedge~  k_{\flt2}   = k_1
         ~\wedge~  k_{ys}   = k_1
 \end{array}
 $$
 
-At this stage we are stuck, because the constraints are not yet in solved form, and we cannot simplify them further. Both $k_1$ and $k_2$ are marked as rigid, so we cannot substitute one for the other and produce a single atomic constraint for $k_{flt2}$.
+At this stage we are stuck, because the constraints are not yet in solved form, and we cannot simplify them further.
+Both $k_1$ and $k_2$ are marked as rigid, so we cannot substitute one for the other and produce a single atomic constraint for $k_{\flt2}$.
+The $\textrm{SOLVE}$ function fails to return a solution, and rule (SProgram) cannot apply.
 
 
 % \newcommand{\eqclasses}[1]{
@@ -343,12 +356,19 @@ At this stage we are stuck, because the constraints are not yet in solved form, 
 
 
 % -----------------------------------------------------------------------------
-\subsection{Iteration Size}
-After inferring the size of each array variable, each operator is assigned an \emph{iteration size}, which is the number of iterations needed in the loop which evaluates that operator. For \Hs@filter@ and other size changing operators, the iteration and result sizes are in general different. For such an operator, we say that the result size is a \emph{descendant} of the iteration size. Conversely, the iteration size is a \emph{parent} of the result size. 
+\subsection{Iteration size}
+After inferring the size of each array variable, each operator is assigned an \emph{iteration size}, which is the number of iterations needed in the loop which evaluates that operator.
+For \Hs@filter@ and other size-changing operators, the iteration and result sizes are in general different.
+For such an operator, we say that the result size is a \emph{descendant} of the iteration size.
+Conversely, the iteration size is a \emph{parent} of the result size. 
 
-This descendant--parent size relation is transitive, so if we filter an array, then filter it again, the size of the result is a descendant of the iteration size of the initial filter. This relation arises naturally from Data Flow Fusion~\cite{lippmeier2013data}, as such an operation would be compiled into a single loop --- with an iteration size identical to the size of the input array, and containing two nested if-expressions to perform the two layers of filtering.
+This descendant--parent size relation is transitive, so if we filter an array, then filter the resulting array, the size of the result is a descendant of the iteration size of the initial filter.
+This relation arises naturally from the fact that we compile individual clusters into a loop using process fusion (\cref{chapter:process:processes}).
+With process fusion, such an operation would be compiled into a single loop --- with an iteration size identical to the size of the input array, and containing two nested if-expressions to perform the two layers of filtering.
 
-Iteration sizes are used to decide which operators can be fused with each other. As in prior work, operators with the same iteration size can be fused. However, in our system we also allow operators of different iteration sizes to be fused, provided those sizes are descendants of the same parent size.
+Iteration sizes are used to decide which operators can be fused with each other.
+As in prior work, operators with the same iteration size can be fused.
+However, in our system we also allow operators of different iteration sizes to be fused, provided those sizes are descendants of the same parent size.
 
 We use $T$ to range over iteration sizes, and write $\bot$ for the case where the iteration size is unknown. The $\bot$ size is needed to handle the \Hs@external@ operator, as we cannot statically infer its true iteration size, and it cannot be fused with any other operator.
 
@@ -359,9 +379,12 @@ MMMMMMMM \= MM       \= MM \= MMMM \= \kill
  \>             \> $~|$   \> $\bot$     \> (unknown size) \\
 \end{tabbing}
 
-Once the size constraints have been solved, we can use the following function to compute the iteration size of each binding. In the definition, we use the syntax $\Gamma(xs)$ to find the $xs : k$ element in the environment $\Gamma$ and return the associated size $k$. Similarly, we use the syntax $C(k)$ to find the corresponding $k = \tau$ constraint in $C$ and return the associated size type $\tau$.
+Once the size constraints have been solved, we can use the $\iiter$ function in \cref{fig:clustering:iter} to compute the iteration size of each binding.
+In the definition, we use the syntax $\Gamma(xs)$ to find the ($xs : k$) element in the environment $\Gamma$ and return the associated size $k$.
+Similarly, we use the syntax $C(k)$ to find the corresponding ($k = \tau$) constraint in $C$ and return the associated size type $\tau$.
 
 
+\begin{figure}
 \begin{tabbing}
 MMMMM \= M \= MMMMMMMMMM \= MM \= \kill
 $\iiter_{\Gamma,C}$  
@@ -388,8 +411,10 @@ $\iiter_{\Gamma,C}$
 \\
         \> $|$  \> $(ys = \Hs@external@~\overline{xs})$  
                 \> $=$ \> $\bot$ 
-\\
 \end{tabbing}
+\caption{Computing the iteration size of a binding}
+\label{fig:clustering:iter}
+\end{figure}
 
 
 % Once the constraints are solved, known to be valid, and sorted into equivalence classes, each combinator is assigned a size. Note that for a filter, the size of the output array $k_o$ is some existential that is less than or equal to $k_n$, but the actual loop size of the \emph{combinator} is equal to $k_n$. This is because, in order to produce the filtered output, all elements of the input $n$ must be considered.
@@ -406,20 +431,19 @@ We define the concept of \emph{transducers} as combinators having a different ou
 As with any other combinator, a transducer may fuse with other nodes of the same iteration size, but transducers may also fuse with nodes having iteration size the same as the transducer's output size.
 For our set of combinators, the only transducer is \Hs@filter@.
 
-Looking back at the \Hs@normalize2@ example, the iteration sizes of the combinators of \Hs@gts@ and \Hs@sum1@ are both $k_{xs}$.
+Looking back at the \Hs@normalize2@ example, the iteration sizes of the combinators \Hs@gts@ (bound to a \Hs/filter/ over input \Hs/xs/) and \Hs@sum1@ (a \Hs/fold/ over \Hs/xs/) are both $k_{xs}$.
 %The iteration size of \Hs@sum2@ is $k_{gts}$, and \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
 %\gabi{gts is no combinator, so can't be a transducer
-The iteration size of \Hs@sum2@ is $k_{gts}$, and the filter combinator which produces \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
-Even though $k_{gts}$ is not equal to $k_{xs}$, the three nodes \Hs@gts@, \Hs@sum1@ and \Hs@sum2@ can all be fused together.
+The iteration size of combinator \Hs@sum2@ (a \Hs/fold/ over \Hs/gts/) is $k_{gts}$, and the filter combinator which produces \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
+Even though $k_{gts}$ is distinct from $k_{xs}$, the three nodes \Hs@gts@, \Hs@sum1@ and \Hs@sum2@ can all be fused together.
 % The two nodes \Hs@sum2@ and \Hs@gts@ can be fused together, since the output size of \Hs@gts@ is the iteration size of \Hs@sum2@.
 % Similarly, \Hs@sum1@ and \Hs@gts@ can be fused together, as they have the same iteration size.
 
-% \ben{Do other systems use the concept of transducers?} \TODO{Explain that a transducer of filter is the filter's parent. so $trans(trans(n)) \not= n$}
-% No,
-We now define a function $trans$, to find the parent transducer of a combinator application. Since each name is bound to at most one combinator, we abuse terminology here slightly and write \emph{combinator $n$} when refering to the combinator occuring in the binding of the name $n$.
+\Cref{fig:clustering:trans} defines a function $trans$, to find the parent transducer of a combinator application.
+Since each name is bound to at most one combinator, we abuse terminology here slightly and write \emph{combinator $n$} when refering to the combinator occuring in the binding of the name $n$.
 The parent transducer $trans(bs, n)$ of a combinator $n$ has the same output size as $n$'s iteration size, but the two have different iteration sizes.
 
-
+\begin{figure}
 \begin{tabbing}
 MMMM \= MM \= MMMMMMMMM \= MMMM \= MM \= \kill
 $trans$  \>$:$\> $binds \rightarrow name \rightarrow \{name\}$ \\
@@ -436,30 +460,22 @@ $trans'(bs,o)$    \\
             \> $|$ \> $o = \Hs@cross@~a~b$     \> $\in bs$ \> $=$ \> $\emptyset$ \\
             \> $|$ \> $o = \Hs@external@~ins$  \> $\in bs$ \> $=$ \> $\emptyset$ \\
 \end{tabbing}
+\caption{Finding the parent transducers of a combinator}
+\label{fig:clustering:trans}
+\end{figure}
 
-To determine whether two combinators of different iteration sizes may be fused together, we first find parent or ancestor transducers of the same size, if they exist:
-
-\begin{tabbing}
-MMMM \= M \= M \= M \= \kill
-$parents$ \> $:$ \> $binds \to name \to name \to \{name \times name\}$ \\
-$parents(bs, a, b)$ \\
-        \> $|$ \> $\iiter_{\Gamma,C}(bs(a)) == \iiter_{\Gamma,C}(bs(b))$ \\
-        \>     \>                      \> $=$ \> $\{(a, b)\}$ \\
-        \> $|$ \> otherwise            \\
-        \>     \>                      \> $=$    \> $\{ parents(bs, a', b) ~|~ a' \in trans(bs, a) \} $      \\
-        \>     \>                      \> $\cup$ \> $\{ parents(bs, a, b') ~|~ b' \in trans(bs, b) \} $  \\
-\end{tabbing}
-
-Two combinators $a$ and $b$ of different size may be fused together only if they have parents $(c, d) \in parents(a,b)$, and the combinators and their parents are also fused together.
-That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
-In the previous example, \Hs@sum1@ and \Hs@sum2@ have different iteration size, and their parents are $parents(\Hs@sum1@, \Hs@sum2@) = \{(\Hs@sum1@, \Hs@gts@)\})$.
-In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, \Hs@sum1@ and \Hs@gts@ must be fused, \Hs@sum1@ and \Hs@sum1@ must be fused, and \Hs@gts@ and \Hs@sum2@ must be fused. Now we can express the restriction on programs we view as valid for our transformation more formally:
+With the $trans$ function, we can express the restriction on programs we view as valid for our transformation more formally:
 
 \textbf{Lemma: sole transducers}.
 If a program $p$ is \emph{valid}, then its bindings will have at most one transducer:
 \[
 \forall p, \sigma, n.\ p :_s \sigma \implies |trans(binds(p), n)| \le 1
 \]
+
+Informally, only the $\Hs/map/_n$ clause in $trans$ can introduce multiple elements in the result.
+Since the constraint generation for $\Hs/map/_n$ requires all inputs to have the same size, the inputs should also have the same transducer.
+If the inputs had different transducers, then their size would be generated by different filters, and each would have its own, separate existential variable as a size type.
+
 % \textbf{Proof:} by induction on $bs$. If $n = \Hs@map@_n~f~ns$,
 % then $trans(bs,n) = \bigcup_{x \in ns} trans(bs,x)$.
 % As \Hs@map@ requires its arguments to have the same size, and \Hs@filter@ introduces a fresh size for its output,
@@ -473,14 +489,78 @@ If a program $p$ is \emph{valid}, then its bindings will have at most one transd
 % \forall bs, n, m.\ trans(bs, n) = \{m\} \implies \tau(n) \not= \tau(m)
 % \]
  
-\textbf{Lemma: sole parents}.
-% I replaced 'one set of parents' with 'one pair of parents' here, because that's what the lemma says
-For some program $p$ with valid constraints, each pair of names $a$ and $b$ will have at most one pair of parents $parents(a,b)$.
-\[
-\forall p, \sigma, a, b.\ p :_s \sigma \implies |parents(binds(p), a, b)| \le 1
-\]
-% \textbf{Proof:} since each binding only has at most one transducer, and transducers' iteration sizes are not the same, there will be at most one pair of transducers up the chain that have equal types.
+% \textbf{Lemma: sole parents}.
+% For some program $p$ with valid constraints, each pair of names $a$ and $b$ will have at most one pair of parents $parents(a,b)$.
+% \[
+% \forall p, \sigma, a, b.\ p :_s \sigma \implies |parents(binds(p), a, b)| \le 1
+% \]
+% 
+% These two lemmas are used in the integer linear programming formulation, when generating the constraints.
+% When fusing two nodes of different iteration size, at most one pair of parents will need to be checked.
 
-These two lemmas are used in the integer linear programming formulation, when generating the constraints.
-When fusing two nodes of different iteration size, at most one pair of parents will need to be checked.
 
+\begin{figure}
+% \begin{tabbing}
+% MMMM \= M \= M \= M \= \kill
+% $parents$ \> $:$ \> $binds \to name \to name \to \{name \times name\}$ \\
+% $parents(bs, a, b)$ \\
+%         \> $|$ \> $\iiter_{\Gamma,C}(bs(a)) == \iiter_{\Gamma,C}(bs(b))$ \\
+%         \>     \>                      \> $=$ \> $\{(a, b)\}$ \\
+%         \> $|$ \> otherwise            \\
+%         \>     \>                      \> $=$    \> $\{ parents(bs, a', b) ~|~ a' \in trans(bs, a) \} $      \\
+%         \>     \>                      \> $\cup$ \> $\{ parents(bs, a, b') ~|~ b' \in trans(bs, b) \} $  \\
+% \end{tabbing}
+% changed to return optional single closest parents:
+%
+\begin{tabbing}
+MMMM \= M \= M \= M \= MMMM \= M \= \kill
+$parents$ \> $:$ \> $binds \to name \to name \to (name \times name)_\bot$ \\
+$parents(bs, a, b)$ \\
+        \> $|$ \> $(p_a,p_b,d) \in parents'(bs,a,b)$ \\
+        \>     \>                      \> $=$ \> $\{(a, b)\}$ \\
+        \> $|$ \> otherwise \\
+        \>     \>                      \> $=$    \> $\bot$ \\
+\\
+$parents'$ \> $:$ \> $binds \to name \to name \to (name \times name \times \mathbb{N})_\bot$ \\
+$parents'(bs, a, b)$ \\
+        \> $|$ \> $\iiter_{\Gamma,C}(bs(a)) == \iiter_{\Gamma,C}(bs(b))$ \\
+        \>     \>                      \> $=$ \> $\{(a, b, 0)\}$ \\
+        \> $|$ \> $a' \in trans(bs,a),~ p_a \in parents'(bs,a',b)$ \\
+        \> $,$ \> $b' \in trans(bs,b),~ p_b \in parents'(bs,a,b')$ \\
+        \>     \>                      \> $=$ \> $increment(closest(p_a, p_b))$ \\
+        \> $|$ \> $a' \in trans(bs,a),~ p_a \in parents'(bs,a',b)$ \\
+        \>     \>                      \> $=$ \> $increment(p_a)$ \\
+        \> $|$ \> $b' \in trans(bs,b),~ p_b \in parents'(bs,a,b')$ \\
+        \>     \>                      \> $=$ \> $increment(p_b)$ \\
+        \> $|$ \> otherwise            \\
+        \>     \>                      \> $=$    \> $\bot$
+\\
+\\
+$closest$ \> $:$ \> $(name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N})$ \\
+$closest((l_a,l_b,l_d), (r_a,r_b,r_d))$ \\
+        \> $|$ \> $l_d \le r_d$ \> \> \> $=$ \> $(l_a,l_b,l_d)$ \\
+        \> $|$ \> otherwise     \> \> \> $=$ \> $(r_a,r_b,r_d)$ \\
+\\
+$increment ~ :$ \> \> $(name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N})$ \\
+$increment((a,b,d)) = (a,b,d+1)$ \\
+\end{tabbing}
+
+\caption{Finding the closest ancestor transducers with same iteration size}
+\label{fig:clustering:parents}
+\end{figure}
+
+To determine whether two combinators of different iteration sizes may be fused together, \cref{fig:clustering:parents} defines the $parents$ function, which finds the closest pair of parent or ancestor transducers, where both ancestors are the same size.
+We use the syntax $(name \times name)_\bot$ to denote an optional pair of names.
+Two combinators $a$ and $b$ of different size may be fused together only if they have parents $(c, d) \in parents(a,b)$, and the combinators and their parents are also fused together.
+That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
+Although we use the terms ``ancestors'' and ``parents'', if the two inputs have the same iteration size, the two parents will be the inputs themselves and the above fusion requirements for different size inputs can be simplified away.
+
+There may be, in general, multiple pairs of ancestor transducers with compatible iteration sizes.
+To fuse a combinator with its ancestor, we must also fuse the combinator with all the nodes in the path between the combinator and its ancestor.
+In the definition of $parents$, we find the closest ancestors because it allows the most fusion; finding the furthest ancestors would be more restrictive, as it would also require fusing the inputs with any other ancestor transducers between the input combinators and the furthest ancestors.
+% In the original publication of this work \citep{robinson2014fusing}, we only allowed fusion when there was a single pair of ancestors.
+
+In the previous \Hs/normalize2/ example, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
+The two folds have different iteration sizes, and their parents are $parents(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
+The parents \Hs/sum1/ and \Hs/gts/ both consume the input \Hs/xs/ and have the same iteration size.
+In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, we require that: \Hs@sum1@ and \Hs@gts@ are fused together; \Hs@sum1@ and \Hs@sum1@ are fused together, which is trivial as fusion is reflexive;  and \Hs@gts@ and \Hs@sum2@ are fused together.

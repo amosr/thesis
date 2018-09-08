@@ -1,0 +1,61 @@
+%!TEX root = ../Main.tex
+
+\newcommand\ins{\textit{ins}}
+\newcommand\inty{\textit{inty}}
+\begin{figure*}
+\footnotesize
+$$
+\fbox{$
+ \SizeF {\program}{\sigma}
+$}
+$$
+$$
+\ruleI  {
+          \SizeL{\Gamma_0}
+                {@let@~ bs~ @in@~ \{ ys_j \}^{j \gets 1 .. m}}
+                {\Gamma_1}{C_1}
+\qquad
+  (\Gamma_2,C_2) = \textrm{SOLVE}(\Gamma_1,~ C_1)
+  \qquad
+          \forall k \in \textrm{fv}(\ov{s}).~
+          (\exists k) \notin \Gamma_2
+        }
+        {
+        \begin{array}{c}
+        \SizeF{f~ \{xs\}^{i \gets 1..n}
+                        = @let@~ bs~ @in@~ \{ys\}^{j \gets 1..m}
+                }
+                { \forall \overline{k_a}.~ 
+                  \exists \overline{k_e}.~
+                        (\{ xs_i : s_i \}^{i \gets 1..n}) \to
+                        (\{ ys_j : t_j \}^{j \gets 1..m})
+                }
+\\[1em]
+\begin{array}{lll}
+\mbox{where }
+  & \Gamma_0 & = \{k_i,~ xs_i : k_i \}^{ i \gets 1 .. n }
+\\
+\\
+  & \ov{s} & = \{ s_i ~|~ i \in 1..n  ~\wedge~ (k_i = s_i) \in C_2 \}
+\\
+ & \ov{k'} & = \{ k'_j ~|~ j \in 1..m ~\wedge~ (ys_j : k_j') \in \Gamma_2 \}
+\\
+  & \ov{t} & = \{ t_j ~|~ j \in 1..m  ~\wedge~ (k_j' = t_j ) \in C_2 \}
+\\
+\\
+ & \ov{k_a} & = \{ k ~|~ k         \in \Gamma_2 ~\wedge~ k \in \textrm{fv}(\ov{s}) \}  
+%                        ~\cap~ (\bigcup_{i \gets 1 .. n}\textrm{fv}(s_i))
+\\
+ & \ov{k_e} & = \{ k ~|~ \exists k \in \Gamma_2 ~\wedge~ k \in \textrm{fv}(\ov{t}) \}
+%                        ~\cap~ (\bigcup_{j \gets 1 .. m}\textrm{fv}(t_j))
+\end{array}
+\end{array}
+        }
+\quad
+\textrm{(SProgram)}
+$$
+
+\caption{Constraint solving for size inference}
+\label{clustering:f:ConstraintSolving}
+\end{figure*}
+

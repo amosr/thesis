@@ -4,7 +4,7 @@
 \begin{center}
 \includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex2-normalizeInc.pdf}
 \end{center}
-\caption{Possible clusterings for \texttt{normalizeInc}}
+\caption{Possible clusterings for \Hs/normalizeInc/}
 \label{clustering:f:normalizeInc}
 \end{figure}
 
@@ -12,23 +12,31 @@
 % -----------------------------------------------------------------------------
 \section{Integer Linear Programming}
 \label{clustering:s:ILP}
-It is usually possible to cluster a program graph in multiple ways. For example, consider the following simple function:
+It is usually possible to cluster a program graph in multiple ways.
+For example, consider the following simple function:
 \begin{haskell}
- normalizeInc :: Array Int -> Array Int
- normalizeInc xs
-  = let incs = map  (+1)     us
-        sum1 = fold (+) 0    us
-        ys   = map  (/ sum1) incs
-    in  ys
+normalizeInc :: Array Int -> Array Int
+normalizeInc xs
+ = let incs = map  (+1)     us
+       sum1 = fold (+) 0    us
+       ys   = map  (/ sum1) incs
+   in  ys
 \end{haskell}
 
-Two possible clusterings are shown in \cref{clustering:f:normalizeInc}. One option is to compute \Hs@sum1@ first and fuse the computation of \Hs@incs@ and \Hs@ys@. Another option is to fuse the computation of \Hs@incs@ and \Hs@sum1@ into a single loop, then compute \Hs@ys@ separately. A third option (not shown) is to compute all results separately, and not perform any fusion. 
+Two possible clusterings are shown in \cref{clustering:f:normalizeInc}.
+One option is to compute \Hs@sum1@ first and fuse the computation of \Hs@incs@ and \Hs@ys@.
+Another option is to fuse the computation of \Hs@incs@ and \Hs@sum1@ into a single loop, then compute \Hs@ys@ separately.
+A third option (not shown) is to compute all results separately, and not perform any fusion. 
 
-Which option is better? On current hardware we generally expect the cost of memory access to dominate runtime. The first clustering in \cref{clustering:f:normalizeInc} requires two reads from array \Hs@xs@ and one write to array \Hs@ys@. The second requires a single fused read from \Hs@xs@, one write to \Hs@incs@, a read back from \Hs@incs@ and a final write to \Hs@ys@. From the size constraints of the program we know that all intermediate arrays have the same size, so we expect the first clustering will peform better as it only needs three array accesses instead of four. 
+Which option is better?
+On current hardware, we generally expect the cost of memory access to dominate runtime.
+The first clustering in \cref{clustering:f:normalizeInc} requires two reads from array \Hs@xs@ and one write to array \Hs@ys@.
+The second clustering requires a single fused read from \Hs@xs@, one write to \Hs@incs@, a read back from \Hs@incs@ and a final write to \Hs@ys@.
+From the size constraints of the program, we know that all intermediate arrays have the same size, so we expect the first clustering will peform better as it only needs three array accesses instead of four. 
 
 For small programs such as \Hs@normalizeInc@ it is possible to naively enumerate all possible clusterings, select just those that are \emph{valid} with respect to fusion preventing edges, and choose the one that maximises a cost metric such as the number of array accesses needed. However, as the program size increases the number of possible clusterings becomes too large to naively enumerate. For example, Pouchet et al~\cite{pouchet2010combined} present a fusion system using the polyhedral model~\cite{pouchet2011polyhedral} and report that some simple numeric programs have over 40,000 possible clusterings, with one particular example having $10^{12}$. 
 
-To deal with the combinatorial explosion in the number of potential clusterings, we instead use an Integer Linear Programming (ILP) formulation. ILP problems are defined as a set of variables, an objective linear function and a set of linear constraints. The integer linear solver finds an assignment to the variables that minimises the objective function, while satisfying all constraints. For the clustering problem we express our constraints regarding fusion preventing edges as linear constraints on the ILP variables, then use the objective function to encode our cost metric. This general approach was first fully described by Megiddo and Sarkar~\cite{megiddo1998optimal}, and our main contribution is to extend it to work with size changing operators such as \Hs@filter@. 
+To deal with the combinatorial explosion in the number of potential clusterings, we instead use an Integer Linear Programming (ILP) formulation. ILP problems are defined as a set of variables, an objective linear function and a set of linear constraints. The integer linear solver finds an assignment to the variables that minimises the objective function, while satisfying all constraints. For the clustering problem we express our constraints regarding fusion preventing edges as linear constraints on the ILP variables, then use the objective function to encode our cost metric. This general approach was first fully described by Megiddo and Sarkar~\cite{megiddo1998optimal}, and our main contribution is to extend it to work with size-changing operators such as \Hs@filter@. 
 
 
 % -----------------------------------------------------------------------------

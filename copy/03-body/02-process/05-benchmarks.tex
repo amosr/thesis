@@ -138,7 +138,6 @@ With the ideal chunk size, the concurrent execution is 1.5 times faster than the
 
 Quickhull is a divide-and-conquer spatial algorithm to find the smallest convex hull containing all points.
 At its core is the \Hs@filterMax@ operation which takes a line and an array of points, and finds the farthest point above the line, as well as all points above the line.
-The streaming libraries, including Folderol, are parameterised over the monad for effects. For simplicity we use an \Hs@IO@ monad.
 
 \begin{lstlisting}[float,label=l:bench:filterMaxFolderol,caption=Folderol implementation of \Hs/filterMax/]
 filterMaxFolderol :: Line -> Vector Point -> IO (Point, Vector Point)
@@ -353,7 +352,7 @@ The Vector implementation (\cref{l:a:bench:compressorVector}) is similar to the 
 Vector's shortcut fusion is able to fuse this program into a single loop, except the two occurrences of the input vector mean that the vector will be indexed twice.
 
 \Cref{table:bench:compressor} shows the runtimes for the dynamic range compressor over $10^8$ samples, which corresponds to around 750MB in memory.
-The runtime difference between the hand-fused implementation and the Folderol implementation are very slight. 
+The runtime difference between the hand-fused implementation and the Folderol implementation is very slight. 
 The Vector implementation is slower because its generated loop indexes the input array twice.
 
 \begin{table}
@@ -470,7 +469,7 @@ In Conduit (\cref{l:a:bench:append2Conduit}) and Pipes (\cref{l:a:bench:append2P
 part2 :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
 part2 fpIn1 fpOut1 fpOut2 = do
   (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->
-    $$(fuse defaultFuseOptions $ do
+    $$(fuse $ do
       in1       <- source    [|sourceLinesOfFile fpIn1|]
       (o1s,o2s) <- partition [|\l -> length l `mod` 2 == 0|] in1
 
@@ -638,7 +637,7 @@ By giving a compile-time warning when fusion fails, we are able to maintain a hi
 % The author can be confident that if it compiles, it will have the desired streaming behaviour.
 
 % -----------------------------------------------------------------------------
-\section{Result Size}
+\section{Result size}
 % \TODO{Update with Folderol sizes}
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.

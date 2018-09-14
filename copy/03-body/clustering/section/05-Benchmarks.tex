@@ -11,7 +11,7 @@ $$\begin{array}{c}
                 & Time & Loops   & Time & Loops      & Time & Loops & Time & Loops   \\
 \hline
 Normalize2      & 1.88s & 5      & 1.64s & 4          & 1.82s & 3  & \textbf{1.59s} & \textbf{2}\\
-Closest points  & 3.83s & 6      & 3.33s & 5          & 2.92s & 3  & \textbf{2.92s} & \textbf{3}\\
+Closest points  & 3.83s & 7      & 3.33s & 6          & 2.92s & 4  & \textbf{2.92s} & \textbf{4}\\
 QuadTree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.72s} & \textbf{2}\\
 \end{tabular}
 
@@ -165,8 +165,42 @@ $25 \cdot x_{sum1, gts} + 1 \cdot x_{sum1,sum2} + 25 \cdot x_{sum1, ys2} + 25 \c
 
 
 % -----------------------------------------------------------------------------
-\subsection{Closest Points}
-The closest points benchmark is a divide-and-conquer algorithm that finds the closest pair of 2-dimensional points in an array. We first find the midpoint along the Y-axis, and filter the remaining points to those above and below the midpoint. We then recursively find the closest pair of points in the two halves, and merge the results. As the filtered points are passed directly to the recursive call, there is no further opportunity to fuse them, and our clustering is the same as returned by Megiddo's algorithm. However, our clustering generates both filtered arrays in a single loop, unlike stream fusion that requires a separate loop for each.
+\subsection{Closest points}
+The closest points benchmark is a divide-and-conquer algorithm that finds the distance between the closest pair of 2-dimensional points in an array.
+We first find the midpoint along the Y-axis, and filter the remaining points to those above and below the midpoint.
+We then recursively find the closest pair of points in the two halves, and merge the results.
+
+\begin{haskell}[float,caption=Closest points implementation,label=figs:clustering:bench:closest-points]
+closestPoints :: Array Point -> Distance
+closestPoints pts
+ | length pts < 100
+ -- Naive $O(n^2)$ implementation for small arrays
+ = closestPointsNaive pts
+ | otherwise
+ = let -- (external) Midpoint
+       midy    = fold (\s (x,y) -> s + y) pts / length pts
+       -- (cluster 1) Filter above and below
+       aboves  = filter (above midy) pts
+       belows  = filter (below midy) pts
+       -- (external) Recursive `divide' step
+       above'  = closestPoints aboves
+       below'  = closestPoints belows
+       border  = min above' below'
+       -- (cluster 2) Find points near the border to compare against each other
+       aboveB  = filter (\p -> below (midy - border) p && above border p) pts
+       belowB  = filter (\p -> above (midy + border) p && below border p) pts
+       -- (cluster 3) Merge results for `conquer' step
+       merged  = cross aboveB belowB
+       dists   = map distance merged
+       mins    = fold min border dists
+   in  mins
+\end{haskell}
+
+The closest points implementation is shown in \cref{figs:clustering:bench:closest-points}, with our clustering described in the comments.
+Our formulation does not directly support the \Hs/length/ operator; we encode the operation to compute the \Hs/midy/ midpoint as an \Hs/external/ combinator when performing clustering.
+The two recursive calls are also encoded as \Hs/external/ combinators.
+As the filtered points are passed directly to the recursive call, there is no further opportunity to fuse them, and our clustering is the same as returned by Megiddo's algorithm.
+However, unlike stream fusion, our clustering fuses the filter combinators for arrays \Hs/aboves/ and \Hs/belows/ into a single loop, as well as fusing the filter combinators for arrays \Hs/aboveB/ and \Hs/belowB/.
 
 
 % -----------------------------------------------------------------------------
@@ -175,16 +209,31 @@ The QuadTree benchmark recursively builds a 2-dimensional space partitioning tre
 
 
 % -----------------------------------------------------------------------------
-\subsection{QuickHull}
-The core of the QuickHull algorithm is shown below: given a line and an array of points, we filter the points to those above the line, and also find the point farthest from that line.
+\subsection{Quickhull}
+The Quickhull algorithm, which we earlier implemented using process fusion and benchmarked in \cref{s:Benchmarks}, 
+The core of the Quickhull algorithm is shown below: given a line and an array of points, we filter the points to those above the line, and also find the point farthest from that line.
+
 
 \begin{haskell}
-hull :: (Point,Point) -> Array Point -> Array Point
-hull line@(l,r) pts
- = let pts' = filter (above   line) pts
-       ma   = fold   (maxFrom line) pts'
-   in (hull (l, ma) pts') ++ (hull (ma, r) pts')
+filterMax :: Line -> Array Point -> (Point, Array Point)
+filterMax l ps
+ = let annot = map (\p -> (p, distance p l)) ps
+       point = fst
+             $ maximumBy (compare `on` snd) annot
+       above = map fst
+             $ filter ((>0) . snd) annot
+   in return (point, above)
 \end{haskell}
+% hull :: (Point,Point) -> Array Point -> Array Point
+% hull line@(l,r) pts
+%  = let pts' = filter (above   line) pts
+%        ma   = fold   (maxFrom line) pts'
+%    in (hull (l, ma) pts') ++ (hull (ma, r) pts')
+% \end{haskell}
 
-Stream fusion cannot fuse the \Hs@pts'@ and \Hs@ma@ bindings because \Hs@pts'@ is referred to multiple times and thus cannot be inlined. Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different. If the \Hs@ma@ binding was rewritten to operate over the \Hs@pts@ array instead of \Hs@pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result. However, this performance behavior is counter intuitive because \Hs@pts'@ is likely to be smaller than \Hs@pts@, so in an unfused program the original version would be faster. Our system fuses both versions.
+Stream fusion cannot fuse the \Hs@pts'@ and \Hs@ma@ bindings because \Hs@pts'@ is referred to multiple times and thus cannot be inlined.
+Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different.
+If the \Hs@ma@ binding was rewritten to operate over the \Hs@pts@ array instead of \Hs@pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result.
+However, this performance behavior is counter intuitive because \Hs@pts'@ is likely to be smaller than \Hs@pts@, so in an unfused program the original version would be faster.
+Our system fuses both versions.
 

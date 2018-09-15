@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\chapter{Related work}
+\chapter{Related work for process fusion}
 \label{related}
 
 This chapter discusses related work on streaming and fusion.
@@ -96,7 +96,7 @@ data PushModel a = PushModel ((a -> IO ()) -> IO ())
 
 The consumer provides a sink by calling the continuation, then the producer repeatedly pushes all its values to the provided sink.
 In this model, the consumer tells the producer when to start producing the entire stream: this is in contrast with pull streams, where the consumer asks for a single element at a time, and push streams, where the producer provides a single element at a time.
-\citet{neumann2011efficiently} originally claimed that the Neumann push model was inherently more efficient than the pull model, but this claim used an unfair comparison between a compiled Neumann push model and an un-optimised pull model \cite{shaikhha2018push}.
+\citet{neumann2011efficiently} originally claimed that the Neumann push model was inherently more efficient than the pull model, but this claim used a comparison between a compiled Neumann push model and an un-optimised pull model \cite{shaikhha2018push}.
 
 The control-flow for the Neumann push model is the same as that of \emph{push arrays}, as described in \citet{claessen2012expressive} and \citet{svensson2014defunctionalizing}.
 Here, push arrays are used as a code generation technique, with the main advantage of generating \emph{branchless} code to append two arrays.

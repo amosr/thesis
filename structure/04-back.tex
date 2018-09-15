@@ -9,6 +9,24 @@
 % \ADDTOC{Index}
 % \printindex
 
+\cleardoublepage
+\phantomsection
+\ADDTOC{Figures}
+\renewcommand{\listfigurename}{Figures}
+\listoffigures
+
+\cleardoublepage
+\phantomsection
+\ADDTOC{Tables}
+\renewcommand{\listtablename}{Tables}
+\listoftables
+
+
+\cleardoublepage
+\phantomsection
+\ADDTOC{Listings}
+\lstlistoflistings
+
 \iffull
 \appendix
 \input{copy/03-body/02-process/A1-benchmark.tex}

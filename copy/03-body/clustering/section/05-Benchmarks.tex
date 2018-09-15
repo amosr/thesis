@@ -12,7 +12,7 @@ $$\begin{array}{c}
 \hline
 Normalize2      & 1.88s & 5      & 1.64s & 4          & 1.82s & 3  & \textbf{1.59s} & \textbf{2}\\
 Closest points  & 3.83s & 7      & 3.33s & 6          & 2.92s & 4  & \textbf{2.92s} & \textbf{4}\\
-QuadTree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.72s} & \textbf{2}\\
+Quadtree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.72s} & \textbf{2}\\
 \end{tabular}
 
 \end{array}$$
@@ -166,12 +166,12 @@ $25 \cdot x_{sum1, gts} + 1 \cdot x_{sum1,sum2} + 25 \cdot x_{sum1, ys2} + 25 \c
 
 % -----------------------------------------------------------------------------
 \subsection{Closest points}
-The closest points benchmark is a divide-and-conquer algorithm that finds the distance between the closest pair of 2-dimensional points in an array.
+The closest points benchmark is a divide-and-conquer algorithm that finds the distance between the closest pair of two-dimensional points in an array.
 We first find the midpoint along the Y-axis, and filter the remaining points to those above and below the midpoint.
 We then recursively find the closest pair of points in the two halves, and merge the results.
 
-\begin{haskell}[float,caption=Closest points implementation,label=figs:clustering:bench:closest-points]
-closestPoints :: Array Point -> Distance
+\begin{haskell}[float,caption=Closest points benchmark,label=figs:clustering:bench:closest-points]
+closestPoints :: Array Point -> Double
 closestPoints pts
  | length pts < 100
  -- Naive $O(n^2)$ implementation for small arrays
@@ -204,25 +204,82 @@ However, unlike stream fusion, our clustering fuses the filter combinators for a
 
 
 % -----------------------------------------------------------------------------
-\subsection{QuadTree}
-The QuadTree benchmark recursively builds a 2-dimensional space partitioning tree from an array of points. At each step the array of points is filtered into four 2-dimensional boxes. As with the closest points algorithm, there are no further opportunities for fusing the filtered results, and our clustering is the same as Megiddo's. However, our clustering produces all four filtered results in a single loop, whereas stream fusion requires four loops.
+\subsection{Quadtree}
+The Quadtree benchmark recursively builds a two-dimensional space partitioning tree from an array of points.
+We first find the initial bounding-box that all the points fit into, by computing the minimum and maximum of both X and Y axes.
+Then, at each step, the bounding-box is split into four quadrants, and each point in the array is assigned to its corresponding quadrant.
+
+\begin{haskell}[float,caption=Quadtree benchmark,label=figs:clustering:bench:quadtree]
+quadtree :: Array Point -> Quadtree
+quadtree pts = go pts initialBounds
+ where
+  initialBounds
+   = let -- (external) Deconstruct points into axes
+         (xs, ys) = unzip pts
+         -- (cluster 1.1) Compute initial bounds
+         x1       = minimum xs
+         x2       = maximum xs
+         y1       = minimum ys
+         y2       = maximum ys
+     in (x1, y1, x2, y2)
+
+  go ins box
+   -- Non-recursive base cases for empty and small input arrays
+   | length ins == 0
+   = Nil
+   -- Check if bounding-box contains a single point
+   | smallbox box
+   = LeafArray ins
+   | otherwise
+   = let -- (external) Split input box into four quadrants
+         (b1,b2,b3,b4)    = splitbox box
+         -- (cluster 2.1) Partition input points into above quadrants
+         p1               = filter (inbox b1) ins
+         p2               = filter (inbox b2) ins
+         p3               = filter (inbox b3) ins
+         p4               = filter (inbox b4) ins
+         -- Recurse into each partitioned quadrant separately
+     in  Tree (go p1 b1) (go p2 b2) (go p3 b3) (go p4 b4)
+\end{haskell}
+
+The Quadtree implementation is shown in \cref{figs:clustering:bench:quadtree}.
+The \Hs/initialBounds/ definition deconstructs the input points into two arrays containing the X and Y axes using the \Hs/unzip/ operation.
+The Vector library, which implements stream fusion, supports constant-time \Hs/unzip/ with a struct-of-arrays representation for unboxed arrays of pairs.
+For the benchmark, we also implement \Hs/unzip/ as a constant-time operation.
+The \Hs/minimum/ and \Hs/maximum/ operations are implemented as folds.
+Our clustering for \Hs/initialBounds/ fuses all four folds into a single loop, as does Megiddo's clustering.
+Stream fusion requires a separate loop for each fold, with four loops in total.
+
+The \Hs/go/ function performs the recursive loop over the points.
+First, it checks whether the input array is empty or contains a single unique point, and returns a leaf node if so.
+Otherwise, the bounding-box is split into its four quadrants, and the points are partitioned into an array for each quadrant.
+Our clustering for \Hs/go/ fuses all four filters into a single loop, as does Megiddo's clustering.
+Stream fusion requires a separate loop for each filter, with four loops in total.
 
 
 % -----------------------------------------------------------------------------
 \subsection{Quickhull}
-The Quickhull algorithm, which we earlier implemented using process fusion and benchmarked in \cref{s:Benchmarks}, 
-The core of the Quickhull algorithm is shown below: given a line and an array of points, we filter the points to those above the line, and also find the point farthest from that line.
+We previously benchmarked the Quickhull algorithm in the process fusion benchmarks, in \cref{s:Benchmarks}.
+\Cref{figs:clustering:bench:filterMax} shows the implementation of \Hs/filterMax/, which forms the core of the Quickhull algorithm.
+In our previous benchmark, we saw that stream fusion was unable to fuse \Hs/filterMax/ into a single loop because the \Hs/ptsAnn/ array is used twice.
+We implemented two Vector versions of \Hs/filterMax/: one that used a manifest array for \Hs/ptsAnn/ and shared the array, and another that recomputed the distances for both consumers.
+
+Our clustering for \Hs/filterMax/ is a single cluster with all combinators fused together.
+In the previous benchmarks, we saw that this clustering, when executed as a fused process network, was faster than both Vector implementations.
+Megiddo's clustering for \Hs/filterMax/ requires a separate loop for the \Hs/above/ combinator, as it is looping over the result of a filter.
+We have not implemented Megiddo's clustering and so do not include the runtime for Quickhull in the results in \cref{clustering:f:BenchResults}; based on our cost model, we expect the runtime to be between the other two clusterings presented in the previous benchmark.
 
 
-\begin{haskell}
+
+\begin{haskell}[float,caption=Quickhull core (\Hs/filterMax/) implementation,label=figs:clustering:bench:filterMax]
 filterMax :: Line -> Array Point -> (Point, Array Point)
-filterMax l ps
- = let annot = map (\p -> (p, distance p l)) ps
-       point = fst
-             $ maximumBy (compare `on` snd) annot
-       above = map fst
-             $ filter ((>0) . snd) annot
-   in return (point, above)
+filterMax l pts
+ = let -- (cluster 1) Compute filter and maximum 
+       ptsAnn   = map (\p -> (p, distance p l)) pts
+       maximAnn = maximumBy (compare `on` snd)  ptsAnn
+       aboveAnn = filter ((>0) . snd)           ptsAnn
+       above    = map fst                       aboveAnn
+   in (fst maximAnn, above)
 \end{haskell}
 % hull :: (Point,Point) -> Array Point -> Array Point
 % hull line@(l,r) pts
@@ -231,9 +288,9 @@ filterMax l ps
 %    in (hull (l, ma) pts') ++ (hull (ma, r) pts')
 % \end{haskell}
 
-Stream fusion cannot fuse the \Hs@pts'@ and \Hs@ma@ bindings because \Hs@pts'@ is referred to multiple times and thus cannot be inlined.
-Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different.
-If the \Hs@ma@ binding was rewritten to operate over the \Hs@pts@ array instead of \Hs@pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result.
-However, this performance behavior is counter intuitive because \Hs@pts'@ is likely to be smaller than \Hs@pts@, so in an unfused program the original version would be faster.
-Our system fuses both versions.
+% Stream fusion cannot fuse the \Hs@pts'@ and \Hs@ma@ bindings because \Hs@pts'@ is referred to multiple times and thus cannot be inlined.
+% Megiddo's algorithm also cannot fuse the two bindings because their iteration sizes are different.
+% If the \Hs@ma@ binding was rewritten to operate over the \Hs@pts@ array instead of \Hs@pts'@, Megiddo's formulation would be able to fuse the two, and the overall program would give the same result.
+% However, this performance behavior is counter intuitive because \Hs@pts'@ is likely to be smaller than \Hs@pts@, so in an unfused program the original version would be faster.
+% Our system fuses both versions.
 

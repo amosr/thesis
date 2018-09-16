@@ -43,7 +43,7 @@ The \Hs@external@ binding invokes a host library function that can produce and c
 All arrays passed to and returned from host functions are fully materialised.
 External bindings are explicit \emph{fusion barriers}, which force arrays and scalars to be fully computed before continuing. 
 
-Finally, note that \Hs@filter@ is only one representative size-changing operator.
-We can handle other combinators, such as \Hs@unfold@ and \Hs@slice@, in our framework, but we stick with simple filtering to aid the discussion.
-We discuss other combinators in \cref{clustering:s:FutureWork}.
+Finally, note that \Hs@filter@ is only one example of a size-changing operator.
+We can handle other size-changing operators such as \Hs@slice@ in our framework, but we stick with simple filtering to aid the discussion.
+We discuss how to support other combinators in \cref{clustering:s:FutureWork}.
 

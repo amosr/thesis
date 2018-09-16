@@ -6,7 +6,7 @@ Size inference has been previously described in the context of array fusion by \
 In constrast to our algorithm, \citet{chatterjee1991size} does not support size-changing functions such as filter.
 If size inference fails, the programs may still be compiled, but fusion is not performed.
 
-Although our constraint based formulation of size inference is reminiscent of type inference for HM(X)~\cite{odersky1999type}, there are important differences.
+Although our constraint-based formulation of size inference is reminiscent of type inference for HM(X)~\cite{odersky1999type}, there are important differences.
 Firstly, our type schemes include existential quantifiers, which express the fact that the sizes of arrays produced by filter operations are statically unknown, in general.
 The output size of \Hs@generate@ is also statically unknown, as the result size is data-dependent and is not available until runtime.
 HM(X) style type inferences use the $\exists$ quantifier to bind local type variables in constraints, and existential quantifiers do not appear in type schemes.
@@ -64,8 +64,9 @@ $$
 
 We write $:_s$ to distinguish size schemes from type schemes.
 
-The existential quantifier appears in size schemes when the array produced by a filter, or similar operator, appears in the result.
+The existential quantifier appears in size schemes when the array produced by a filter or generate appears in the result.
 For example:
+
 \begin{haskell}
 filterLeft %\(:\sb{s}\,\forall\,k\sb{1}.\,\exists\,k\sb{2}.\,(xs\,:\,k\sb{1})\;\to\;(ys\sb{1}\,:\,k\sb{1},\,ys\sb{2}\,:\,k\sb{2})\)%
 filterLeft xs
@@ -77,14 +78,15 @@ filterLeft xs
 The size scheme of \Hs@filterLeft@ shows that it works for input arrays of all sizes.
 The first result array has the same size as the input, and the second has some unrelated and unknown size.
 
-Finally, note that size schemes form but one aspect of the type information that would be expressible in a full dependently typed language.
+Finally, note that size schemes form only one aspect of the type information that would be expressible in a full dependently typed language.
 For example, in Coq or Agda we could write something like:
+
 \begin{haskell}
-filterLeft : %\(\forall\,k\sb{1}:\,\)Nat\(.~\,\exists\,k\sb{2}:\,\)Nat\(.\)%
-  Array %\(k\sb{1}\)% Float -> (Array %\(k\sb{1}\)% Float, Array %\(k\sb{2}\)% Float)
+filterLeft : %\(\forall\,k\sb{1}:\,\)Nat\(.~\,\exists\,k\sb{2}:\,\)Nat\(.\)% Array %\(k\sb{1}\)% Float -> (Array %\(k\sb{1}\)% Float, Array %\(k\sb{2}\)% Float)
 \end{haskell}
 
-However, the type inference systems for fully higher order dependently typed languages typically require quantified types to be provided by the user, and do not perform the type generalization process. In our situation, we need automatic type generalization, but for a first-order language only.
+However, the type inference systems for fully higher order dependently typed languages typically require quantified types to be provided by the user, and do not perform the type generalization process.
+In our situation, we need automatic type generalization, but for a first-order language only.
 
 
 \input{copy/03-body/clustering/figures/Size-constraint-gen.tex}
@@ -103,7 +105,7 @@ The element ($zs : k$) records the size $k$ of some array variable $zs$.
 A plain $k$ indicates that $k$ can be unified with other size types when solving constraints, whereas $\exists k$ indicates a  \emph{rigid} size variable that cannot be unified with other sizes.
 We use the $\exists k$ syntax because this variable will also be existentially quantified if it appears in the size scheme of the overall program.
 
-The constraints are generated in a specific form, to facilitate the constraint solving process.
+The constraints are generated in a specific form in \cref{clustering:f:ConstraintGeneration}, to facilitate the constraint solving process.
 For each array variable in the program, we generate a new size variable, like size $k_{zs}$ for array variable $zs$.
 These new size variables always appear on the \emph{left} of atomic equality constraints.
 For each array binding, we may also introduce unification or rigid variables; these appear on the \emph{right} of atomic equality constraints.
@@ -142,19 +144,22 @@ normalize2 xs
 \end{haskell}
 \end{minipage}
 
-In this example, the input array \Hs/xs/ and its corresponding size type $k_{xs}$ are passed as part of the input environment to the constraint generation judgment.
-For each binding, we generate a constraint and add any required array and size bindings to the environment.
-The \Hs/sum1/ binding, a \Hs/fold/, does not bind any array variables and works for any input size, so we leave the environment as-is and produce a $\true$ constraint.
+To compute the constraints and environment for this example, the input environment given to constraint generation records that the input array \Hs/xs/ has the corresponding size type $k_{xs}$.
+This input environment is described in \cref{clustering:s:ConstraintSolvingGen}.
+For each binding, the rules in \cref{clustering:f:ConstraintGeneration} generate a constraint and add any required array and size bindings to the environment.
+The \Hs/sum1/ binding, a \Hs/fold/, does not bind any array variables and works for any input size, so the corresponding rule leaves the environment as-is and produces a $\true$ constraint.
 For the \Hs/gts/ binding, a \Hs/filter/, the size of the output array is unknown.
-We record the size of the output array by introducing a new size-type variable $k_{gts}$, as well as an existential variable $k_1$; we also generate the constraint ($k_{gts} = k_1$).
+The \Hs/filter/ rule records the size of the output array by introducing a new size-type variable $k_{gts}$, as well as an existential variable $k_1$; the rule also generates the constraint ($k_{gts} = k_1$).
 For the \Hs/ys1/ binding, a \Hs/map/, the size of the output array is the same as the input array.
-We introduce a new size variable $k_{ys1}$ to record the size of the output array, and introduce a new unification variable $k_2$.
-In the constraints, we require both variables to be equal to the input size variable $k_{xs}$, ensuring that array size variables occur on the left-hand side and unification variables on the right.
+The \Hs/map/ rule introduces a new size variable $k_{ys1}$ to record the size of the output array, and introduces a new unification variable $k_2$.
+The rule introduces constraints requiring the new unification variable $k_2$ to be equal to both the input size variable $k_{xs}$ and the output size variable $k_{ys1}$.
+In the constraints, array size variables occur on the left-hand side and unification variables occur on the right-hand side.
 Constraint generation for the remaining bindings proceeds similarly.
 
 
 % -------------------------------------------------------------------
 \subsection{Constraint solving and generalization}
+\label{clustering:s:ConstraintSolvingGen}
 \Cref{clustering:f:ConstraintSolving} shows the rule for assigning a size scheme to a program.
 The top-level judgment form ($\SizeF{\program}{\sigma}$) assigns size scheme $\sigma$ to $\program$.
 
@@ -235,21 +240,25 @@ filterLeft xs
 The size constraints for this program, already in solved form, are as follows:
 $$
 \begin{array}{ll}
-       & xs : k_{xs},~ ys_1 : k_{ys1},~ \exists k_1,~ ys_2 : k_{ys2},~ k_2
+       & xs : k_{xs},~ ys_1 : k_{ys1},~ k_1,~ ys_2 : k_{ys2},~ \exists k_2
 \\
-\vdash &          k_{ys_1} = k_1
+\vdash &          k_{xs}   = k_1
+        ~\wedge~  k_{ys_1} = k_1 
         ~\wedge~  k_{ys_2} = k_2
-        ~\wedge~  k_{xs}   = k_2
 \end{array}
 $$
 
-As variable $k_1$ is marked as rigid, we introduce an existential quantifier for it, producing the size scheme stated earlier:
+As variable $k_2$ is marked as rigid, we introduce an existential quantifier for it, producing the size scheme stated earlier:
 
 $$
-@filterLeft@ :\sb{s}\,\forall k\sb{2}.\ \exists k\sb{1}.\ (xs\,:\,k\sb{2})\;\to\;(ys\sb{1}\,:\,k\sb{2},\,ys\sb{2}\,:\,k\sb{1})
+@filterLeft@ :\sb{s}\,\forall k\sb{1}.\ \exists k\sb{2}.\ (xs\,:\,k\sb{1})\;\to\;(ys\sb{1}\,:\,k\sb{1},\,ys\sb{2}\,:\,k\sb{2})
 $$
 
-Note that, although rule~(SProgram) from \cref{clustering:f:ConstraintSolving} performs a \emph{generalization} process, there is no corresponding instantiation rule. The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another. To say this another way, all subgraphs are fully inlined. Recall from \cref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program. We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
+Note that, although rule~(SProgram) from \cref{clustering:f:ConstraintSolving} performs a \emph{generalization} process, there is no corresponding instantiation rule.
+The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another.
+To say this another way, all subgraphs are fully inlined.
+Recall from \cref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program.
+We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
 
 When producing size schemes, we do not permit the arguments of an operator graph to have existentially quantified sizes.
 This restriction is necessary to reject programs that we cannot statically guarantee will be well-sized.
@@ -266,22 +275,22 @@ As the \Hs@map2@ operator requires both of its arguments to have the same size, 
 The size constraints are as follows:
 $$
 \begin{array}{ll}
-       & xs : k_{xs},~ flt : k_{flt},~ \exists k_1,~ ys : k_{ys},~ k_2
+       & xs : k_{xs},~ \mi{flt} : k_{\mi{flt}},~ \exists k_1,~ ys : k_{ys},~ k_2
 \\
-\vdash &          k_{flt}  = k_1
-        ~\wedge~  k_{flt}  = k_2
+\vdash &          k_{\mi{flt}}  = k_1
+        ~\wedge~  k_{\mi{flt}}  = k_2
         ~\wedge~  k_{xs}   = k_2
         ~\wedge~  k_{ys}   = k_2
 \end{array}
 $$
 
-\noindent
 Solving this then yields:
+
 $$
 \begin{array}{ll}
-       & xs : k_{xs},~ flt : k_{flt},~ \exists k_1,~ ys : k_{ys},~ k_1
+       & xs : k_{xs},~ \mi{flt} : k_{\mi{flt}},~ \exists k_1,~ ys : k_{ys},~ k_1
 \\
-\vdash &          k_{flt}  = k_1
+\vdash &          k_{\mi{flt}}  = k_1
         ~\wedge~  k_{xs}   = k_1
         ~\wedge~  k_{ys}   = k_1
 \end{array}
@@ -328,6 +337,8 @@ At this stage we are stuck, because the constraints are not yet in solved form, 
 Both $k_1$ and $k_2$ are marked as rigid, so we cannot substitute one for the other and produce a single atomic constraint for $k_{\flt2}$.
 The $\textrm{SOLVE}$ function fails to return a solution, and rule (SProgram) cannot apply.
 
+% The \Hs/bad2/ example is similar to the \Hs/partitionAppend/ example from \cref{s:Benchmarks}, where the input stream is filtered twice, and both results are appended together.
+% We were able to execute \Hs/partitionAppend/ as a streaming process by 
 
 % \newcommand{\eqclasses}[1]{
 %     \begin{tabbing}

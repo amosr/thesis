@@ -51,7 +51,9 @@ This thesis makes the following contributions:
 \item[Modal types to ensure efficiency and correctness:]
 if, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
 The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, as well as ensuring that the stream query has the same semantics as if it were operating over arrays.
+At the time of writing in 2018, Icicle is currently running in production in the machine-learning pipeline at Ambiata.
 Icicle is described in \cref{part:icicle}.
+\TODO{get production stats}
 
 \item[Process fusion:]
 a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple queries, and user-defined combinators.

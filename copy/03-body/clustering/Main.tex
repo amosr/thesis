@@ -3,32 +3,29 @@
 
 \input{copy/03-body/clustering/style/utils.tex}
 
-\TODO{this chapter is very rough}
-
-This chapter presents a clustering algorithm for scheduling streaming programs that require multiple passes over input streams.
+This chapter presents a clustering algorithm for scheduling array programs, which can perform multiple passes over input arrays, and introduce intermediate arrays.
+Each cluster is executed as a streaming process network, to be fused by the process fusion algorithm from \cref{chapter:process:processes}.
 This work was first published as \citet{robinson2014fusing}.
-So far, in this thesis, we have assumed that all input streams are \emph{ephemeral}: that is, once the elements have been read, they cannot be recovered.
-This property is certainly the case for reading from a network socket, but input streams stored on disk or in memory are persistent and can be re-read any number of times.
-To support ephemeral streams and rewindable streams, and treat both types of streams the same, the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
-When we know that all the input streams are rewindable, we can execute larger programs which require multiple passes over the input, by executing each pass as its own streaming program.
 
-In this chapter, we look at a slightly different class of programs, where all input streams are rewindable, and any intermediate streams --- streams produced by one pass and consumed by another --- can be temporarily stored on disk.
-Given such a multiple pass program, we perform \emph{clustering} to determine how many passes to perform, and how to schedule each stream operation among the different passes.
-The choice of clustering affects runtime performance.
+In the process networks from earlier, all streams are \emph{ephemeral}: once the elements have been read, the elements cannot be recovered unless they are explicitly buffered.
+Input streams such as reading from a network socket are ephemeral, but for array computations where our input streams are backed by arrays stored in memory, the underlying array can be re-read any number of times.
+For array computations, intermediate and output arrays can be stored and re-read as well.
+% To support ephemeral streams and rewindable streams, and treat both types of streams the same, the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
+Array computations that perform multiple passes over input or intermediate arrays can be executed as multiple streaming programs.
+Each pass is executed as its own streaming program, with the input streams read from arrays, and the output streams written to arrays.
+For these array computations, we perform \emph{clustering} to determine how many passes to perform, and how to schedule each stream operation among the different passes.
+There are generally many possible clusterings, and the choice of clustering can affect runtime performance.
 To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of traversals of the input.
-
-We look at array programs.
-The choice of combinators dictates the required representation for inputs and outputs.
-In our presentation of clustering, we include the \Hs@gather@ operation, which performs lifted array indexing and requires random access; we also support \Hs@cross@, which computes the cross-product and requires one iteration over its second input for every element in the first input.
-
-To compile the clusters found by our clustering technique into a sequential streaming program, we use process fusion from \cref{chapter:process:processes}.
-% It improved on existing array fusion approaches~\cite{coutts2007stream, keller2010repa} as it guarantees fusion into a single loop for programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. 
+We use \emph{integer linear programming} (ILP), a mathematical optimisation technique, to find the best clustering according to our cost model.
 
 The contributions of this chapter are:
 \begin{itemize}
+\item
+We motivate our clustering algorithm by comparing three possible clusterings for an array program involving \Hs/filter/, an example of a \emph{size-changing operator} (\cref{clustering:s:Introduction});
+
 \item   
 We extend the clustering algorithm of \citet{megiddo1998optimal} and \citet{darte2002contraction}, with support for size-changing operators.
-Size-changing operators can be clustered with operations on both their source stream and output stream, and compiled naturally with process fusion (\cref{clustering:s:ILP});
+In our system, size-changing operators can be clustered with operations on both their source stream and output stream, whereas prior work only allows clustering size-changing operators with operations on their source stream (\cref{clustering:s:ILP});
 
 \item
 We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:
@@ -43,7 +40,7 @@ We present benchmarks of our algorithm applied to several common programming pat
 Our algorithm is complete and optimising for the chosen cost model yields good results in practice, though a cost model which maps exactly to program runtime is infeasible in general (\cref{clustering:s:Benchmarks}).
 \end{itemize}
 
-Our clustering algorithm is implemented at \url{https://github.com/amosr/clustering}.
+Our implementation is available at \url{https://github.com/amosr/clustering}.
 
 % The key to compiling functional, collection oriented array programs into efficient code is to minimise memory traffic.
 % Simply fusing subsequent array operations into a single computation is not sufficient; we also need to cluster \emph{separate} traversals of the same array into a single traversal.

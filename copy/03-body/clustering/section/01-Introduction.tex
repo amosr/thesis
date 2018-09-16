@@ -1,5 +1,5 @@
 %!TEX root = ../Main.tex
-\section{Introduction}
+\section{Clustering with filters}
 \label{clustering:s:Introduction}
 % A collection-oriented programming model is ideal for expressing data-parallel computations, as it exposes the communication patterns to the compiler without requiring complicated loop analysis.
 % It is essential, however, that the compiler combines these operations into a small number of efficient loops, as a naive translation leads to high memory traffic and poor performance.
@@ -17,7 +17,7 @@
 
 % To compile collection-oriented array functional array programs, which play a particular important role in parallel programming, into efficient code, it is essential that we can compile the array operations to a small number of imperative loops. Data flow fusion~\cite{lippmeier2013data} addressed this problem by presenting a technique to compile a specific class of data flow programs into single, efficient imperative loops. It improved on existing related array fusion approaches (~\cite{coutts2007stream}, ~\cite{keller2010repa} as it 1) it fuses programs that use branching data flows where a produced array is consumed by several consumers, and 2) guarantees complete fusion into a single loop for all programs that operate on the same size input data and contain no fusion-preventing dependencies between operators. However, it can only fuse code fragments into one loop that produce a single output array. Approaches based on Integer Linear Programming (\cite{megiddo1998optimal} and Darte~\cite{darte2002contraction}) do not suffer from this shortcoming. On the other hand, they cannot handle operations like filter, which produce arrays whose size differs from the input arrays.  The technique we present in this paper can handle both multi-loop fragments as well as size-altering operations. 
 
-To see the effect of clustering, consider how we might execute the following array program as a stream program:
+To see the effect of clustering, consider the following array program:
 
 \begin{haskell}
 normalize2 :: Array Int -> (Array Int, Array Int)
@@ -30,30 +30,34 @@ normalize2 xs
    in (ys1, ys2)
 \end{haskell}
 
-The function \Hs@normalize2@ computes two sums: one of all the elements of \Hs@xs@, the other of only elements greater than zero.
+The \Hs@normalize2@ function computes two sums: one of all the elements of \Hs@xs@, the other of only elements greater than zero.
 The two maps then divide each element in the input \Hs@xs@ by either \Hs/sum1/ or \Hs/sum2/.
 Since we need to fully evalute the sums before we can start to execute either map, we need at least two separate passes over the input.
 These folds are examples of \emph{fusion-preventing dependencies}, as fold cannot be fused with subsequent operations.
-For a streaming program, a fusion-preventing dependency between two combinators means that the program will require multiple passes.
+A fusion-preventing dependency between two combinators means that the two combinators must be performed in separate passes.
+
+\Cref{clustering:f:normalize2-clusterings} shows three cluster diagrams of \Hs@normalize2@, with each diagram applied to a different clustering algorithm.
+A cluster diagram is an extended version of the dependency graphs we have already seen; we explain the details in \cref{clustering:s:CombinatorNormalForm}.
+The leftmost diagram shows how we have to break this program up to execute each part with the pull streams from \cref{taxonomy/pull}.
+With pull streams we cannot compute the sums or the maps concurrently, so we end up with four loops, denoted by dotted lines in the diagram; only the filter operation is combined with the subsequent fold.
+If we wrote this program to use stream fusion \citep{coutts2007stream}, or any other pull-based shortcut fusion, we would end up with the same clustering.
+% We benchmarked our process fusion against the Vector library earlier, in \cref{s:Benchmarks}.
 
 \begin{figure}
 \begin{center}
 \includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex1-compare.pdf}
 \end{center}
-\caption{Clusterings for \Hs/normalize2/ example: with stream fusion; our system; best imperative system}
+\caption{Clusterings for \Hs/normalize2/: with pull streams; our system; best imperative system}
 \label{clustering:f:normalize2-clusterings}
 \end{figure}
 
 
-\Cref{clustering:f:normalize2-clusterings} shows three cluster diagrams of \Hs@normalize2@, with each diagram applied to a different clustering algorithm.
-A cluster diagram is an extended version of the dependency graphs we have already seen; we explain the details in \cref{clustering:s:CombinatorNormalForm}.
-The leftmost diagram shows how we have to break this program up to execute each part with the pull streams from \cref{taxonomy/pull}.
-The pull streams cannot compute the sums or the maps concurrently, so we end up with four loops, denoted by dotted lines in the diagram; only the filter operation is combined with the subsequent fold.
-If we wrote this program using pull-based stream fusion \citep{coutts2007stream}, we would end up with the same clustering.
-% We benchmarked our process fusion against the Vector library earlier, in \cref{s:Benchmarks}.
-
 The rightmost diagram in \cref{clustering:f:normalize2-clusterings} shows the clustering determined by the best existing ILP approach for imperative array-based loop fusion.
-This clustering combines the \Hs@sum1@ fold and \Hs@sum2@ filter into one loop, but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations.
+Imperative clustering algorithms, such as \citet{megiddo1998optimal}, only cluster together loops of the same iteration size.
+The result of the filter operation, stored in the array \Hs/gts/, has a different size to the input array \Hs/xs/.
+The fold over \Hs/gts/ is performed separately to the filter operation because the two have different loop iteration sizes.
+This clustering combines the \Hs@sum1@ fold and \Hs@sum2@ filter into one loop, as well as combining the two map operations.
+% , but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations.
 
 Our approach, shown in the middle of \cref{clustering:f:normalize2-clusterings}, produces the optimal clustering in this case: one loop for the sums, another for the maps.
 For this example, we could execute each cluster as either push streams (\cref{taxonomy/push}) or as a process network fused by process fusion (\cref{chapter:process:processes}).

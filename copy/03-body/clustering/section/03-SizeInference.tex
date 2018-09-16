@@ -2,8 +2,8 @@
 \section{Size inference}
 Before performing clustering, we infer the relative sizes of each array in the program.
 We now present a simple constraint-based inference algorithm.
-Size inference has been previously described in the context of array fusion by Chatterjee~\cite{chatterjee1991size}.
-In constrast to our algorithm, \cite{chatterjee1991size} does not support size-changing functions such as filter.
+Size inference has been previously described in the context of array fusion by \citet{chatterjee1991size}.
+In constrast to our algorithm, \citet{chatterjee1991size} does not support size-changing functions such as filter.
 If size inference fails, the programs may still be compiled, but fusion is not performed.
 
 Although our constraint based formulation of size inference is reminiscent of type inference for HM(X)~\cite{odersky1999type}, there are important differences.

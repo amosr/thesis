@@ -5,6 +5,7 @@
 % to properly explain the relationship between flow fusion and DPH.
 
 \section{Future work}
+\label{clustering:s:FutureWork}
 % In this chapter, we have seen how process fusion can be used in an array-based context, 
 
 % We have shown that using integer linear programming to find clusterings is able to produce predictably better clusterings than heuristic and greedy approaches.
@@ -13,18 +14,25 @@
 
 One obvious shortcoming of our clustering formulation is the limited selection of combinators.
 Other combinators can currently be used as external computations, but this is not ideal as they will not be fused.
-Single-input combinators which produce the same number of elements as they consume, such as \Hs@postscanl@, \Hs@prescanl@, and \Hs@indexed@, would be simple to add using the same size inference rules as single-input \Hs@map@.
-Extraction combinators, such as \Hs@slice@, \Hs@take@ and \Hs@drop@, could be implemented with an existential output size similar to the size inference for \Hs@filter@.
-The \Hs@tail@ combinator, which drops the first element, could be implemented as (\Hs@take 1@), or perhaps by adding a new size type to denote `decrementing' a size type.
+We now present some ideas of how to support common combinators in future work.
 
-Implementing \Hs@append@ would require adding a new size type for appending two size types together, similar to the \Hs@cross@ combinator.
+The size inference rules for single-input \Hs@map@ can be re-used for single-input combinators that produce one output element for every input element, such as \Hs@postscanl@, \Hs@prescanl@, and \Hs@indexed@.
+% Single-input combinators which produce the same number of elements as they consume, such as \Hs@postscanl@, \Hs@prescanl@, and \Hs@indexed@, would be simple to add using the same size inference rules as single-input \Hs@map@.
+Extraction combinators, such as \Hs@slice@, \Hs@take@ and \Hs@drop@, take a contiguous `slice' of the input.
+These could be implemented with an existential output size similar to the size inference for \Hs@filter@.
+The \Hs@tail@ combinator, which discards the first element, could be implemented with an existential output size as with (\Hs@drop 1@), or perhaps by adding a new size type to denote `decrementing' a size type.
+
+Implementing \Hs@append@ would likely involve adding a new size type for appending two size types together, similar to the result size of the \Hs@cross@ combinator.
 Although the size of appending two \emph{concrete} input arrays is commutative, the loops that generate the two halves of the output cannot generally be interchanged.
 The size type for appending two inputs therefore should not be commutative.
 As we saw in \cref{ss:Fusing:a:network}, process fusion can fuse appends with one shared input and two different inputs into a single process.
-It may be possible to extend the definition of transducers to allow such clusterings by requiring only one half of the append size type to be equal.
+To support this clustering, the definition of transducers would have to be modified to allow fusion between nodes with the same size type as one of the inputs and nodes with the same size as the output.
+% It may be possible to extend the definition of transducers to allow such clusterings by requiring only one half of the append size type to be equal.
+It may be simpler to implement \Hs@append@ by introducing an existential size type for both the iteration size and the output size; however, introducing an existential for the output size hides the fact that appending two size types is an injection.
+% would allow consumers of the output array to be fused with the \Hs@append@, but \Hs@append@ would not be able to fuse with either of its input producers, as they .
 
-Implementing \Hs@length@ is particularly interesting, as it does not require the array to be manifest, but does require some array with the same rate to be manifest.
-For example, finding the length of the output of a filter can only be done after the filter is computed; in contrast, finding the length of the output of a map may sometimes be done before the map is computed.
+The \Hs@length@ combinator is unique, as it does not require the array to be manifest, but does require some array with the same rate to be manifest.
+For example, finding the length of the output of a filter can only be done after the filter is computed; in contrast, finding the length of the output of a map can often be done before the map is computed.
 Once \Hs@length@ is implemented, more interesting functions such as \Hs@reverse@ can be implemented as a \Hs@generate@ followed by a \Hs@gather@.
 
 % For this work to be useful for Data Parallel Haskell, more combinators are required such as segmented fold and segmented map, which operate on segmented representations of nested arrays.

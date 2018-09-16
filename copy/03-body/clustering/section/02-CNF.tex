@@ -4,9 +4,9 @@
 % -----------------------------------------------------------------------------
 \section{Combinator normal form}
 \label{clustering:s:CombinatorNormalForm}
-Input programs are expressed in \emph{combinator normal form} (CNF), which is a textual description of the dependency graph.
+To perform clustering on an input program, the program is expressed in \emph{combinator normal form} (CNF), which is a textual description of the dependency graph.
 The grammar for CNF is given in \cref{clustering:f:CombinatorNormalForm}.
-Syntactically, a CNF program is a restricted Haskell program consisting of a list of array combinator bindings.
+Syntactically, a CNF program is a restricted Haskell function definition consisting of one or more let-bound array operations.
 
 \input{copy/03-body/clustering/figures/Program.tex}
 
@@ -30,7 +30,7 @@ The $\Hs@map@_n$ combinator takes a worker function, $n$ arrays of the same leng
 As such, it is similar to Haskell's \Hs@zipWith@, with an added length restriction on the argument arrays.
 The \Hs@generate@ combinator takes an array length and a worker function, and creates a new array by applying the worker to each index.
 The \Hs@gather@ combinator takes an array of elements, an array of indices, and produces the array of elements that are positioned at each index.
-In Haskell, this would be implemented as (\Hs@gather arr ixs = map (index arr) ixs@).
+In Haskell, \Hs@gather@ would be implemented as (\Hs@gather arr ixs = map (index arr) ixs@).
 The \Hs@cross@ combinator returns the cartesian product of two arrays. 
 
 The exact form of the worker functions is left unspecified, as it is not important for the discussion.
@@ -39,11 +39,11 @@ We also assume that each CNF program considered for fusion is embedded in a larg
 Workers are additionally restricted so they can only directly reference the \emph{scalar} variables bound by the local CNF program, though they may reference array variables bound by the host program.
 All access to locally bound array variables is via the formal parameters of array combinators, which ensures that all data dependencies we need to consider for fusion are explicit in the dependency graph.
 
-The \Hs@external@ binding invokes a host library function that can produce and consume arrays, but not be fused with other combinators.
+The \Hs@external@ binding invokes a host library function that can produce and consume arrays, but cannot be fused with other combinators.
 All arrays passed to and returned from host functions are fully materialised.
 External bindings are explicit \emph{fusion barriers}, which force arrays and scalars to be fully computed before continuing. 
 
 Finally, note that \Hs@filter@ is only one representative size-changing operator.
-We can handle more complex functions, such as \Hs@unfold@, in our framework, but we stick with simple filtering to aid the discussion.
-
+We can handle other combinators, such as \Hs@unfold@ and \Hs@slice@, in our framework, but we stick with simple filtering to aid the discussion.
+We discuss other combinators in \cref{clustering:s:FutureWork}.
 

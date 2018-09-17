@@ -13,12 +13,12 @@ $\edges$     \> @  :@ \> $\program \to E$                          \\
 $\edges(bs)$ \> $~~= \bigcup_{b \in bs} \edge(bs, b)$
 \\
 \\
-MM             \= M \= $\Hs@gather@~\data~\indices$ \= \kill
+MM             \= M \= $\Hs@gather@~$ \= $\data~\indices$ \= \kill
 $\edge$      \> ~@:@ \> $\{\bind\} \times \bind \to E$ \\
 $\edge(bs, \out = b)$ \\
-   \> $~|$ \> $\Hs@fold@~f~in$ \> $\gets b$ \\
-   \> $~|$ \> $\Hs@map@~f~in$ \> $\gets b$ \\
-   \> $~|$ \> $\Hs@filter@~f~in$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@fold@$ \> $f~in$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@map@$ \> $f~in$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@filter@$ \> $f~in$ \> $\gets b$ \\
     \> $=$    \> $\{\inedge(bs,\out,s) ~|~ s \in \fv(f)\} \cup \{\inedge(bs, \out, in) \}$
 \\[1ex]
 % $\edge(bs, \out = \Hs@map@~f~in)$  \\
@@ -27,15 +27,15 @@ $\edge(bs, \out = b)$ \\
 % $\edge(bs, \out = \Hs@filter@~f~in)$ \\
 %     \> $=$    \> $\{\inedge(bs,\out,s) ~|~ s \in \fv(f)\} \cup \{\inedge(bs, \out, in) \}$
 % \\
-   \> $~|$ \> $\Hs@gather@~\data~\indices$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@gather@~\data~\indices$ \> \> $\gets b$ \\
 % $\edge(bs, \out = \Hs@gather@~data~indices)$ \\
     \> $=$    \> $\{(\out,\data, \fusionpreventing) \} \cup \{\inedge(bs, \out, \indices) \}$      
 \\[1ex]
-   \> $~|$ \> $\Hs@cross@~a~b$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@cross@~a~b$ \> \> $\gets b$ \\
 % $\edge(bs, \out = \Hs@cross@~a~b)$ \\
     \> $=$    \> $\{\inedge(bs, \out, a) \}           \cup      \{(\out, b, \fusionpreventing) \}$
 \\[1ex]
-   \> $~|$ \> $\Hs@external@~ins$ \> $\gets b$ \\
+   \> $~|$ \> $\Hs@external@~ins$ \> \> $\gets b$ \\
 % $\edge(bs, \outs = \Hs@external@~ins)$  \\
     \> $=$    \> $\{(o,i, \fusionpreventing) ~|~ o \in \out,~ i \in ins \}$
 \\

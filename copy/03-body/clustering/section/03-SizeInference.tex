@@ -257,7 +257,7 @@ $$
 Note that, although rule~(SProgram) from \cref{clustering:f:ConstraintSolving} performs a \emph{generalization} process, there is no corresponding instantiation rule.
 The size inference process works on the entire graph at a time, and there is no mechanism for one operator to invoke another.
 To say this another way, all subgraphs are fully inlined.
-Recall from \cref{clustering:s:CombinatorNormalForm}, that we assume our operator graphs are embedded in a larger host program.
+Recall from \cref{clustering:s:CombinatorNormalForm} that we assume our operator graphs are embedded in a larger host program.
 We use size information to guide the clustering process, and although the host program can certainly call the operator graph, static size information does not flow across this boundary.
 
 When producing size schemes, we do not permit the arguments of an operator graph to have existentially quantified sizes.
@@ -272,7 +272,9 @@ bad1 xs
 
 The above program filters its input array, and then applies \Hs@map2@ to the filtered version as well as the original array.
 As the \Hs@map2@ operator requires both of its arguments to have the same size, \Hs@bad1@ would only be valid when the predicate \Hs@p@ is always true.
-The size constraints are as follows:
+We could execute this program as a process network if we replaced the \Hs/map2/ operator with \Hs/zipWith/, and explicitly read from the input array \Hs/xs/ twice, as in the two-source version of \Hs/partitionAppend/ from \cref{s:Benchmarks:partitionAppend}.
+The result size of the \Hs/zipWith/ operator is the smaller of the two input operators; the extra size restriction on \Hs/map2/ simplifies size inference, as we do not need to introduce the concept of the minimum of size types.
+The size constraints for \Hs/bad1/ are as follows:
 $$
 \begin{array}{ll}
        & xs : k_{xs},~ \mi{flt} : k_{\mi{flt}},~ \exists k_1,~ ys : k_{ys},~ k_2
@@ -284,7 +286,7 @@ $$
 \end{array}
 $$
 
-Solving this then yields:
+Solving these constraints then yields:
 
 $$
 \begin{array}{ll}
@@ -297,6 +299,7 @@ $$
 $$
 
 In this case, rule~(SProgram) does not apply, because the parameter variable $xs$ has size $k_1$, but $k_1$ is marked as rigid in the environment (with $\exists k_1$). 
+This function is rejected by size inference, as a caller cannot guarantee that an input array's size matches the existential size type chosen by the function.
 
 As a final example, the following program is ill-sized because the two filter operators are not guaranteed to produce the same number of elements:
 \begin{haskell}
@@ -368,14 +371,14 @@ The $\textrm{SOLVE}$ function fails to return a solution, and rule (SProgram) ca
 
 % -----------------------------------------------------------------------------
 \subsection{Iteration size}
-After inferring the size of each array variable, each operator is assigned an \emph{iteration size}, which is the number of iterations needed in the loop which evaluates that operator.
+After inferring the size of each array variable, each operator is assigned an \emph{iteration size}, which is the number of iterations needed in the loop that evaluates the operator.
 For \Hs@filter@ and other size-changing operators, the iteration and result sizes are in general different.
 For such an operator, we say that the result size is a \emph{descendant} of the iteration size.
 Conversely, the iteration size is a \emph{parent} of the result size. 
 
 This descendant--parent size relation is transitive, so if we filter an array, then filter the resulting array, the size of the result is a descendant of the iteration size of the initial filter.
-This relation arises naturally from the fact that we compile individual clusters into a loop using process fusion (\cref{chapter:process:processes}).
-With process fusion, such an operation would be compiled into a single loop --- with an iteration size identical to the size of the input array, and containing two nested if-expressions to perform the two layers of filtering.
+This relation arises naturally from the fact that we compile individual clusters into a single process using process fusion (\cref{chapter:process:processes}).
+With process fusion, such an operation would be compiled into a process containing a single loop that pulls from a stream backed by the input array --- with an iteration size identical to the size of the input array, and containing two case instructions to perform the two layers of filtering.
 
 Iteration sizes are used to decide which operators can be fused with each other.
 As in prior work, operators with the same iteration size can be fused.
@@ -399,7 +402,7 @@ Similarly, we use the syntax $C(k)$ to find the corresponding ($k = \tau$) const
 \begin{tabbing}
 MMMMM \= M \= MMMMMMMMMM \= MM \= \kill
 $\iiter_{\Gamma,C}$  
-        \>$:$\> $bind \rightarrow T$ 
+        \>$:$\> $\bind \rightarrow T$ 
 \\[1ex]
 $\iiter_{\Gamma,C}$
         \> $|$  \> $(z~ = \Hs@fold@~ f~xs)$     
@@ -442,32 +445,30 @@ We define the concept of \emph{transducers} as combinators having a different ou
 As with any other combinator, a transducer may fuse with other nodes of the same iteration size, but transducers may also fuse with nodes having iteration size the same as the transducer's output size.
 For our set of combinators, the only transducer is \Hs@filter@.
 
-Looking back at the \Hs@normalize2@ example, the iteration sizes of the combinators \Hs@gts@ (bound to a \Hs/filter/ over input \Hs/xs/) and \Hs@sum1@ (a \Hs/fold/ over \Hs/xs/) are both $k_{xs}$.
-%The iteration size of \Hs@sum2@ is $k_{gts}$, and \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
-%\gabi{gts is no combinator, so can't be a transducer
-The iteration size of combinator \Hs@sum2@ (a \Hs/fold/ over \Hs/gts/) is $k_{gts}$, and the filter combinator which produces \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
+Looking back at the \Hs@normalize2@ example, the iteration sizes of the filter over \Hs/xs/, which produces the array \Hs/gts/, and the fold over \Hs/xs/, which produces the scalar \Hs/sum1/, are both $k_{xs}$.
+The iteration size of the fold over \Hs/gts/, which produces the scalar \Hs@sum2@, is $k_{gts}$, and the filter combinator which produces \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
 Even though $k_{gts}$ is distinct from $k_{xs}$, the three nodes \Hs@gts@, \Hs@sum1@ and \Hs@sum2@ can all be fused together.
 % The two nodes \Hs@sum2@ and \Hs@gts@ can be fused together, since the output size of \Hs@gts@ is the iteration size of \Hs@sum2@.
 % Similarly, \Hs@sum1@ and \Hs@gts@ can be fused together, as they have the same iteration size.
 
-\Cref{fig:clustering:trans} defines a function $trans$, to find the parent transducer of a combinator application.
+\Cref{fig:clustering:trans} defines a function $\trans$, to find the parent transducer of a combinator application.
 Since each name is bound to at most one combinator, we abuse terminology here slightly and write \emph{combinator $n$} when refering to the combinator occuring in the binding of the name $n$.
-The parent transducer $trans(bs, n)$ of a combinator $n$ has the same output size as $n$'s iteration size, but the two have different iteration sizes.
+The parent transducer $\trans(bs, n)$ of a combinator $n$ has the same output size as $n$'s iteration size, but the two have different iteration sizes.
 
 \begin{figure}
 \begin{tabbing}
 MMMM \= MM \= MMMMMMMMM \= MMMM \= MM \= \kill
-$trans$  \>$:$\> $binds \rightarrow name \rightarrow \{name\}$ \\
-$trans(bs,o)$    \\
-            \> $|$ \> $o = \Hs@filter@~f~n$    \> $\in bs$ \> $=$ \> $trans'(bs,n)$ \\
-            \> $|$ \> otherwise             \>          \> $=$ \> $trans'(bs,o)$ \\
+$\trans$  \>$:$\> $\{\bind\} \rightarrow \name \rightarrow \{\name\}$ \\
+$\trans(bs,o)$    \\
+            \> $|$ \> $o = \Hs@filter@~f~n$    \> $\in bs$ \> $=$ \> $\trans'(bs,n)$ \\
+            \> $|$ \> otherwise             \>          \> $=$ \> $\trans'(bs,o)$ \\
 \\
-$trans'(bs,o)$    \\
+$\trans'(bs,o)$    \\
             \> $|$ \> $o = \Hs@fold@~f~n$      \> $\in bs$ \> $=$ \> $\emptyset$ \\
-            \> $|$ \> $o = \Hs@map@_n~f~ns$    \> $\in bs$ \> $=$ \> $\bigcup_{x \in ns} trans(bs, x)$ \\
+            \> $|$ \> $o = \Hs@map@_n~f~ns$    \> $\in bs$ \> $=$ \> $\bigcup_{x \in ns} \trans(bs, x)$ \\
             \> $|$ \> $o = \Hs@filter@~f~n$    \> $\in bs$ \> $=$ \> $\{o\}$       \\
             \> $|$ \> $o = \Hs@generate@~s~f$  \> $\in bs$ \> $=$ \> $\emptyset$ \\
-            \> $|$ \> $o = \Hs@gather@~i~d$    \> $\in bs$ \> $=$ \> $trans(bs,i)$ \\
+            \> $|$ \> $o = \Hs@gather@~i~d$    \> $\in bs$ \> $=$ \> $\trans(bs,i)$ \\
             \> $|$ \> $o = \Hs@cross@~a~b$     \> $\in bs$ \> $=$ \> $\emptyset$ \\
             \> $|$ \> $o = \Hs@external@~ins$  \> $\in bs$ \> $=$ \> $\emptyset$ \\
 \end{tabbing}
@@ -475,17 +476,17 @@ $trans'(bs,o)$    \\
 \label{fig:clustering:trans}
 \end{figure}
 
-With the $trans$ function, we can express the restriction on programs we view as valid for our transformation more formally:
+With the $\trans$ function, we can express the restriction on programs we view as valid for our transformation more formally:
 
 \textbf{Lemma: sole transducers}.
 If a program $p$ is \emph{valid}, then its bindings will have at most one transducer:
 \[
-\forall p, \sigma, n.\ p :_s \sigma \implies |trans(binds(p), n)| \le 1
+\forall p, \sigma, n.\ p :_s \sigma \implies |\trans(\mi{binds}(p), n)| \le 1
 \]
 
-Informally, only the $\Hs/map/_n$ clause in $trans$ can introduce multiple elements in the result.
+Informally, only the $\Hs/map/_n$ clause in $\trans$ can introduce multiple transducers in the result, and only the \Hs/filter/ clause can introduce a transducer.
 Since the constraint generation for $\Hs/map/_n$ requires all inputs to have the same size, the inputs should also have the same transducer.
-If the inputs had different transducers, then their size would be generated by different filters, and each would have its own, separate existential variable as a size type.
+If the inputs had different transducers, then their size would be generated by different filters, and each would have its own separate existential variable as a size type, not fulfilling the same-size requirement for $\Hs/map/_n$.
 
 % \textbf{Proof:} by induction on $bs$. If $n = \Hs@map@_n~f~ns$,
 % then $trans(bs,n) = \bigcup_{x \in ns} trans(bs,x)$.
@@ -525,53 +526,61 @@ If the inputs had different transducers, then their size would be generated by d
 %
 \begin{tabbing}
 MMMM \= M \= M \= M \= MMMM \= M \= \kill
-$parents$ \> $:$ \> $binds \to name \to name \to (name \times name)_\bot$ \\
-$parents(bs, a, b)$ \\
-        \> $|$ \> $(p_a,p_b,d) \in parents'(bs,a,b)$ \\
+$\parents$ \> $:$ \> $\{\bind\} \to \name \to \name \to (\name \times \name)_\bot$ \\
+$\parents(bs, a, b)$ \\
+        \> $|$ \> $(p_a,p_b,d) \in \parents'(bs,a,b)$ \\
         \>     \>                      \> $=$ \> $\{(a, b)\}$ \\
         \> $|$ \> otherwise \\
         \>     \>                      \> $=$    \> $\bot$ \\
 \\
-$parents'$ \> $:$ \> $binds \to name \to name \to (name \times name \times \mathbb{N})_\bot$ \\
-$parents'(bs, a, b)$ \\
+$\parents'$ \> $:$ \> $\{\bind\} \to \name \to \name \to (\name \times \name \times \mathbb{N})_\bot$ \\
+$\parents'(bs, a, b)$ \\
         \> $|$ \> $\iiter_{\Gamma,C}(bs(a)) == \iiter_{\Gamma,C}(bs(b))$ \\
         \>     \>                      \> $=$ \> $\{(a, b, 0)\}$ \\
-        \> $|$ \> $a' \in trans(bs,a),~ p_a \in parents'(bs,a',b)$ \\
-        \> $,$ \> $b' \in trans(bs,b),~ p_b \in parents'(bs,a,b')$ \\
-        \>     \>                      \> $=$ \> $increment(closest(p_a, p_b))$ \\
-        \> $|$ \> $a' \in trans(bs,a),~ p_a \in parents'(bs,a',b)$ \\
-        \>     \>                      \> $=$ \> $increment(p_a)$ \\
-        \> $|$ \> $b' \in trans(bs,b),~ p_b \in parents'(bs,a,b')$ \\
-        \>     \>                      \> $=$ \> $increment(p_b)$ \\
+        \> $|$ \> $a' \in \trans(bs,a),~ p_a \in \parents'(bs,a',b)$ \\
+        \> $,$ \> $b' \in \trans(bs,b),~ p_b \in \parents'(bs,a,b')$ \\
+        \>     \>                      \> $=$ \> $\mi{increment}(\mi{closest}(p_a, p_b))$ \\
+        \> $|$ \> $a' \in \trans(bs,a),~ p_a \in \parents'(bs,a',b)$ \\
+        \>     \>                      \> $=$ \> $\mi{increment}(p_a)$ \\
+        \> $|$ \> $b' \in \trans(bs,b),~ p_b \in \parents'(bs,a,b')$ \\
+        \>     \>                      \> $=$ \> $\mi{increment}(p_b)$ \\
         \> $|$ \> otherwise            \\
         \>     \>                      \> $=$    \> $\bot$
 \\
 \\
-$closest$ \> $:$ \> $(name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N})$ \\
-$closest((l_a,l_b,l_d), (r_a,r_b,r_d))$ \\
+$\mi{closest}$ \> $:$ \> $(\name \times \name \times \mathbb{N}) \to (\name \times \name \times \mathbb{N}) \to (\name \times \name \times \mathbb{N})$ \\
+$\mi{closest}((l_a,l_b,l_d), (r_a,r_b,r_d))$ \\
         \> $|$ \> $l_d \le r_d$ \> \> \> $=$ \> $(l_a,l_b,l_d)$ \\
         \> $|$ \> otherwise     \> \> \> $=$ \> $(r_a,r_b,r_d)$ \\
 \\
-$increment ~ :$ \> \> $(name \times name \times \mathbb{N}) \to (name \times name \times \mathbb{N})$ \\
-$increment((a,b,d)) = (a,b,d+1)$ \\
+$\mi{increment} :$ \> \> $(\name \times \name \times \mathbb{N}) \to (\name \times \name \times \mathbb{N})$ \\
+$\mi{increment}((a,b,d)) = (a,b,d+1)$ \\
 \end{tabbing}
 
 \caption{Finding the closest ancestor transducers with same iteration size}
 \label{fig:clustering:parents}
 \end{figure}
 
-To determine whether two combinators of different iteration sizes may be fused together, \cref{fig:clustering:parents} defines the $parents$ function, which finds the closest pair of parent or ancestor transducers, where both ancestors are the same size.
+To determine whether two combinators of different iteration sizes may be fused together, \cref{fig:clustering:parents} defines the $\parents$ function, which finds the closest pair of parent or ancestor transducers, where both ancestors are the same size.
 We use the syntax $(name \times name)_\bot$ to denote an optional pair of names.
-Two combinators $a$ and $b$ of different size may be fused together only if they have parents $(c, d) \in parents(a,b)$, and the combinators and their parents are also fused together.
+Two combinators $a$ and $b$ of different size may be fused together only if they have parents $(c, d) \in \parents(a,b)$, and the combinators and their parents are also fused together.
 That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
-Although we use the terms ``ancestors'' and ``parents'', if the two inputs have the same iteration size, the two parents will be the inputs themselves and the above fusion requirements for different size inputs can be simplified away.
+Although we use the terms ``ancestors'' and ``parents'', if the two input nodes have the same iteration size, the two parents will be the inputs themselves and the above fusion requirements for different size inputs are trivially satisfied, since a node is always fused with itself.
 
-There may be, in general, multiple pairs of ancestor transducers with compatible iteration sizes.
+The definition of $\parents'$ returns the pair of parents as well as the distance, determined by counting how many other ancestor transducers there are between the input node and the parents.
+The $\mi{closest}$ function compares the distances of two pairs of parents and chooses the closest pair.
+The $\mi{increment}$ function increases the distance by one.
+
+A single combinator can have multiple ancestor transducers, though the $\trans$ function returns only the parent transducer.
+For a pair of nodes, there may be many different pairs of ancestor transducers with compatible iteration sizes.
+In general, the pair of nodes can be fused together if \emph{any} pair of ancestor transducers with compatible iterations sizes are fused together.
+Because fusion is transitive, we can express this by requiring the pair of nodes to be fused with the closest pair of ancestors only.
 To fuse a combinator with its ancestor, we must also fuse the combinator with all the nodes in the path between the combinator and its ancestor.
-In the definition of $parents$, we find the closest ancestors because it allows the most fusion; finding the furthest ancestors would be more restrictive, as it would also require fusing the inputs with any other ancestor transducers between the input combinators and the furthest ancestors.
+In the definition of $\parents$, we find the closest ancestors because it allows the most fusion; finding the furthest ancestors would be more restrictive, as it would also require fusing the inputs with any other ancestor transducers between the input combinators and the furthest ancestors.
 % In the original publication of this work \citep{robinson2014fusing}, we only allowed fusion when there was a single pair of ancestors.
 
+
 In the previous \Hs/normalize2/ example, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
-The two folds have different iteration sizes, and their parents are $parents(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
+The two folds have different iteration sizes, and their parents are $\parents(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
 The parents \Hs/sum1/ and \Hs/gts/ both consume the input \Hs/xs/ and have the same iteration size.
 In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, we require that: \Hs@sum1@ and \Hs@gts@ are fused together; \Hs@sum1@ and \Hs@sum1@ are fused together, which is trivial as fusion is reflexive;  and \Hs@gts@ and \Hs@sum2@ are fused together.

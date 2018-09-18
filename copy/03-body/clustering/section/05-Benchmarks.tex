@@ -23,7 +23,7 @@ Quadtree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.7
 This section discusses three representative benchmarks, and gives the full ILP program of the first benchmark.
 These benchmarks highlight the main differences between our fusion mechanism and related work.
 The runtimes of each benchmark are summarized in \cref{clustering:f:BenchResults}.
-We report times for: the unfused case, where each operator is assigned to its own cluster; the clustering implied by pull-based stream fusion~\cite{coutts2007stream}; the clustering chosen by Megiddo~\cite{megiddo1998optimal}; and the clustering chosen by our system. 
+We report times for: the unfused case, where each operator is assigned to its own cluster; the clustering implied by pull-based stream fusion~\cite{coutts2007stream}; the clustering chosen by \cite{megiddo1998optimal}; and the clustering chosen by our system. 
 
 For each benchmark, we report the runtimes of hand-fused C code based on the clustering determined by each algorithm.
 Although in a production implementation of clustering we would use the process fusion from \cref{chapter:process:processes} to fuse each cluster, we report on hand-fused C code to provide a fair comparison to related work.
@@ -46,7 +46,6 @@ The hand-fused implementations of the benchmark programs are available at \url{h
 
 
 % -----------------------------------------------------------------------------
-\pagebreak
 \subsection{Normalize2}
 To demonstrate the ILP formulation, we will use the \Hs@normalize2@ example from \cref{clustering:s:Introduction}, repeated here:
 \begin{haskell}

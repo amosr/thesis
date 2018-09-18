@@ -4,7 +4,7 @@
 \begin{center}
 \includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex2-normalizeInc.pdf}
 \end{center}
-\caption{Possible clusterings for \Hs/normalizeInc/}
+\caption{Two clusterings for \Hs/normalizeInc/}
 \label{clustering:f:normalizeInc}
 \end{figure}
 
@@ -32,7 +32,7 @@ Which option is better?
 On current hardware, we generally expect the cost of memory access to dominate runtime.
 The first clustering in \cref{clustering:f:normalizeInc} requires two reads from array \Hs@xs@ and one write to array \Hs@ys@.
 The second clustering requires a single fused read from \Hs@xs@, one write to \Hs@incs@, a read back from \Hs@incs@ and a final write to \Hs@ys@.
-From the size constraints of the program, we know that all intermediate arrays have the same size, so we expect the first clustering will peform better as it only needs three array accesses instead of four. 
+From the size constraints of the program, we know that all intermediate arrays have the same size, so we expect the first clustering will peform better as it only needs three array accesses per element in the input array, instead of four. 
 
 For small programs such as \Hs@normalizeInc@, it is possible to naively enumerate all possible clusterings, select just those that are \emph{valid} with respect to fusion-preventing edges, and choose the one that maximises a cost metric such as the number of array accesses needed.
 However, as the program size increases the number of possible clusterings becomes too large to naively enumerate.
@@ -47,16 +47,18 @@ This general approach was first fully described by \citet{megiddo1998optimal}; o
 
 % -----------------------------------------------------------------------------
 \subsection{Dependency graphs}
-A dependency graph represents the data dependencies of the program to be fused, and we use it as an intermediate stage when producing linear constraints for the ILP problem. The dependency graph contains enough information to determine the possible clusterings of the input program, while abstracting away from the exact operators used to compute each intermediate array. The rules for producing dependency graphs are shown in \cref{clustering:f:DependencyGraph}.
+A dependency graph represents the data dependencies of the program to be fused, and we use it as an intermediate stage when producing linear constraints for the ILP problem.
+The dependency graph contains enough information to determine the possible clusterings of the input program, while abstracting away from the exact operators used to compute each intermediate array.
+The rules for producing dependency graphs are shown in \cref{clustering:f:DependencyGraph}.
 
 \input{copy/03-body/clustering/figures/ILP-dependency-graph.tex}
 
-Each binding in the source program becomes a node in the dependency graph.
-For each intermediate variable, we add a directed edge from the binding that produces a value to all bindings that consume it.
+Each binding in the source program becomes a node ($V$) in the dependency graph.
+For each intermediate variable, we add a directed edge ($E$) from the binding that produces a value to all bindings that consume it.
 Each edge is also marked as either \emph{fusible} or \emph{fusion-preventing}.
 Fusion-preventing edges are used when the producer must finish its execution before the consumer node can start.
 For example, a \Hs@fold@ operation must complete execution before it can produce the scalar value needed by its consumers.
-Conversely, the \Hs@map@ operation produces an output value for each value it consumes, and so its edge is marked as fusible. 
+Conversely, the \Hs@map@ operation produces an output value for each value it consumes; as the values are produced incrementally, its edge is marked as fusible. 
 
 The \Hs@gather@ operation is a hybrid: it takes an indices array and an elements array, and for each element in the indices array returns the corresponding data element.
 This means that \Hs/gather/ can be fused with the operation that produces its indices, but not the operation that produces its elements --- because those are accessed in a random-access manner. 
@@ -75,14 +77,16 @@ The variables involved in these constraints are split into three groups, shown i
 \parbox{0cm}{
 \begin{tabbing}
 M   \= M \= MMMMMM \= MM \= \kill
-$x$   \> @:@  \> $node \times node$ \> $\to$ \> $\mathbb{B}$ \\
-$\pi$ \> @:@  \> $node$             \> $\to$ \> $\mathbb{R}$ \\
-$c$   \> @:@  \> $node$             \> $\to$ \> $\mathbb{B}$
+$x$   \> @:@  \> $V \times V$ \> $\to$ \> $\mathbb{B}$ \\
+$\pi$ \> @:@  \> $V$             \> $\to$ \> $\mathbb{R}$ \\
+$c$   \> @:@  \> $V$             \> $\to$ \> $\mathbb{B}$
 \end{tabbing}
 }
 \caption{Definition of variables in the integer linear program}
 \label{fig:clustering:ilp-vars}
 \end{figure}
+
+% \subsubsection{Fused together}
 
 The first group of variables, $x$, is parameterised by a pair of nodes from the dependency graph.
 For each pair of nodes with indices $i$ and $j$, we use a boolean variable $x_{i,j}$, which indicates whether those two nodes are fused.
@@ -91,11 +95,12 @@ Using $0$ for the fused case means that the objective function can be a weighted
 The values of these variables are used to construct the final clustering, such that $\forall i,j.\ x_{i,j} = 0 \iff \mathit{cluster}(i) = \mathit{cluster}(j)$.
 % This group of variables is equivalent to $x$ in \citet{megiddo1998optimal}.
 
+% \subsubsection{Topological ordering}
 The second group of variables in \cref{fig:clustering:ilp-vars}, $\pi$, is parameterised by a single node.
 This group of variables is used to ensure that the clustering is acyclic.
 An acyclic clustering is necessary to be able to execute the resulting clustering: we need to ensure that for each node in the graph, the dependencies of that node can be executed before the node itself.
-For each node $i$, we associate a real $\pi_i$ such that every node $j$ that depends on $i$, and is not fused with $i$, we have $\pi_j > \pi_i$.
-Our linear constraints will ensure that if two nodes are fused into the same cluster then their $\pi$ values will be identical --- though nodes in different clusters can also have the same $\pi$ value.
+For each node $i$, we associate a real number $\pi_i$, such that for every node $j$ that depends on $i$ and is not fused with $i$, we have $\pi_j > \pi_i$.
+Our linear constraints will ensure that if two nodes are fused into the same cluster, then their $\pi$ values will be identical --- though nodes in different clusters can also have the same $\pi$ value.
 Here is an example of a cyclic clustering, with the cluster (C1) or (C2) specified on the right:
 \begin{haskell}
   cycle xs  = let ys  = map (+1) xs     -- (C1)
@@ -104,16 +109,17 @@ Here is an example of a cyclic clustering, with the cluster (C1) or (C2) specifi
               in  zs
 \end{haskell}
 
-There is no fusion-preventing edge directly between the \Hs@xs@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@.
-If the \Hs@xs@ and \Hs@zs@ bindings were in the same cluster (C1) and \Hs@sum@ was in cluster (C2), there would be a dependency cycle between (C1) and (C2), and neither could be executed before the other.
+There is no fusion-preventing edge directly between the \Hs@ys@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@.
+If the \Hs@ys@ and \Hs@zs@ bindings were in the same cluster (C1) and \Hs@sum@ was in cluster (C2), there would be a dependency cycle between (C1) and (C2), and neither could be executed before the other.
 We constrain the $\pi$ variables to reject this clustering, by requiring that $\pi_{\Hs@ys@} \le \pi_{\Hs@sum@} < \pi_{\Hs@zs@}$.
 Since $\pi_{\Hs@ys@} < \pi_{\Hs@zs@}$, the two cannot be in the same cluster.
 
 % The $\pi$ group is equivalent to $\pi$ in \citet{megiddo1998optimal}, and $\rho$ in \citet{darte2002contraction}.
 
+% \subsubsection{Array contraction}
 The final group of variables in \cref{fig:clustering:ilp-vars}, $c$, is parameterised by a single node.
 This group of variables is used to help define the cost model encoded by the objective function.
-Each node is assigned a variable $c_i$ that indicates whether the array the associated binding produces is \emph{fully contracted}.
+Each node is assigned a variable $c_i$ that indicates whether the array produced by the associated binding is \emph{fully contracted}.
 When an array is fully contracted, it means that all consumers of that array are fused into the same cluster, so we have $c_i = 0 \iff (\forall (i',j) \in E.\ i = i' \implies x_{i,j} = 0)$.
 In the final program, each successive element of a fully contracted array can be stored in a scalar register, rather than requiring an array register or memory storage. 
 
@@ -130,7 +136,7 @@ These three variable groups are a mixture of the variables from previous work.
 % -----------------------------------------------------------------------------
 \subsection{Linear constraints}
 \label{clustering:s:LinearConstraints}
-The constraints we place on the ILP variables are split into four groups: constraints that ensure the clustering is acyclic; constraints that encode fusion preventing edges; constraints on nodes with different iteration sizes, and constraints involving array contraction. 
+The constraints we place on the integer linear program variables are split into four groups: constraints that ensure the clustering is acyclic; constraints that encode fusion preventing edges; constraints on nodes with different iteration sizes, and constraints involving array contraction. 
 
 % Before showing the optimised version with certain constraints removed (\cref{clustering:s:OptimisedConstraints}), this simpler, unoptimised version is shown. The only difference is that fewer constraints and variables are required in the optimised version, but both versions give the same clustering. This unoptimised version generates clustering constraints and variables for every pair of nodes, regardless of whether they may, in fact, be fused together. Later, we show that certain constraints and variables can be removed when there is a fusion-preventing edge between two nodes.
 
@@ -174,25 +180,26 @@ MMM     \= MMM \= M \= MMM \= M \= MMM \= \kill
                 ~\vee~ \iiter_{\Gamma,C}(j) = \bot$)
 \end{tabbing}
 
-Secondly, if the two nodes have different iteration sizes and no common parent, then they also cannot be fused and we set $x_{i,j} = 1$:
+Secondly, if the two nodes have different iteration sizes and no common ancestors with compatible iteration sizes, then they also cannot be fused and we set $x_{i,j} = 1$:
 \begin{tabbing}
 MMM     \= MMM \= M \= MMM \= M \= MMM \= \kill
         \> $x_{i,j}$   \> $=$   \> $1$          \>       \>     \\
         \> (if $\iiter_{\Gamma,C}(i) \not= \iiter_{\Gamma,C}(j) 
-                ~\wedge~ parents(i,j) = \bot$)
+                ~\wedge~ \concestors(i,j) = \bot$)
 \end{tabbing}
 
-Finally, if the two nodes had different iteration sizes but \emph{do} have parent transducers of the same size, then the two nodes can be fused if they are fused with their respective parents, and the parents themselves are fused:
+Finally, if the two nodes have different iteration sizes but \emph{do} have compatible common ancestors, then the two nodes can be fused if they are fused with their respective concestors, and the concestors themselves are fused:
 \begin{tabbing}
 MMM     \= MMM \= M \= MMM \= M \= MMM \= \kill
         \> $x_{a,A}$   \> $\le$ \> $x_{a,b}$    \>       \>     \\
         \> $x_{b,B}$   \> $\le$ \> $x_{a,b}$    \>       \>     \\
         \> $x_{A,B}$   \> $\le$ \> $x_{a,b}$    \>       \>     \\
         \> (if $\iiter_{\Gamma,C}(a) \not= \iiter_{\Gamma,C}(b) 
-                ~\wedge~ (A,B) \in parents(a,b)$)
+                ~\wedge~ (A,B) \in \concestors(a,b)$)
 \end{tabbing}
 
-This last part is the main difference to existing ILP solutions: we allow nodes with different iteration sizes to be fused when their parent transducers are fused. The actual constraints encode a ``no more fused than'' relationship. For example $x_{a,A} \le x_{a,b}$ means that nodes $a$ and $b$ can be no more fused than nodes $a$ and $A$. 
+This last part is the main difference to existing ILP solutions: we allow nodes with different iteration sizes to be fused when their common ancestor transducers are fused.
+The actual constraints encode a ``no more fused than'' relationship. For example $x_{a,A} \le x_{a,b}$ means that nodes $a$ and $b$ can be no more fused than nodes $a$ and $A$. 
 
 As a simple example, consider fusing an operation on filtered data with its generating filter, as in the folds from \Hs/normalize2/:
 \begin{haskell}
@@ -201,10 +208,10 @@ As a simple example, consider fusing an operation on filtered data with its gene
     sum2 = fold (+) 0  gts
 \end{haskell}
 
-Here, \Hs/sum1/ and \Hs/sum2/ have different iteration sizes, and their ancestor transducers are computed to be $parents(\Hs/sum1/, \Hs/sum2/) = (\Hs/sum1/, \Hs/gts/)$.
+Here, \Hs/sum1/ and \Hs/sum2/ have different iteration sizes, and their compatible common ancestor transducers are computed to be $\concestors(\Hs/sum1/, \Hs/sum2/) = (\Hs/sum1/, \Hs/gts/)$.
 This means that \Hs/sum1/ and \Hs/sum2/ may only be fused together if three requirements are satisfied: \Hs/sum1/ is fused with \Hs/sum1/ (trivial), \Hs/sum2/ is fused with \Hs/gts/, and \Hs/sum1/ is fused with \Hs/gts/.
 
-% Here, $parents(gts,sum2) = \{gts, gts\}$. This generates spurious, but still valid, constraints that $gts$ must be fused with $gts$ and $gts$ must be fused with $sum2$, in order for $gts$ and $sum2$ to be fused together. While these constraints are unnecessary in this case, they are harmless.
+% Here, $\concestors(gts,sum2) = \{gts, gts\}$. This generates spurious, but still valid, constraints that $gts$ must be fused with $gts$ and $gts$ must be fused with $sum2$, in order for $gts$ and $sum2$ to be fused together. While these constraints are unnecessary in this case, they are harmless.
 
 % While it may seem like these constraints should be implied by transitivity of clustering, all clustering variables are used for the objective function.
 
@@ -278,7 +285,7 @@ The integer linear program including the objective function is shown in \cref{fi
 The integer linear program defined in the previous section includes more constraints than strictly necessary to define the valid clusterings.
 If two nodes have a path between them which includes a fusion preventing edge, then we know up-front that they must be placed in different clusters.
 \Cref{fig:clustering:possible} defines the function $\possible(a,b)$, which determines whether there is any possibility that the two nodes $a$ and $b$ can be fused.
-Similarly, the function $\possible'(a, b)$ checks whether there is any possibility that the parents of $a$ and $b$ may be fused.
+Similarly, the function $\possible'(a, b)$ checks whether there is any possibility that the compatible common ancestors of $a$ and $b$ may be fused.
 
 \begin{figure}
 \begin{tabbing}
@@ -289,7 +296,7 @@ $\possible(a,b) = \forall p \in path(a,b) \cup path(b,a).\ \fusionpreventing \no
 $\possible' : \name \times \name \to \mathbb{B}$ \\
 MMMMMMx        \= M    \= \kill
 $\possible'(a,b)$ 
-        \> $=$   \>$\exists A, B.\ (A,B) \in parents(a,b) \wedge \possible(a,b)$ \\
+        \> $=$   \>$\exists A, B.\ (A,B) \in \concestors(a,b) \wedge \possible(a,b)$ \\
         \> $\wedge$ \> $\possible(A,a) \wedge \possible(B,b) \wedge \possible(A,B)$
 \end{tabbing}
 \caption{Definition of $\possible$ function for checking fusion-preventing paths}
@@ -327,7 +334,7 @@ Subject to \> $-N \cdot x_{i,j}$ \> $\le$ \> $\pi_j - \pi_i$ \> $\le$ \> $N \cdo
            \> $x_{j',j}$   \> $\le$ \> $x_{i,j}$        \>       \>            \\
            \> $x_{i',j'}$   \> $\le$ \> $x_{i,j}$        \>       \>            \\
            \> (if $\iiter_{\Gamma,C}(i) \not= \iiter_{\Gamma,C}(j) \wedge \possible'(i,j)$ \\
-           \> \> $\wedge~parents(i,j) = \{(i',j')\}$) 
+           \> \> $\wedge~\concestors(i,j) = \{(i',j')\}$) 
 \\[0.5ex]
            \> $x_{i,j}$    \> $=$   \> $1$             \>       \>            \\
            \> (if $\iiter_{\Gamma,C}(i) \not= \iiter_{\Gamma,C}(j) \wedge \neg \possible'(i,j)$) 

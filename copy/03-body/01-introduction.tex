@@ -18,14 +18,16 @@ The type system of Icicle guarantees that well-typed query programs have the sam
 % Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 
-However, push streams generally do not support computations with multiple inputs except for two cases: firstly, non-deterministically merging two streams; and secondly, in some circumstances appending streams --- as we shall see in \cref{taxonomy/push}.
+However, push streams generally do not support computations with multiple inputs except for two cases: first, non-deterministically merging two streams; and second, in some circumstances appending streams --- as we shall see in \cref{taxonomy/push}.
 As an alternative to push streams, Kahn process networks~\citep{kahn1976coroutines} support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant runtime overhead.
 In \cref{s:Fusion} we describe \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
-This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and the synchronised product operator (\cref{related/synchronised-product}), which is generally used in the context of proving properties of concurrent processes, rather than as an optimisation.
+This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and the synchronised product operator (\cref{related/synchronised-product}), which is generally used in the context of verifying properties of concurrent processes and model checking, rather than as an optimisation.
 
-Streaming programs are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
-We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
+If the input data is small enough to fit in memory as an array, the cost of reading the data multiple times becomes less prohibitive, but we would still like to read the data as few times as possible.
+% Streaming operations have a local view of the input data, and can only see one element at a time.
+% are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
+% We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
 For programs requiring multiple passes over the input, there are generally many different ways to divide the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each stream operation among the different passes.
 The choice of clustering affects runtime performance.
@@ -51,9 +53,18 @@ This thesis makes the following contributions:
 \item[Modal types to ensure efficiency and correctness:]
 if, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
 The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, as well as ensuring that the stream query has the same semantics as if it were operating over arrays.
-At the time of writing in 2018, Icicle is currently running in production in the machine-learning pipeline at Ambiata.
+Icicle runs in production in the machine-learning pipeline at Ambiata.
+For one particular client, we receive thirty gigabtyes of uncompressed new data every day, over which we compute more than four thousand queries in a single pass.
+The input data is compressed and kept indefinitely.
+When creating a new machine-learning model, Icicle is used to provide training data by computing queries over the five terabytes of compressed historical data.
+% Icicle is also used to provide training data for machine learning models, in which case the history of all input data must be kept.
+% The history of all input data is kept for training machine learning models, and takes five terabytes
 Icicle is described in \cref{part:icicle}.
-\TODO{get production stats}
+
+% Pure compute:
+% 1024 machines, 7 minutes per machine (5tb input)
+% Compute + scatter + *:
+% 100x r3.4xlarge instances to run 1024 query tasks, taking 4.5 hours each
 
 \item[Process fusion:]
 a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple queries, and user-defined combinators.
@@ -66,7 +77,7 @@ a proof of correctness for the above-mentioned fusion system, mechanised in the 
 The proof states that when two processes are fused together, the fused process computes the same result as the original processes.
 The proof is described in \cref{s:Proofs}.
 
-\item[Clustering for rewindable streams:]
+\item[Clustering for array-backed streams:]
 a clustering algorithm for streaming transformers, which supports size-changing operations such as filter.
 This algorithm converts a set of streaming transformers to an Integer Linear Program to be solved externally.
 The clustering algorithm is described in \cref{clustering}.

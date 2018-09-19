@@ -1,12 +1,12 @@
 \chapter{Introduction}
 \label{introduction}
 To learn interesting things from large datasets, we generally want to perform lots of queries.
-When our query is simple and our data is big, we might spend more time reading the data than we spend computing the answer.
+When each query is simple and our data is big, we might spend more time reading the data than we spend computing the answer.
 In this case, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
 
 When querying datasets that do not fit in memory or disk, it can be hard to ensure that our query program's internal state will fit in memory.
-One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\cref{taxonomy}), which we can write by composing stream transformers together.
-Composing stream transformers together can add some performance overhead, which is usually removed by \emph{fusing} together multiple transformers into a single transformer.
+One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\cref{taxonomy}), by composing stream transformers together.
+Composing stream transformers naively can add some performance overhead, which is then usually removed by \emph{fusing} multiple transformers into a single transformer.
 
 This thesis describes low-overhead streaming models for executing multiple queries at a time.
 We focus on two streaming models: push streams (\cref{taxonomy/push}), and Kahn process networks (\cref{taxonomy/kpn}, \cref{chapter:process:processes}).
@@ -18,11 +18,11 @@ The type system of Icicle guarantees that well-typed query programs have the sam
 % Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 
-However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams, and in some circumstances appending streams, as we shall see in \cref{taxonomy/push}.
-As an alternative to push streams, Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant runtime overhead.
-In \cref{s:Fusion} we introduce \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
+However, push streams generally do not support computations with multiple inputs except for two cases: firstly, non-deterministically merging two streams; and secondly, in some circumstances appending streams --- as we shall see in \cref{taxonomy/push}.
+As an alternative to push streams, Kahn process networks~\citep{kahn1976coroutines} support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant runtime overhead.
+In \cref{s:Fusion} we describe \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
-This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and synchronised product of processes (\cref{related/synchronised-product}), which is generally used as a proof technique rather than an optimisation.
+This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and the synchronised product operator (\cref{related/synchronised-product}), which is generally used in the context of proving properties of concurrent processes, rather than as an optimisation.
 
 Streaming programs are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
 We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.

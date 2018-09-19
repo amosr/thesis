@@ -13,22 +13,26 @@ $$\begin{array}{c}
 Normalize2      & 1.88s & 5      & 1.64s & 4          & 1.82s & 3  & \textbf{1.59s} & \textbf{2}\\
 Closest points  & 3.83s & 7      & 3.33s & 6          & 2.92s & 4  & \textbf{2.92s} & \textbf{4}\\
 Quadtree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.72s} & \textbf{2}\\
+Quickhull       & 0.60s & 4      & 0.40s & 3          & 0.30s & 2  & \textbf{0.21s} & \textbf{1}\\
 \end{tabular}
 
 \end{array}$$
+\TODO{these numbers are partly hand-fused and partly folderol: reimplement all in folderol}
 \caption{Benchmark results}
 \label{clustering:f:BenchResults}
 \end{table}
 
-This section discusses three representative benchmarks, and gives the full ILP program of the first benchmark.
+This section discusses four representative benchmarks, and gives the full ILP program of the first benchmark.
 These benchmarks highlight the main differences between our fusion mechanism and related work.
 The runtimes of each benchmark are summarized in \cref{clustering:f:BenchResults}.
-We report times for: the unfused case, where each operator is assigned to its own cluster; the clustering implied by pull-based stream fusion~\cite{coutts2007stream}; the clustering chosen by \cite{megiddo1998optimal}; and the clustering chosen by our system. 
+We report times and the number of clusters for: the unfused case, where each operator is assigned to its own cluster; the clustering implied by pull-based stream fusion~\cite{coutts2007stream}; the clustering chosen by \citet{megiddo1998optimal}; and the clustering chosen by our system. 
 
-For each benchmark, we report the runtimes of hand-fused C code based on the clustering determined by each algorithm.
-Although in a production implementation of clustering we would use the process fusion from \cref{chapter:process:processes} to fuse each cluster, we report on hand-fused C code to provide a fair comparison to related work.
-As mentioned in~\citet{lippmeier2013data}, the current Haskell stream fusion mechanism introduces overhead in terms of a large number of duplicate loop counters, which increases register pressure unnecessarily.
-Hand-fusing all code and compiling it with the same compiler (GCC) isolates the true cost of the various clusterings from low-level differences in code generation.
+For each benchmark, we compute the different clusterings, and compile each cluster using the process fusion implementation described in \cref{s:Benchmarks}.
+Using the same fusion algorithm isolates the true cost of the various clusterings from low-level differences in code generation.
+% report the runtimes of hand-fused C code based on the clustering determined by each algorithm.
+% Although in a production implementation of clustering we would use the process fusion from \cref{chapter:process:processes} to fuse each cluster, we report on hand-fused C code to provide a fair comparison to related work.
+% As mentioned in~\citet{lippmeier2013data}, the current Haskell stream fusion mechanism introduces overhead in terms of a large number of duplicate loop counters, which increases register pressure unnecessarily.
+% Hand-fusing all code and compiling it with the same compiler (GCC) isolates the true cost of the various clusterings from low-level differences in code generation.
 
 We have used both GLPK and CPLEX as external ILP solvers.
 For small programs such as \Hs@normalizeInc@, both solvers produce solutions in under 100ms.
@@ -60,7 +64,7 @@ normalize2 xs
 \end{haskell}
 
 We use the ILP formulation with fusion-preventing path optimisation from \cref{clustering:s:OptimisedConstraints}.
-First, we calculate $\possible$ to find the nodes which have no fusion-preventing path between them.
+First, we calculate the $\possible$ function to find the nodes which have no fusion-preventing path between them.
 The sets of nodes which can potentially be fused together are as follows:
 \[ \{ \{sum1, gts, sum2\}
  , \{sum1, ys2\}
@@ -68,7 +72,7 @@ The sets of nodes which can potentially be fused together are as follows:
  , \{ys1, ys2\} \} \]
 
 The complete ILP program is shown in \cref{fig:clustering:normalize2-ilp}.
-In the objective function the weights for $x_{sum1, sum2}$ and $x_{sum2, ys1}$ are both only 1, because they do not share any input arrays.
+In the objective function the weights for $x_{sum1, sum2}$ and $x_{sum2, ys1}$ are both only 1, because the respective combinators do not share any input arrays.
 
 \begin{figure}
 \begin{tabbing}
@@ -116,18 +120,18 @@ $\pi_{ys1 },~ \pi_{ys2 }$
 $c_{gts},~ c_{ys1},~ c_{ys2}$           
     \> $=$ \> $0$
 \end{tabbing}
-\caption{A solution to the integer linear program for \Hs/normalize2/}
+\caption{A minimal solution to the integer linear program for \Hs/normalize2/}
 \label{fig:clustering:normalize2-ilp-sol}
 \end{figure}
 
 One minimal solution to the integer linear program for \Hs/normalize2/ is given in \cref{fig:clustering:normalize2-ilp-sol}.
 This minimal solution is not unique, though in this case the only other minimal solutions use different $\pi$ values, and denote the same clustering.
 Looking at just the non-zero variables in the objective function, the value is $25 \cdot x_{sum1,ys2} + 25 \cdot x_{gts,ys1} + 1 \cdot x_{sum2, ys1} = 51$.
-For illustrative purposes, note that objective function could be reduced by setting $x_{sum1,ys2} = 0$ (fusing $sum1$ and $ys1$), but this conflicts with the other constraints.
+For illustrative purposes, note that the objective function could be reduced by setting $x_{sum1,ys2} = 0$ (fusing $sum1$ and $ys1$), but this conflicts with the other constraints.
 Since $x_{sum1, sum2} = 0$, we require that $\pi_{sum1} = \pi_{sum2}$, as well as \mbox{$\pi_{sum2} < \pi_{ys2}$}.
 These constraints cannot be satisfied, so a clustering that fused $sum1$ and $ys2$ would not also permit $sum1$ and $sum2$ to be fused.
 
-We will now compare the clustering produced by our system, with the one implied by pull-based stream fusion.
+We will now compare the clustering produced by our system with the one implied by pull-based stream fusion.
 As we saw in \cref{taxonomy/pull}, pull streams do not support distributing an input stream among multiple consumers; likewise, stream fusion does not support fusing an input with multiple consumers into a single loop.
 % , or fuse operators that are not in a producer-consumer relationship.
 The corresponding values of the $x_{ij}$ variables are:
@@ -196,9 +200,10 @@ closestPoints pts
 \end{haskell}
 
 The closest points implementation is shown in \cref{figs:clustering:bench:closest-points}, with our clustering described in the comments.
+To compute the clustering of this program, we ignore the base case for small arrays and only look at the recursive case.
 Our formulation does not directly support the \Hs/length/ operator; we encode the operation to compute the \Hs/midy/ midpoint as an \Hs/external/ combinator when performing clustering.
 The two recursive calls are also encoded as \Hs/external/ combinators.
-As the filtered points are passed directly to the recursive call, there is no further opportunity to fuse them, and our clustering is the same as returned by Megiddo's algorithm.
+As the filtered points in \Hs/aboves/ and \Hs/belows/ are passed directly to the recursive call, there is no further opportunity to fuse them, and our clustering is the same as returned by Megiddo's algorithm.
 However, unlike stream fusion, our clustering fuses the filter combinators for arrays \Hs/aboves/ and \Hs/belows/ into a single loop, as well as fusing the filter combinators for arrays \Hs/aboveB/ and \Hs/belowB/.
 
 
@@ -206,20 +211,20 @@ However, unlike stream fusion, our clustering fuses the filter combinators for a
 \subsection{Quadtree}
 The Quadtree benchmark recursively builds a two-dimensional space partitioning tree from an array of points.
 We first find the initial bounding-box that all the points fit into, by computing the minimum and maximum of both X and Y axes.
-Then, at each step, the bounding-box is split into four quadrants, and each point in the array is assigned to its corresponding quadrant.
+Then, at each recursive step, the bounding-box is split into four quadrants, and each point in the array is placed in the array for its corresponding quadrant.
 
 \begin{haskell}[float,caption=Quadtree benchmark,label=figs:clustering:bench:quadtree]
 quadtree :: Array Point -> Quadtree
 quadtree pts = go pts initialBounds
  where
   initialBounds
-   = let -- (external) Deconstruct points into axes
-         (xs, ys) = unzip pts
-         -- (cluster 1.1) Compute initial bounds
-         x1       = minimum xs
-         x2       = maximum xs
-         y1       = minimum ys
-         y2       = maximum ys
+   = let -- (cluster 1.1) Compute initial bounds
+         xs = map fst pts
+         ys = map snd pts
+         x1 = minimum xs
+         x2 = maximum xs
+         y1 = minimum ys
+         y2 = maximum ys
      in (x1, y1, x2, y2)
 
   go ins box
@@ -242,14 +247,14 @@ quadtree pts = go pts initialBounds
 \end{haskell}
 
 The Quadtree implementation is shown in \cref{figs:clustering:bench:quadtree}.
-The \Hs/initialBounds/ definition deconstructs the input points into two arrays containing the X and Y axes using the \Hs/unzip/ operation.
-The Vector library, which implements stream fusion, supports constant-time \Hs/unzip/ with a struct-of-arrays representation for unboxed arrays of pairs.
-For the benchmark, we also implement \Hs/unzip/ as a constant-time operation.
+The \Hs/initialBounds/ definition deconstructs the input points into two arrays containing the X and Y axes using two \Hs/map/ operations.
 The \Hs/minimum/ and \Hs/maximum/ operations are implemented as folds.
-Our clustering for \Hs/initialBounds/ fuses all four folds into a single loop, as does Megiddo's clustering.
-Stream fusion requires a separate loop for each fold, with four loops in total.
+Our clustering for \Hs/initialBounds/ fuses all six operations into a single loop, as does Megiddo's clustering.
+Stream fusion requires a separate loop for each fold, and would require a separate loop for each \Hs/map/ operation, as each result is used twice.
+The Vector library, which implements stream fusion, supports constant-time \Hs/unzip/ by using a struct-of-arrays representation for unboxed arrays of pairs.
+To provide a fair comparison, we replace the \Hs/map/ operations with constant-time \Hs/unzip/ in the stream fusion clustering for \Hs/initialBounds/, leading to four loops in total.
 
-The \Hs/go/ function performs the recursive loop over the points.
+The \Hs/go/ function performs the recursive loop over the points array.
 First, it checks whether the input array is empty or contains a single unique point, and returns a leaf node if so.
 Otherwise, the bounding-box is split into its four quadrants, and the points are partitioned into an array for each quadrant.
 Our clustering for \Hs/go/ fuses all four filters into a single loop, as does Megiddo's clustering.
@@ -261,12 +266,14 @@ Stream fusion requires a separate loop for each filter, with four loops in total
 We previously benchmarked the Quickhull algorithm in the process fusion benchmarks, in \cref{s:Benchmarks}.
 \Cref{figs:clustering:bench:filterMax} shows the implementation of \Hs/filterMax/, which forms the core of the Quickhull algorithm.
 In our previous benchmark, we saw that stream fusion was unable to fuse \Hs/filterMax/ into a single loop because the \Hs/ptsAnn/ array is used twice.
-We implemented two Vector versions of \Hs/filterMax/: one that used a manifest array for \Hs/ptsAnn/ and shared the array, and another that recomputed the distances for both consumers.
+Stream fusion only fuses the combinators for \Hs/aboveAnn/ and \Hs/above/ together, requiring three loops in total.
+% We previously compared two Vector versions of \Hs/filterMax/: one that used a manifest array for \Hs/ptsAnn/ and shared the array, and another that recomputed the distances for both consumers.
+% For this benchmark, we compare against the shared array clustering for stream fusion, as it is the clustering for stream fusion.
 
-Our clustering for \Hs/filterMax/ is a single cluster with all combinators fused together.
-In the previous benchmarks, we saw that this clustering, when executed as a fused process network, was faster than both Vector implementations.
-Megiddo's clustering for \Hs/filterMax/ requires a separate loop for the \Hs/above/ combinator, as it is looping over the result of a filter.
-We have not implemented Megiddo's clustering and so do not include the runtime for Quickhull in the results in \cref{clustering:f:BenchResults}; based on our cost model, we expect the runtime to be between the other two clusterings presented in the previous benchmark.
+For \Hs/filterMax/, our clustering algorithm produces a single cluster with all combinators fused together.
+% In the previous benchmarks, we saw that this clustering, when executed as a fused process network, was faster than both Vector implementations.
+Megiddo's clustering for \Hs/filterMax/ requires a separate loop for the \Hs/map/ operation that produces the \Hs/above/ array, as it is looping over the result of a filter.
+% We have not implemented Megiddo's clustering and so do not include the runtime for Quickhull in the results in \cref{clustering:f:BenchResults}; based on our cost model, we expect the runtime to be between the other two clusterings presented in the previous benchmark.
 
 
 

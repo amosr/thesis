@@ -3,29 +3,28 @@
 
 \input{copy/03-body/clustering/style/utils.tex}
 
-This chapter presents a clustering algorithm for scheduling array programs, which can perform multiple passes over input arrays, and introduce intermediate arrays.
-Each cluster is executed as a streaming process network, to be fused by the process fusion algorithm from \cref{chapter:process:processes}.
+This chapter presents a clustering algorithm for scheduling array programs, which may perform multiple passes over input or intermediate arrays.
+% This chapter presents a clustering algorithm for scheduling array programs, which can perform multiple passes over input arrays, and introduce intermediate arrays.
 This work was first published as \citet{robinson2014fusing}.
 
-In the process networks from earlier, all streams are \emph{ephemeral}: once the elements have been read, the elements cannot be recovered unless they are explicitly buffered.
-Input streams such as reading from a network socket are ephemeral, but for array computations where our input streams are backed by arrays stored in memory, the underlying array can be re-read any number of times.
+In the streaming models we have seen so far, all streams are \emph{ephemeral}: once the elements have been read, they cannot be recovered unless they are explicitly buffered.
+Input streams such as reading from a network socket are ephemeral, but arrays stored in memory can be re-read any number of times.
 For array computations, intermediate and output arrays can be stored and re-read as well.
-% To support ephemeral streams and rewindable streams, and treat both types of streams the same, the definition of process networks in \cref{chapter:process:processes} restricted the streaming programs to a single pass over the input.
 Array computations that perform multiple passes over input or intermediate arrays can be executed as multiple streaming programs.
-Each pass is executed as its own streaming program, with the input streams read from arrays, and the output streams written to arrays.
-For these array computations, we perform \emph{clustering} to determine how many passes to perform, and how to schedule each stream operation among the different passes.
+We execute each pass as its own streaming process network, fused by the process fusion algorithm from \cref{chapter:process:processes}, with the input streams being read from arrays, and the output streams written to arrays.
+For a given array computation, we perform \emph{clustering} to determine how many passes to perform, and how to schedule the individual array operations that comprise the array computation among the different passes.
 There are generally many possible clusterings, and the choice of clustering can affect runtime performance.
-To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the least number of traversals of the input.
+To minimise the time spent reading and re-reading the data, we would like to use a clustering with as few as possible array traversals and intermediate arrays.
 We use \emph{integer linear programming} (ILP), a mathematical optimisation technique, to find the best clustering according to our cost model.
 
 The contributions of this chapter are:
 \begin{itemize}
 \item
-We motivate our clustering algorithm by comparing three possible clusterings for an array program involving \Hs/filter/, an example of a \emph{size-changing operator} (\cref{clustering:s:Introduction});
+We identify an opportunity for improvement over existing imperative clustering algorithms, which do not allow \emph{size-changing operators} such as \Hs/filter/ to be assigned to the same cluster as operations that consume the output array (\cref{clustering:s:Introduction});
 
 \item   
-We extend the clustering algorithm of \citet{megiddo1998optimal} and \citet{darte2002contraction}, with support for size-changing operators.
-In our system, size-changing operators can be clustered with operations on both their source stream and output stream, whereas prior work only allows clustering size-changing operators with operations on their source stream (\cref{clustering:s:ILP});
+We extend the clustering algorithm of \citet{megiddo1998optimal} and \citet{darte2002contraction} with support for size-changing operators.
+In our system, size-changing operators can be clustered with operations on both their source array and output array (\cref{clustering:s:ILP});
 
 \item
 We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:

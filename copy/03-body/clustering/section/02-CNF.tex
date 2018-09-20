@@ -33,7 +33,7 @@ The \Hs@gather@ combinator takes an array of elements, an array of indices, and 
 In Haskell, \Hs@gather@ would be implemented as (\Hs@gather arr ixs = map (index arr) ixs@).
 The \Hs@cross@ combinator returns the cartesian product of two arrays. 
 
-The exact form of the worker functions is left unspecified, as it is not important for the discussion.
+The exact form of the worker functions is left unspecified.
 We assume that workers are pure, can at least compute arithmetic functions of their scalar arguments, and index into arrays in the environment.
 We also assume that each CNF program considered for fusion is embedded in a larger host program which handles file IO and the like.
 Workers are additionally restricted so they can only directly reference the \emph{scalar} variables bound by the local CNF program, though they may reference array variables bound by the host program.
@@ -45,5 +45,5 @@ External bindings are explicit \emph{fusion barriers}, which force arrays and sc
 
 Finally, note that \Hs@filter@ is only one example of a size-changing operator.
 We can handle other size-changing operators such as \Hs@slice@ in our framework, but we stick with simple filtering to aid the discussion.
-We discuss how to support other combinators in \cref{clustering:s:FutureWork}.
+We discuss other combinators in \cref{clustering:s:FutureWork}.
 

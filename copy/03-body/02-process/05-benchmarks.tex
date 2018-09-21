@@ -508,59 +508,53 @@ The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to
 \subsection{Partition / append}
 \label{s:Benchmarks:partitionAppend}
 
-The program in \cref{l:bench:partitionAppendFail} partitions an input vector into a vector containing the even-valued elements, and a vector containing the odd-valued elements.
-The two result vectors are then appended together.
-If we try to compile this code with Folderol, we get a compile-time warning:
-
-% Process network after fusion:
-% ()    ->{Folderol.Source.sourceOfVector xs_6989586621679047426}-> $0
-% 
-% $0    ->------------------------(dup2)--------------------------> $4 $5
-%       ->L0
-%         L0 (dup2_L0_0): pull $0 L1 L4
-%         L1 (dup2_L1_0): push $4 L2
-%         L2 (dup2_L2_0): push $5 L3
-%         L3 (dup2_L3_0): drop $0 L0
-%         L4 (dup2_L4_0): done
-% $4 $5 ->--------------(append / filter / filter)----------------> $3
-%       ->L0
-%         L0 (append_L0_0_filter_L0_0_n_0_filter_L0_0_n_0): pull $4 L1 L4
-%         L1 (append_L0_0_filter_L1_0_n_0_filter_L0_0_n_0): bool L3 L2
-%         L2 (append_L0_0_filter_L3_0_n_0_filter_L0_0_n_0): drop $4 L0
-%         L3 (append_L0_0_filter_L3_0_h_0_filter_L0_0_n_0): jump L5
-%         L4 (append_L3_0_filter_L4_0_c_0_filter_L0_0_n_0): pull $5 L6 L9
-%         L5 (append_L1_0_filter_L3_0_h_0_filter_L0_0_n_0): push $3 L2
-%         L6 (append_L3_0_filter_L4_0_c_0_filter_L1_0_n_0): bool L8 L7
-%         L7 (append_L3_0_filter_L4_0_c_0_filter_L3_0_n_0): drop $5 L4
-%         L8 (append_L3_0_filter_L4_0_c_0_filter_L3_0_h_0): jump L10
-%         L9 (append_L6_0_filter_L4_0_c_0_filter_L4_0_c_0): done
-%         L10 (append_L4_0_filter_L4_0_c_0_filter_L3_0_h_0): push $3 L7
-% $3    ->--------------{snkYs_6989586621679047427}---------------> ()
-
-\begin{code}
-bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
-  Maximum process count exceeded:
-    after fusion there are 2 processes, but maximum is 1.
-  Falling back to unbounded communication channels.
-\end{code}
-
-This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering.
-Some sort of buffering is inevitable, because \Hs@append@ requires all the \Hs@evens@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
-To implement this, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
+The program in \cref{l:bench:partitionAppendFail} converts the input vector to a stream, and partitions the stream elements into a stream for the even-valued elements, and a stream for the odd-valued elements.
+The even-valued elements are halved, while the odd-valued elements are doubled.
+The two result streams are then appended together and converted back to a vector.
 
 \begin{lstlisting}[float,label=l:bench:partitionAppendFail,caption=Partition / append fusion failure]
 partitionAppendFailure :: Vector Int -> IO (Vector Int)
 partitionAppendFailure xs = do
   (apps,()) <- vectorSize xs $ \snkApps ->
     $$(fuse $ do
-        x0    <- source [|sourceOfVector xs|]
-        evens <- filter [|even             |] x0
-        odds  <- filter [|odd              |] x0
-        -- Failure: cannot fuse append with both filters
-        apps  <- append evens odds
+        x0           <- source    [|sourceOfVector xs|]
+        (evens,odds) <- partition [|even             |] x0
+        evens'       <- map       [|\i -> i `div` 2  |] evens
+        odds'        <- map       [|\i -> i * 2      |] odds
+        -- Failure: cannot fuse append with partition
+        apps         <- append evens' odds'
         sink apps       [|snkApps          |]$$)
   return apps
 \end{lstlisting}
+
+
+\begin{lstlisting}[float,language=nil,label=l:bench:partitionAppendWarning,caption=Partition / append fusion failure compile-time warning]
+bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
+  Maximum process count exceeded:
+    after fusion there are 2 processes, but maximum is 1.
+  Falling back to unbounded communication channels for remaining processes.
+
+  Input process network (4 processes):
+    ()    ->-{sourceOfVector xs}--> C0
+    C0    ->-----(partition)------> C1 C2
+    C1    ->--------(map)---------> C3
+    C2    ->--------(map)---------> C4
+    C3 C4 ->------(append)--------> C5
+    C5    ->------{snkApps}-------> ()
+  
+  Fused process network (2 processes):
+    ()    ->-{sourceOfVector xs}--> C0
+    C0    ->-----(partition)------> C1 C2
+    C1 C2 ->-(append / map / map)-> C5
+    C5    ->------{snkApps}-------> ()
+\end{lstlisting}
+
+If we try to compile \Hs/partitionAppendFailure/ with Folderol, we get the compile-time warning in \cref{l:bench:partitionAppendWarning}.
+This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering.
+The warning shows the dependencies between processes in the process network, with each process' input channels and output channels.
+Our Template Haskell implementation does not have access to the variable names used by streams or the names of worker functions, so we denote the streams by the placeholder names @C0@ to @C5@.
+Some sort of buffering is inevitable, because \Hs@append@ requires all the \Hs@evens@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
+To implement this, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
 
 In this case, the input stream is backed by a real vector, which means we can, in fact, implement it without introducing an unbounded buffer: we already have the buffer.

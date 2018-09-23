@@ -542,7 +542,7 @@ bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
     C3 C4 ->------(append)--------> C5
     C5    ->------{snkApps}-------> ()
   
-  Fused process network (2 processes):
+  Partially fused process network (2 processes):
     ()    ->-{sourceOfVector xs}--> C0
     C0    ->-----(partition)------> C1 C2
     C1 C2 ->-(append / map / map)-> C5
@@ -550,14 +550,14 @@ bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
 \end{lstlisting}
 
 If we try to compile \Hs/partitionAppendFailure/ with Folderol, we get the compile-time warning in \cref{l:bench:partitionAppendWarning}.
-This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering.
+This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering, and will instead be executed as a partially fused concurrent process network.
 The warning shows the dependencies between processes in the process network, with each process' input channels and output channels.
-Our Template Haskell implementation does not have access to the variable names used by the original program, so we denote the channels by the placeholder names \Hs@C0@ to \Hs@C5@.
+The Template Haskell implementation does not have access to the variable names used by the original program, so communication channels are denoted by the placeholder names \Hs@C0@ to \Hs@C5@.
 The input process network shows a line for each source, sink and process.
 The source \Hs/{sourceOfVector xs}/ produces the \Hs/C0/ stream, named \Hs/x0/ in the original program.
-The \Hs/partition/ process consumes the \Hs/C0/ stream and produces the output channels \Hs/C1/ and \Hs/C2/, respectively named \Hs/evens/ and \Hs/odds/ in the original program.
+The \Hs/partition/ process consumes the \Hs/C0/ stream and produces the output channels \Hs/C1/ and \Hs/C2/, named \Hs/evens/ and \Hs/odds/ respectively in the original program.
 
-The fused process network shows that the \Hs/append/ process has been fused with the two \Hs/map/ processes, but could not be fused with the \Hs/partition/ process.
+The partially fused process network shows that the \Hs/append/ process has been fused with the two \Hs/map/ processes, but could not be fused with the \Hs/partition/ process.
 Some sort of buffering is inevitable for this process network, because \Hs@append@ requires all the \Hs@evens'@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
 To implement this in a single traversal of the input stream, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
@@ -622,26 +622,13 @@ Unfortunately, in this example, the Vector program still splits this array in tw
 \hline
 Folderol & 2-source & 0.42s &   100\% & 8.0e7 & 100\% \\
          & 2-loop   & 0.33s &    79\% & 2.4e8 & 300\% \\
-         & concurrent (partially fused) & 0.85s &   202\% & 2.7e9 & 3,418\% \\
+         & KPN partially fused & 0.53s &   126\% & 3.2e8 & 400\% \\
+         & (2 CPUs, chunk size $10^3$) \\ % & (CPU time 1.09s) \\
+         & KPN unfused         & 0.82s &   195\% & 5.7e8 & 713\% \\
+         & (4 CPUs, chunk size $10^3$) \\ % & (CPU time 2.6s) \\
 Vector   & 2-source & 0.41s &    98\% & 1.6e8 &  200\% \\
          & 2-loop   & 0.31s &    74\% & 1.6e8 &  200\% \\
 \end{tabular}
-% KPN execution:
-%                   chunk size   runtime -N1    runtime -N2   runtime -N4       alloc
-% partially fused            1             -              -             -           -
-%                           10           640              -             -           -
-%                          100           456              -             -           -
-%                         1000           385            220             -           -
-%                        10000           374              -             -           -
-%                       100000           369              -             -           -
-%                      1000000           363              -             -           -
-% unfused                    1          5675           7421             -        5e10
-%                           10             -              -             -           -
-%                          100             -              -             -           -
-%                         1000             -            786           789           -
-%                        10000             -              -             -           -
-%                       100000             -              -             -           -
-%                      1000000             -              -             -           -
 \end{center}
 \caption[PartitionAppend2 benchmark results]{PartitionAppend2 benchmark results}
 \label{table:bench:part2app2}
@@ -649,11 +636,14 @@ Vector   & 2-source & 0.41s &    98\% & 1.6e8 &  200\% \\
 
 \Cref{table:bench:part2app2} shows the runtimes for partitioning and appending an input vector with $10^7$ elements.
 In the results table, the Vector version with two loops is the fastest, but the difference between it and Folderol with two loops is fairly small.
-The Folderol version with two sources uses the least memory - a third of the two-loop Folderol, and a half of the Vector versions.
-The Folderol version with two loops allocates memory for the intermediate \Hs/evens/ and \Hs/odds/ arrays, as well as for the output array.
-The Vector version with two loops allocates memory for the intermediate and output arrays as well, but the Vector implementation of \Hs/partition/ saves some allocation by re-using the same output Vector for both outputs.
-The Vector version with two sources uses the same amount of memory, because the \Hs/append/ function overestimates the amount of memory required to be the sum of the maximum output size of the two filters.
-The partially fused Folderol version, which executes as a concurrent process network, is the slowest and allocates the most memory, because the elements must be allocated .
+The Folderol version with two sources uses the least memory, as it requires no intermediate arrays.
+% The Folderol version with two loops allocates memory for the intermediate \Hs/evens/ and \Hs/odds/ arrays, as well as for the output array.
+% The Vector version with two loops allocates memory for the intermediate and output arrays as well, but the Vector implementation of \Hs/partition/ saves some allocation by re-using the same output Vector for both outputs.
+% The Vector version with two sources uses the same amount of memory, because the \Hs/append/ function overestimates the amount of memory required to be the sum of the maximum output size of the two filters.
+The two concurrent versions are \Hs/partitionAppendFailure/, which was partially fused into the two processes shown in the warning in \cref{l:bench:partitionAppendWarning}, and a version with fusion disabled, which executes as the four original processes.
+We executed with the number of processors ranging from one to four, and the chunk size ranging from $10^0$ to $10^6$; the table shows the execution with the fastest runtime.
+% The extra allocations in the concurrent executions includes the overhead for chunked arrays as well as channel communication.
+These results illustrate a trade-off between memory usage and throughput.
 Sometimes, we are willing to sacrifice lower throughput for lower memory usage, and this decision depends on the context.
 By giving a compile-time warning when fusion fails, we are able to maintain a high level of abstraction, while empowering the author to make these scheduling decisions.
 % The author must explicitly choose when is the right time to reuse an array, when is the right time to introduce a new loop, and when is the right time to introduce intermediate buffers.

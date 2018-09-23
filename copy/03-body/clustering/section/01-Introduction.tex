@@ -76,7 +76,7 @@ In general, a single cluster produced by our algorithm may contain combinators w
 
 % However, many programs \emph{do} contain opportunities for fusion, if we only knew which opportunities to take. The following example offers \emph{several} unique, but mutually exclusive approaches to fusion. \Cref{clustering:f:normalize2-clusterings} on the next page shows some of the possibilities.
 % \begin{code}
-%  normalize2 :: Array Int -> Array Int
+%  normalize2 :: Array Int -> (Array Int, Array Int)
 %  normalize2 xs
 %   = let sum1 = fold   (+)  0   xs
 %         gts  = filter (> 0)    xs

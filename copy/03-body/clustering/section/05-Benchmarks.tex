@@ -10,14 +10,14 @@ $$\begin{array}{c}
                 & \multicolumn{2}{c}{Megiddo} &\multicolumn{2}{c}{\textbf{Ours}} \\
                 & Time & Loops   & Time & Loops      & Time & Loops & Time & Loops   \\
 \hline
-Normalize2      & 1.88s & 5      & 1.64s & 4          & 1.82s & 3  & \textbf{1.59s} & \textbf{2}\\
-Closest points  & 3.83s & 7      & 3.33s & 6          & 2.92s & 4  & \textbf{2.92s} & \textbf{4}\\
-Quadtree        & 5.22s & 8      & 5.22s & 8          & 4.72s & 2  & \textbf{4.72s} & \textbf{2}\\
-Quickhull       & 0.60s & 4      & 0.40s & 3          & 0.30s & 2  & \textbf{0.21s} & \textbf{1}\\
+Normalize2      & 0.37s & 5      & 0.31s & 4          & 0.34s & 3  & \textbf{0.28s} & \textbf{2}\\
+Closest points  & 7.34s & 7      & 6.86s & 6          & 6.33s & 4  & \textbf{6.33s} & \textbf{4}\\
+Quadtree        & 0.25s & 8      & 0.25s & 8          & 0.11s & 2  & \textbf{0.11s} & \textbf{2}\\
+%                   25ms                                                   11ms
+Quickhull       & 0.43s & 4      & 0.39s & 3          & 0.28s & 2  & \textbf{0.21s} & \textbf{1}\\
 \end{tabular}
 
 \end{array}$$
-\TODO{these numbers are partly hand-fused and partly folderol: reimplement all in folderol}
 \caption{Benchmark results}
 \label{clustering:f:BenchResults}
 \end{table}
@@ -53,7 +53,7 @@ The hand-fused implementations of the benchmark programs are available at \url{h
 \subsection{Normalize2}
 To demonstrate the ILP formulation, we will use the \Hs@normalize2@ example from \cref{clustering:s:Introduction}, repeated here:
 \begin{haskell}
-normalize2 :: Array Int -> Array Int
+normalize2 :: Array Int -> (Array Int, Array Int)
 normalize2 xs
  = let sum1 = fold   (+)  0   xs
        gts  = filter (>   0)  xs
@@ -181,7 +181,7 @@ closestPoints pts
  = closestPointsNaive pts
  | otherwise
  = let -- (external) Midpoint
-       midy    = fold (\s (x,y) -> s + y) pts / length pts
+       midy    = fold (\s (x,y) -> s + y) 0 pts / length pts
        -- (cluster 1) Filter above and below
        aboves  = filter (above midy) pts
        belows  = filter (below midy) pts

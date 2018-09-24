@@ -1,18 +1,19 @@
 \CHAPTERX{Abstract}
-To learn interesting things from large datasets, we generally want to perform lots of queries.
-If we compute each query separately, we may spend more time reading the data than we spend computing the answer.
-Instead of computing each query separately, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
+To learn interesting things from a large dataset, we generally want to perform lots of queries.
+If we perform each query separately, we may spend more time reading and re-reading the same dataset than we spend computing the answer.
+Instead of performing each query separately, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
 
 Two streaming models for executing multiple queries at a time are push streams and Kahn process networks.
 
-Push streams can execute multiple queries at a time, but these queries can be unwieldy to write as they must be constructed ``back-to-front''.
+Push streams can be used to execute multiple queries at a time, but queries using push streams can be unwieldy to write as they must be constructed ``back-to-front''.
 We introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar array-based semantics, while retaining the execution strategy of push streams.
-The type system of Icicle guarantees that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together.
+The type system of Icicle guarantees that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input data can be executed together.
 
 However, push streams do not support computations with multiple inputs except for non-deterministically merging two streams.
-Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which introduce significant overhead.
+Kahn process networks support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant overhead.
 We introduce a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
-This fusion method generalises previous work on stream fusion and demonstrates the connection between fusion and synchronised product of processes, which is generally used as a proof technique rather than an optimisation.
+This fusion method generalises previous work on stream fusion and demonstrates the connection between fusion and the synchronised product operator, which is generally used in the context of verification and model checking, rather than as an optimisation.
 
+\TODO{mention clustering}
 

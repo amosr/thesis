@@ -151,7 +151,7 @@ filterMaxFolderol l ps = do
       above' <- map    [|fst                    |] above
       maxim  <- maxBy  [|compare `on` snd       |] annot
       sink maxim       [|snkMaxim               |]
-      sink above'      [|snkAbove               |]$$)
+      sink above'      [|snkAbove               |])
   return (fst maxim, above)
 \end{lstlisting}
 
@@ -316,7 +316,7 @@ compressor vecIns = do
         roots   <- root      means
         gains   <- transfer  roots
         output  <- multiply  input    gains
-        sink output          [|snkOut|]$$)
+        sink output          [|snkOut|])
   return vecOut
 
 -- Stream transformers
@@ -386,7 +386,7 @@ compressorLop vecIns = do
         roots   <- root      means
         gains   <- transfer  roots
         output  <- multiply  input    gains
-        sink out             [|snkOut|]$$)
+        sink out             [|snkOut|])
   return vecOut
 \end{lstlisting}
 
@@ -438,7 +438,7 @@ append2 fpIn1 fpIn2 fpOut = do
       count <- fold   [|\c _ -> c + 1|] [|0|] aps
 
       sink count      [|snkCount               |]
-      sink aps        [|sinkFileOfLines fpOut  |]$$)
+      sink aps        [|sinkFileOfLines fpOut  |])
   return count
 \end{lstlisting}
 \begin{table}
@@ -479,7 +479,7 @@ part2 fpIn1 fpOut1 fpOut2 = do
       sink c1                [|snkC1                 |]
       sink c2                [|snkC2                 |]
       sink o1s               [|sinkFileOfLines fpOut1|]
-      sink o2s               [|sinkFileOfLines fpOut2|]$$)
+      sink o2s               [|sinkFileOfLines fpOut2|])
   return (c1, c2)
 \end{lstlisting}
 \begin{table}
@@ -524,7 +524,7 @@ partitionAppendFailure xs = do
         evens'       <- map       [|\i -> i `div` 2  |] evens
         odds'        <- map       [|\i -> i * 2      |] odds
         apps         <- append evens' odds'
-        sink apps       [|snkApps          |]$$)
+        sink apps                 [|snkApps          |])
   return apps
 \end{lstlisting}
 
@@ -545,7 +545,7 @@ bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
   Partially fused process network (2 processes):
     ()    ->-{sourceOfVector xs}--> C0
     C0    ->-----(partition)------> C1 C2
-    C1 C2 ->-(append / map / map)-> C5
+    C1 C2 ->-(map / map / append)-> C5
     C5    ->------{snkApps}-------> ()
 \end{lstlisting}
 
@@ -578,7 +578,7 @@ partitionAppend2Source xs = do
         evens'       <- map    [|\i -> i `div` 2  |] evens
         odds'        <- map    [|\i -> i * 2      |] odds
         apps         <- append evens' odds'
-        sink apps       [|snkApps          |]$$)
+        sink apps       [|snkApps          |])
   return apps
 \end{lstlisting}
 
@@ -598,13 +598,13 @@ partitionAppend2Loop xs = do
         evens'       <- map       [|\i -> i `div` 2  |] evens
         odds'        <- map       [|\i -> i * 2      |] odds
         sink evens'               [|snkEvens'        |]
-        sink odds'                [|snkOdds'         |]$$)
+        sink odds'                [|snkOdds'         |])
   (apps,()) <- vectorSize xs $ \snkApps ->
     $$(fuse $ do
         evens' <- source    [|sourceOfVector evens'V |]
         odds'  <- source    [|sourceOfVector odds'V  |]
         apps   <- append evens' odds'
-        sink apps           [|snkApps                |]$$)
+        sink apps           [|snkApps                |])
   return apps
 \end{lstlisting}
 

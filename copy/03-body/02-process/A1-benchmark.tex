@@ -99,7 +99,7 @@ quickhull fPivots fFilterMax ps0
 %       above' <- map    [|fst                    |] above
 %       maxim  <- maxBy  [|compare `on` snd       |] annot
 %       sink maxim       [|snkMaxim               |]
-%       sink above'      [|snkAbove               |]$$)
+%       sink above'      [|snkAbove               |])
 %   return (fst maxim, above)
 % \end{lstlisting}
 
@@ -259,7 +259,7 @@ filterMaxStreaming l ps = do
 %         avg     <- postscanl [|lop        |] [|0|] squares
 %         mul     <- map       [|clip       |]       avg
 %         out     <- zipWith   [|(*)        |] mul   ins
-%         sink out             [|snkOut     |]$$)
+%         sink out             [|snkOut     |])
 %   return vecOut
 %  where
 %   lop acc sample = acc * 0.9 + sample * 0.1
@@ -291,7 +291,7 @@ compressorVector ins = do
 %         avg     <- postscanl [|lop        |] [|0|] squares
 %         mul     <- map       [|clip       |]       avg
 %         out     <- zipWith   [|(*)        |] mul   lopped
-%         sink out             [|snkOut     |]$$)
+%         sink out             [|snkOut     |])
 %   return vecOut
 % \end{lstlisting}
 
@@ -317,7 +317,7 @@ compressorLopVector ins = do
 %       count <- fold   [|\c _ -> c + 1|] [|0|] aps
 % 
 %       sink count      [|snkCount               |]
-%       sink aps        [|sinkFileOfLines fpOut  |]$$)
+%       sink aps        [|sinkFileOfLines fpOut  |])
 %   return count
 % \end{lstlisting}
 
@@ -414,7 +414,7 @@ append2Streaming in1 in2 out = do
 %       sink c1                [|snkC1                 |]
 %       sink c2                [|snkC2                 |]
 %       sink o1s               [|sinkFileOfLines fpOut1|]
-%       sink o2s               [|sinkFileOfLines fpOut2|]$$)
+%       sink o2s               [|sinkFileOfLines fpOut2|])
 %   return (c1, c2)
 % \end{lstlisting}
 
@@ -529,7 +529,7 @@ part2Streaming in1 out1 out2 = do
 %         bs    <- filter [|odd              |] x0
 %         -- Failure: cannot fuse append with both filters
 %         asbs  <- append as bs
-%         sink asbs       [|snkYs            |]$$)
+%         sink asbs       [|snkYs            |])
 %   return ys
 % \end{lstlisting}
 % 
@@ -542,7 +542,7 @@ part2Streaming in1 out1 out2 = do
 %         as    <- filter [|even             |] x0
 %         bs    <- filter [|odd              |] x1
 %         asbs  <- append as bs
-%         sink asbs       [|snkYs            |]$$)
+%         sink asbs       [|snkYs            |])
 %   return ys
 % \end{lstlisting}
 % 
@@ -554,13 +554,13 @@ part2Streaming in1 out1 out2 = do
 %         x0      <- source    [|sourceOfVector xs|]
 %         (as,bs) <- partition [|even             |] x0
 %         sink as              [|snkAs            |]
-%         sink bs              [|snkBs            |]$$)
+%         sink bs              [|snkBs            |])
 %   (ys,()) <- vectorSize xs $ \snkYs ->
 %     $$(fuse $ do
 %         as'   <- source      [|sourceOfVector as|]
 %         bs'   <- source      [|sourceOfVector bs|]
 %         asbs  <- append as' bs'
-%         sink asbs            [|snkYs            |]$$)
+%         sink asbs            [|snkYs            |])
 %   return ys
 % \end{lstlisting}
 

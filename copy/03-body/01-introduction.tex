@@ -1,30 +1,33 @@
 \chapter{Introduction}
 \label{introduction}
-To learn interesting things from large datasets, we generally want to perform lots of queries.
+To learn interesting things from a large dataset, we generally want to perform lots of queries.
 When each query is simple and our data is big, we might spend more time reading the data than we spend computing the answer.
-In this case, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
+Instead of performing each query separately, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
 
 When querying datasets that do not fit in memory or disk, it can be hard to ensure that our query program's internal state will fit in memory.
-One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\cref{taxonomy}), by composing stream transformers together.
-Composing stream transformers naively can add some performance overhead, which is then usually removed by \emph{fusing} multiple transformers into a single transformer.
+One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\cref{taxonomy}) by composing stream transformers together.
+Composing stream transformers naively can introduce some performance overhead, which is then usually removed by \emph{fusing} multiple transformers into a single transformer.
 
 This thesis describes low-overhead streaming models for executing multiple queries at a time.
 We focus on two streaming models: push streams (\cref{taxonomy/push}), and Kahn process networks (\cref{taxonomy/kpn}, \cref{chapter:process:processes}).
 
-Push streams can execute multiple queries at a time, but these queries can be unwieldy to write as they must be constructed ``back-to-front''.
+Push streams can be used to execute multiple queries at a time, but queries using push streams can be unwieldy to write as they must be constructed ``back-to-front''.
 In \cref{part:icicle} we introduce a query language called Icicle, which allows programmers to write and reason about queries using a more familiar array-based semantics, while retaining the execution strategy of push streams.
 The type system of Icicle guarantees that well-typed query programs have the same semantics whether they are executed as array programs or as stream programs, and that all queries over the same input can be executed together in a single pass.
 % \TODO{talk about duplicate work in push streams as well, rather than focussing on fairly trivial syntax changes}
 % Icicle is a streaming query language, which means that queries can only perform a single pass over the input data.
 % The Icicle compiler translates queries written in Icicle to push streams, and fuses multiple queries together to execute multiple queries at a time.
 Icicle has been running in production at Ambiata, a machine-learning company, for over two years.
-For one particular client, we receive thirty gigabtyes of uncompressed new data every day, over which Icicle computes more than four thousand queries in a single pass.
-The input data is kept indefinitely and, once compressed, currently requires five terabytes of storage.
-When creating a new machine-learning model, Icicle can provide training data by computing queries over the entire historical data.
+For one particular client, we receive thirty gigabtyes of uncompressed new data every day.
+Each record in the data represents an action by a particular end-user, and we use Icicle to execute a set of around four thousand prepared queries for each end-user.
+Each end-user's query results are given as inputs to a statistical model that aims to predict the end-user's future behaviour.
+The compressed input data is stored indefinitely and currently requires five terabytes of storage.
+When creating a new statistical model, Icicle is used to provide training data by executing a new set of queries over the entire historical data.
 % Icicle is also used to provide training data for machine learning models, in which case the history of all input data must be kept.
 % The history of all input data is kept for training machine learning models, and takes five terabytes
 
-However, push streams, and by extension Icicle, generally do not support computations with multiple inputs except for two cases: first, non-deterministically merging two streams; and second, in some circumstances appending streams --- as we shall see in \cref{taxonomy/push}.
+However, push streams, and by extension Icicle, generally do not support computations with multiple inputs except for non-deterministically merging two streams.
+In some circumstances, this non-deterministic merge can be used to append streams --- as we shall see in \cref{taxonomy/push}.
 As an alternative to push streams, Kahn process networks~\citep{kahn1976coroutines} support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant runtime overhead.
 In \cref{s:Fusion} we describe \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
 The fused process communicates through local variables rather than costly communication channels.
@@ -38,10 +41,11 @@ This fusion method generalises previous work on stream fusion (\cref{related/str
 % are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
 % We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
 
-When the input data is small enough to fit in memory, we can write each query as an \emph{array program}.
-Array programs can read from input arrays multiple times, and can produce intermediate and output arrays which can also be read multiple times.
+When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program.
+Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
+The produced arrays can also be read from multiple times.
 % Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
-We can execute array programs by splitting them into \emph{passes}, and executing each pass as a separate streaming program, where the input and output streams are backed by manifest arrays.
+We can execute array programs by splitting them into \emph{passes}, which generally correspond to a single loop over an array, and executing each pass as a separate streaming program, where the input and output streams are backed by manifest arrays.
 For array programs that require multiple passes, there are generally many different ways to divide the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each operation among the different passes.
 The choice of clustering affects runtime performance.

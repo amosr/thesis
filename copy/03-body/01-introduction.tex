@@ -45,20 +45,21 @@ When the input dataset is small enough to fit in memory, we can write each query
 Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
 The produced arrays can also be read from multiple times.
 % Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
-We can execute array programs by splitting them into \emph{passes}, which generally correspond to a single loop over an array, and executing each pass as a separate streaming program, where the input and output streams are backed by manifest arrays.
+We can execute array programs by splitting them into \emph{passes}, which generally correspond to a loop that reads or produces an array, and executing each pass as a separate streaming program, where the input and output streams are backed by in-memory arrays.
 For array programs that require multiple passes, there are generally many different ways to divide the work among the passes.
-We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each operation among the different passes.
+We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each array operation among the different passes.
 The choice of clustering affects runtime performance.
-To minimise the time spent reading and re-reading the data, we would like to use a clustering which requires the minimum number of passes and intermediate arrays.
-Finding this clustering is NP-hard \cite{darte1999complexity}.
+To minimise the time spent reading and re-reading arrays, we would like to use a clustering which requires the minimum number of passes and intermediate arrays.
+Finding such a minimal clustering is NP-hard \cite{darte1999complexity}.
 
-In \cref{clustering}, we find the minimal clustering by generating an integer linear program, and using an external solver to find the solution.
-The clustering algorithm of \citet{megiddo1998optimal} computes the clustering for an imperative loop nest, rather than a set of array combinators.
+In \cref{clustering}, we find the minimal clustering by representing the array program's possible clusterings as an integer linear program, and using an external solver to find a solution that minimises our cost metric.
+The clustering algorithm of \citet{megiddo1998optimal} also uses integer linear programming, and computes the clustering for an imperative loop nest rather than a set of array combinators.
 Individual loops in the loop nest are assigned to clusters, and all loops in the same cluster are fused together.
 In \citet{megiddo1998optimal}, as with many imperative loop fusion systems, loops can only be fused together if their loop bounds are identical.
-In such systems, a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
+In these systems, a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
 With process fusion, we \emph{can} fuse a filter with its consumer, so a clustering algorithm for imperative loop nests would introduce more passes than necessary.
-Our clustering algorithm extends \citet{megiddo1998optimal} to cluster array combinators, and to support size-changing operations such as filter.
+Our clustering algorithm extends \citet{megiddo1998optimal} to cluster array combinators, adding support for size-changing operations such as filter.
+% We allow size-changing operations to be assigned to the same cluster as operations on both their source array and their output array.
 % As such, clustering algorithms designed for imperative loop fusion ignore the opportunities for fusing filters together, and may assign more clusters than necessary.
 % By working with high-level combinators rather than loop nests, we extend this clustering algorithm to recognise that filters can be fused with their consumer or their producer.
 
@@ -89,8 +90,9 @@ The proof states that when two processes are fused together, the fused process c
 The proof is described in \cref{s:Proofs}.
 
 \item[Clustering for array-backed streams:]
-a clustering algorithm for array combinators, which supports size-changing operations such as filter.
-This algorithm encodes the clustering constraints of a set of array combinators as an integer linear program to be solved externally.
+a clustering algorithm for array combinators, which supports size-changing operators such as filter.
+We allow size-changing operators to be assigned to the same cluster as operations on both their source array and their output array; existing clustering algorithms for imperative loop nests cannot assign size-changing operators to the same cluster as operations on the output array.
+Our algorithm encodes the clustering constraints of a set of array combinators as an integer linear program to be solved externally.
 The clustering algorithm is described in \cref{clustering}.
 
 \end{description}

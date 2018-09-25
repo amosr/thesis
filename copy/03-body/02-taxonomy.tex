@@ -4,9 +4,9 @@
 In this thesis, we write queries as \emph{streaming programs} so that we may query large datasets without running out of memory.
 Streaming programs consume data from their input streams element by element, processing the elements in sequential order, and need only store a limited number of elements at a time as local state.
 A streaming program cannot rewind an input stream to reread previous elements, or perform random access to read from an arbitrary element in the stream.
-These restrictions mean that a streaming program cannot, for example, sort all the input data in a single pass, because single-pass sorting requires storing all the elements in memory.
+These restrictions mean that a streaming program cannot, for example, sort all the input data in a single pass over the input stream, because single-pass sorting requires storing all the elements in memory.
 The upside of these restrictions is that if we can write our queries as streaming programs, we can be confident that they will run in constant space --- no matter how large the input stream is.
-In general, input streams may be infinite, though in this thesis we focus on \emph{large} but finite streams.
+In general, input streams may be infinite, though in this thesis we focus on large but finite streams.
 
 % With just this definition one could go and write a streaming program in more or less any language with input-output facilities.
 % This is how a C programmer may implement a streaming program.
@@ -55,9 +55,25 @@ The Pearson correlation coefficient is defined as the covariance of price with t
 We can also define the Pearson correlation coefficient geometrically: it is the cosine of the angle between the regression line of price over time, and the regression line of time over price.
 
 \input{figs/stock-a.tex}
+
+\begin{haskell}[float,label=figs/impl/correlation-multi,caption=Multiple-pass correlation implementation]
+correlation :: [(Double,Double)] -> Double
+correlation xys = covariance xys / stddev (map fst xys) * stddev (map snd xys)
+
+stddev :: [Double] -> Double
+stddev xs = sqrt (mean (map (^2) xs) / mean xs * mean xs)
+
+covariance :: [(Double,Double)] -> Double
+covariance xys =
+ let xy = map (\(x,y) -> x * y) xys
+ in mean xy - mean (map fst xys) * mean (map snd xys)
+
+mean :: [Double] -> Double
+mean xs = sum xs / fromIntegral (length xs)
+\end{haskell}
+
 \begin{haskell}[float,label=figs/impl/correlation,caption=One-pass correlation implementation]
 type State = (Double, Double, Double, Double, Double, Double)
-
 correlation_z :: State
 correlation_z = (0,0,0,0,0,0)
 
@@ -68,10 +84,11 @@ correlation_k (mx, my, sd, sdX, sdY, n) (x,y) =
      dy   = y   - my
      mx'  = mx  + (dx / n')
      my'  = my  + (dy / n')
+     dx'  = x   - my'
      dy'  = y   - my'
-     sd'  = sd  + dx + dy'
-     sdX' = sdX + dx + dx
-     sdY' = sdY + dy + dy
+     sd'  = sd  + dx * dy'
+     sdX' = sdX + dx * dx'
+     sdY' = sdY + dy * dy'
  in (mx',my',sd',sdX',sdY',n')
 
 correlation_x :: State -> Double
@@ -95,7 +112,10 @@ The angle here corresponds to a correlation of $0.94$, in a range from negative 
 % The Pearson correlation coefficient represents how well the relationship can be approximated by a linear function and ranges from negative one to one; a correlation of one denotes that price grows linearly with time, while a correlation of negative one denotes that price decreases linearly with time.
 % When the relationship is non-linear but does still tend to increase over time, the correlation will be a positive number between zero and one.
 
-We can implement a one-pass correlation algorithm, and although the details are quite complicated, we can express it as a fold over a list.
+\cref{figs/impl/correlation-multi} shows a direct implementation of the correlation coefficient.
+This implementation performs multiple passes over the input list, and is not numerically stable.
+We can implement a more stable one-pass correlation algorithm using the covariance algorithm specified in \citet{welford1962note}.
+Although the details are quite complicated, we can express this algorithm as a fold over a list.
 The fold uses an initial state, \Hs/correlation_z/, and for each element updates the state with a worker function \Hs/correlation_k/.
 The one-pass correlation algorithm keeps track of the running means and standard deviations of both axes, which are used to compute the correlation.
 As such, the fold state contains more than just the correlation.
@@ -120,7 +140,6 @@ regression = regression_x (foldl regression_k regression_z)
 
 Now that we have functions to compute the linear regression and the correlation, we can compute both at the same time.
 The following program returns a pair containing the correlation and regression:
-\newpage
 
 \begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
@@ -145,11 +164,12 @@ We want to compare each day's price for our stock against the average price for 
 \input{figs/stock-bc.tex}
 
 \Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the market index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price from \cref{fig:stock:it:stock-over-time} compared to the market index price.
+The comparison of stock price to market index price compares each day's stock price against the corresponding day's market price.
+Each day is visualised as the percentage difference between the day's stock price and the mean stock price for the period for the y axis, compared to the percentage difference between the day's market price and the mean market price for the period for the x axis.
 In the comparison of stock price to index price, we can see that the stock has grown faster than the index.
 
 
 We can compute the comparison of stock over market with the following program:
-\newpage
 
 \begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
@@ -159,7 +179,7 @@ priceOverMarket stock index =
   in (regression prices, correlation prices)
 \end{haskell}
 
-To match each stock day against the corresponding market index day, and discard any days missing from either input, we join the stock with the index based on the date.
+The \Hs/join/ operator matches each stock day against the corresponding market index day, and discards any days missing from either input.
 We then extract both prices from the joined result and compute the regression and correlation.
 As with \Hs/priceOverTime/, this function requires two traversals of the \Hs/prices/ list.
 
@@ -167,7 +187,6 @@ Since the analyses \Hs/priceOverTime/ and \Hs/priceOverMarket/ both provide usef
 It is just as easy to combine these queries together as it was to compute both the correlation and the regression.
 The following program computes both:
 
-\newpage
 \begin{haskell}
 priceAnalyses :: [Record] -> [Record] -> ((Line, Double), (Line, Double))
 priceAnalyses stock index =
@@ -266,7 +285,7 @@ join comparekey (Pull pull_a) (Pull pull_b) = Pull (do
 \end{haskell}
 
 
-\Cref{figs/impl/pull/combinator} shows the type signatures of the push stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
+\Cref{figs/impl/pull/combinator} shows the type signatures of the pull stream versions of \Hs/regression/ and \Hs/correlation/, as well as the implementation of the \Hs/join/ combinator.
 The \Hs/correlation/ and \Hs/regression/ functions can be implemented much like their list versions, using the pull implementation of \Hs/foldl/.
 
 The \Hs/join/ function executes by reading a value from each input stream and comparing the values using the given comparison function.
@@ -294,16 +313,18 @@ priceOverTime_pull_bad stock = do
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
 After computing the regression, the program computes the correlation of the same input stream.
 When the correlation tries to read the \Hs/timeprices/ stream again, the stream has already been exhausted.
-For this reason, pull streams, as well as many other streaming models, require that streams are not used multiple times.
+For this reason, pull streams, as well as Java 8 Streams \citep{reese2014java} and Strymonas \citep{biboudis2017expressive}, require that streams are not used multiple times.
 In fact, in \cref{taxonomy/polarised} we shall see a streaming model which is more strict and requires that streams are used exactly once (\emph{linearly}).
+Some models, such as Iteree-based streams \citep{kiselyov2012iteratees}, do not explicitly outlaw streams from being used multiple times, but can exhibit the same surprising behaviour when multiple consumers take elements from the same stream.
 
-Some streaming representations allow streams to be \emph{rewinded} so they may be read multiple times from the start.
-When a stream is read multiple times, all the effects and all the work that went into computing the stream the first time must be done a second time.
-Rewinding would allow this program to compute the correct result, but the file would be read from disk again.
+Since our input streams are sourced from files stored on disk, we could imagine \emph{rewinding} the input streams and re-reading the files again from the start.
+In order to rewind the stream, all the effects and all the work that went into computing the stream the first time must be done a second time.
+Rewinding would allow this program to compute the correct result, but it is only feasible for \emph{persistent} input streams.
+Real-time inputs such as sensor data may be too large to store indefinitely, and for network-backed storage, the extra communication time may make performing multiple reads impractical.
+
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time:
-\newpage
 
 \begin{haskell}
 regressionCorrelation_pull :: Pull (Double,Double) -> IO (Line, Double)
@@ -415,7 +436,6 @@ map2 f g (Pull pull_a) = Pull pull_c
 
 The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
 We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression:
-\newpage
 
 \begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
@@ -500,7 +520,6 @@ Unlike with pull streams, a push consumer has no way of choosing among multiple 
 The producer is in control while the consumer passively waits for its next input value.
 
 We \emph{do} in fact have a regular (covariant) map function for push streams, but this transforms the stream result rather than the input elements:
-\newpage
 
 \begin{haskell}
 map_result :: (r -> r') -> Push a r -> Push a r'
@@ -674,7 +693,6 @@ drain_io (Pull pull_a) push_a = loop
 \end{haskell}
 
 We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@:
-\newpage
 
 \begin{haskell}
 dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
@@ -1071,7 +1089,6 @@ Often, a well-optimised sequential implementation of a program will consume sign
 % In fact, the contrary is often true.
 % \cite{mcsherry2015scalability} stresses the importance of measuring against a well-optimised single-threaded implementation when absolute performance is the goal.
 
-\newpage
 
 \section{Summary}
 We have seen the relative advantages of various streaming models.

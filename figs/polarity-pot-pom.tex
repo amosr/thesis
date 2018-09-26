@@ -16,7 +16,7 @@ digraph G {
   graph [style="rounded corners"];
 
   subgraph cluster_priceOverTime  {
-    lblstyle="right";
+    lblstyle="right,xshift=-0.1cm";
     label="priceOverTime";
     texlbl="\Hs/priceOverTime/";
     pot_tps [texlbl="\Hs/map_o/"];
@@ -29,7 +29,7 @@ digraph G {
   };
 
   subgraph cluster_priceAgainstMarket {
-    lblstyle="left";
+    lblstyle="left,xshift=0.2cm";
     label="priceOverMarket";
     texlbl="\Hs/priceOverMarket/";
     pom_join [texlbl="\Hs/join_ii/"];

@@ -293,7 +293,7 @@ Both input streams are sorted by some key, which the comparison function extract
 If the keys are equal, \Hs/join/ returns the pair.
 Otherwise, \Hs/join/ pulls again from the input stream with the smaller key: since both streams are sorted by the key, if one stream has a higher key than the other, it means the stream with the higher key does not have a corresponding value for the smaller key.
 % if the other stream has a higher key it means the other stream does not have a corresponding value for the smaller key.
-In our @priceOverMarket@ example, the files are sorted by date and the comparison function compares the dates.
+In our \Hs@priceOverMarket@ example, the files are sorted by date and the comparison function compares the dates.
 We can join the two files in a streaming manner because both input files are already sorted by date; if the files were not sorted by date, we would need to perform a non-streaming join, for example a hash-join, which stores the entirety of one input in a hashtable in memory.
 % eg keep all of one input in memory and perform a hash-join, or read the file multiple times.
 % The join function takes the two input streams, as well as functions to extract the key from each input record.
@@ -313,15 +313,15 @@ priceOverTime_pull_bad stock = do
 Computing the regression pulls all the values from the \Hs/timeprices/ stream and folds over them until the stream is exhausted.
 After computing the regression, the program computes the correlation of the same input stream.
 When the correlation tries to read the \Hs/timeprices/ stream again, the stream has already been exhausted.
-For this reason, pull streams, as well as Java 8 Streams \citep{reese2014java} and Strymonas \citep{biboudis2017expressive}, require that streams are not used multiple times.
-In fact, in \cref{taxonomy/polarised} we shall see a streaming model which is more strict and requires that streams are used exactly once (\emph{linearly}).
-Some models, such as Iteree-based streams \citep{kiselyov2012iteratees}, do not explicitly outlaw streams from being used multiple times, but can exhibit the same surprising behaviour when multiple consumers take elements from the same stream.
+For this reason, we say that pull streams cannot be used multiple times.
+This single-use restriction also exists in other streaming models, such as Java 8 Streams \citep{reese2014java} and Strymonas \citep{biboudis2017expressive}.
+Some streaming models, such as Iteratees \citep{kiselyov2012iteratees}, do not explicitly state any single-use restriction, but exhibit the same potentially surprising behaviour when multiple consumers compete for elements from the same stream.
+In \cref{taxonomy/polarised} we shall see a streaming model that is more strict and requires that streams be used exactly once and cannot be discarded (\emph{linearly}).
 
 Since our input streams are sourced from files stored on disk, we could imagine \emph{rewinding} the input streams and re-reading the files again from the start.
-In order to rewind the stream, all the effects and all the work that went into computing the stream the first time must be done a second time.
+If we were to rewind the stream, all the effects and all the work that went into computing the stream the first time would have to be done a second time.
 Rewinding would allow this program to compute the correct result, but it is only feasible for \emph{persistent} input streams.
-Real-time inputs such as sensor data may be too large to store indefinitely, and for network-backed storage, the extra communication time may make performing multiple reads impractical.
-
+Real-time inputs such as sensor data may accumulate too quickly to be stored indefinitely, and for network-backed storage, the extra communication time may make performing multiple reads impractical.
 
 Fortunately, because \Hs/regression/ and \Hs/correlation/ are both computed by folds, we can combine the two into a single fold.
 In the following program, the fold worker function \Hs/both_k/ and seed \Hs/both_z/ compute both regression and correlation at the same time:
@@ -382,9 +382,9 @@ To execute these shared streams, each time we read from a shared stream, we need
 \subsection{Streaming overhead}
 \label{taxonomy/pull/streaming-overhead}
 
-This pull stream representation can incur some streaming overhead because of the allocated @Maybe@ values.
+This pull stream representation can incur some streaming overhead because of the allocated \Hs@Maybe@ values.
 For simple combinators such as map, however, the overhead can be optimised away.
-Consider the following function, which applies two functions to the elements in a stream:
+Consider the following function, which applies two worker functions to the elements in a stream:
 
 \begin{haskell}
 map2 :: (a -> b) -> (b -> c) -> Pull a -> Pull c
@@ -396,7 +396,7 @@ map2 f g stream_a
 
 We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
 Fortunately, after some optimisation, both programs incur the same amount of overhead.
-To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in @bs@ and @cs@ above.
+To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in \Hs@bs@ and \Hs@cs@ above.
 After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function:
 
 \begin{haskell}
@@ -414,13 +414,13 @@ map2 f g (Pull pull_a) = Pull pull_c
              Just b' -> (Just (g a')))
 \end{haskell}
 
-When we pull from @pull_c@, it asks @pull_b@ for the next element, which in turn asks @pull_a@.
-When there is a stream element to process, @pull_a@ constructs a @Just@ containing the value and returns it to @pull_b@.
-This @Just@ is then destructed by @pull_b@ so the function @f@ can be applied to the element, before wrapping the result in a new @Just@ which is returned to @pull_c@.
-Now, @pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when @pull_a@ returns a @Just@, @pull_b@ also returns a @Just@.
+When we pull from \Hs@pull_c@, it asks \Hs@pull_b@ for the next element, which in turn asks \Hs@pull_a@.
+When there is a stream element to process, \Hs@pull_a@ constructs a \Hs@Just@ containing the value and returns it to \Hs@pull_b@.
+This \Hs@Just@ is then destructed by \Hs@pull_b@ so the function \Hs@f@ can be applied to the element, before wrapping the result in a new \Hs@Just@ which is returned to \Hs@pull_c@.
+Now, \Hs@pull_c@ must perform the same unwrapping and wrapping on the returned value, even though we statically know that when \Hs@pull_a@ returns a \Hs@Just@, \Hs@pull_b@ also returns a \Hs@Just@.
 
-To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining @pull_b@ into where it is called in @pull_c@.
-Then, using the monad laws, we can rewrite the @return@ statement containing the case expression from @pull_b@, nesting this case expression inside the scrutinee of the other case expression:
+To take advantage of this knowledge and remove the superfluous wrapping and unwrapping, we first transform the program by inlining \Hs@pull_b@ into where it is called in \Hs@pull_c@.
+Then, using the monad laws, we can rewrite the \Hs@return@ statement containing the case expression from \Hs@pull_b@, nesting this case expression inside the scrutinee of the other case expression:
 
 \begin{haskell}
 map2 f g (Pull pull_a) = Pull pull_c
@@ -434,7 +434,7 @@ map2 f g (Pull pull_a) = Pull pull_c
              Just b' -> (Just (g b')))
 \end{haskell}
 
-The nested case expression returns statically-known constructors of @Nothing@ or @Just@, which the outer case expression immediately matches on.
+The nested case expression returns statically-known constructors of \Hs@Nothing@ or \Hs@Just@, which the outer case expression immediately matches on.
 We remove the intermediate step using the \emph{case-of-case} transform \cite{jones1998transformation}, which converts these nested case expressions to a single case expression:
 
 \begin{haskell}
@@ -448,10 +448,31 @@ map2 f g (Pull pull_a) = Pull pull_c
 \end{haskell}
 
 By applying some standard program transformations, the two maps are combined into one, removing the overhead of additional constructors.
-Optimising compilers perform similar transforms as part of their suite of general purpose optimisations.
-In the pull stream representation used here, the @filter@ combinator is expressed as a recursive function, which makes it harder to inline the definition and remove the overhead.
-In \cref{related/fusion} we discuss more sophisticated representations; for example in the Stream Fusion~\cite{coutts2007stream} representation, @filter@ is defined non-recursively to assist inlining.
-These more sophisticated representations of pull streams do not afford extra expressivity over the pull streams described above; the same set of combinators can be implemented with the same asymptotic space and time behaviour and improved constant factors.
+Optimising compilers perform similar transforms as part of their suite of general purpose optimisations \citep{jones1996compiling}.
+
+For other operations, the streaming overhead can be harder to remove.
+\Cref{figs/impl/pull/filter} shows the implementation of the \Hs/filter/ combinator.
+The function \Hs/pull_a'/ pulls an element and checks whether it satisfies the given predicate.
+If the element does not satisfy the predicate, \Hs/pull_a'/ performs a recursive loop to check the next element.
+The recursion in this function makes it harder for the compiler to inline and optimise, and the overhead may not be removed. % : for example, inlining recursive functions must be done carefully to avoid non-termination.
+Stream fusion \citep{coutts2007stream}, which uses a more sophisticated pull stream representation, allows pull functions to return a \emph{skip} constructor, instructing the consumer to pull again.
+The stream fusion implementation of \Hs/filter/ instructs the consumer to pull the next element when the predicate fails, instead of recursively looping.
+Compilers that use an intermediate language based on sequent calculus may be able to inline and optimise recursive functions directly, without needing to convert stream operations to non-recursive functions \citep{maurer2017compiling}.
+We discuss other representations of pull streams in \cref{related/fusion}.
+These other representations of pull streams, as well as the representation used by stream fusion, do not afford extra expressivity over the pull streams described above; the same set of combinators can be implemented with the same asymptotic space and time behaviour and improved constant factors.
+
+\begin{haskell}[float,caption=Pull implementation of \Hs/filter/,label=figs/impl/pull/filter]
+filter :: (a -> Bool) -> Pull a -> Pull a
+filter predicate (Pull pull_a) = Pull pull_a'
+ where
+  pull_a' = do
+    a <- pull_a
+    case a of
+     Nothing -> return Nothing
+     Just a'
+      | predicate a' -> return (Just a')
+      | otherwise    -> pull_a'
+\end{haskell}
 
 % more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
 
@@ -490,9 +511,9 @@ When the stream is finished we call \Hs/done/ to retrieve the result.
 
 
 In this representation, it is the consumers that are values of type (\Hs/Push a r/): they are sinks into which we can push values of type \Hs/a/, and eventually get an \Hs/r/ back.
-This inversion of pull streams results in a fundamental difference in how we program with push streams, and what we can express with push streams.
+This inversion of control for pull streams leads to a fundamental difference in how we program with push streams, and what we can express with push streams.
 
-Although we use a slightly different representation, the push streams described here are analogous to the \emph{sinks} described in \citet{bernardy2015duality} and \citet{lippmeier2016polarized}.
+The push streams described here are analogous to the \emph{sinks} described in \citet{bernardy2015duality} and \citet{lippmeier2016polarized}, albeit with a slightly different representation.
 In this thesis, we use the push/pull terminology of \citet{kay2009you}.
 However, the `push' in `push streams' is different from the `push' in the `push model' used for database execution, as described in \citet{neumann2011efficiently}.
 In the \emph{Neumann push model}, a stream producer is represented as a continuation which takes a sink to push values into.
@@ -500,10 +521,10 @@ Once the consumer provides a sink, the producer repeatedly pushes all its values
 The control-flow for the Neumann push model is the same as for \emph{push arrays}, as described in \citet{claessen2012expressive}.
 % Push arrays can be represented as a continuation which receives a push stream as an argument, and are useful for optimising code-generation for append operations.
 Like pull streams, the Neumann push model does not support executing multiple queries concurrently; unlike pull streams, the Neumann push model does not support combinators with multiple inputs except append.
-For now, we are interested in executing multiple queries; we defer further discussion of the Neumann push model to \cref{related/push-model}.
+We discuss the Neumann push model further in \cref{related/push-model}.
 
 
-We cannot map a function over the elements in push streams in the way that we would with lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function, making the stream element contravariant.
+We cannot map a function over the elements in push streams in the way that we would with lists or pull streams, because the definition of (\Hs/Push a r/) uses the stream element type \Hs/a/ as the input to a function.
 Instead, we implement contravariant-map, or \Hs/contramap/, like so:
 
 \begin{haskell}
@@ -515,7 +536,7 @@ contramap a_to_b bs = Push push_a done_a
 \end{haskell}
 
 The \Hs/contramap/ function takes a function to convert values of type \Hs/a/ to values of type \Hs/b/ and a sink to push values of type \Hs/b/ to, returning a sink which can receive values of type \Hs/a/.
-When a producer tries to push an input value into the returned stream, the @push_a@ function converts this to a value of type @b@ and pushes it further on to the consumer of @b@.
+When a producer tries to push an input value into the returned stream, the \Hs@push_a@ function converts this to a value of type \Hs@b@ and pushes it further on to the consumer of \Hs@b@.
 Unlike with pull streams, a push consumer has no way of choosing among multiple inputs.
 The producer is in control while the consumer passively waits for its next input value.
 
@@ -532,7 +553,7 @@ map_result r_to_r' push_a = Push (push push_a) done_a'
 
 The type of \Hs/foldl/ for push streams is similar to pull streams, except instead of taking the pull stream to read from, it returns a push stream which will eventually return the result.
 The return value is in \Hs/IO/ because we use a mutable reference to store the current state, which must be allocated before returning the stream.
-As values are pushed into the sink, the mutable reference containing the seed is updated with the current result of the fold:
+As values are pushed into the sink, the mutable reference containing the fold state is updated with the current result of the fold:
 
 \begin{haskell}
 foldl :: (b -> a -> b) -> b -> IO (Push a b)
@@ -545,12 +566,12 @@ foldl k z = do
   return (Push push_a done_a)
 \end{haskell}
 
-As before, we can use this @foldl@ function to implement @correlation@ and @regression@.
+As before, we can use this \Hs@foldl@ function to implement \Hs@correlation@ and \Hs@regression@.
 
 In order to share a stream between multiple consumers, we need some way to broadcast messages and push each element to many consumers.
 We can broadcast to two consumers by combining two consumers into one before connecting it to a producer.
 The following function, \Hs/dup_ooo/, duplicates a stream among two consumers, and returns a pair containing both results.
-We call this operation @dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (push streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \cref{taxonomy/polarised}.
+We call this operation \Hs@dup_ooo@ because it \emph{dup}licates elements into two \emph{o}utput sinks (push streams), returning a new \emph{o}utput sink; the reason for this name will become apparent when we see other ways to duplicate streams in \cref{taxonomy/polarised}.
 
 \begin{haskell}
 dup_ooo :: Push a r -> Push a r' -> Push a (r,r')
@@ -566,7 +587,7 @@ dup_ooo a1 a2 = Push push_a done_a
     return (r, r')
 \end{haskell}
 
-We could also use the applicative functor instance for push streams to combine consumers together, specifying how to transform and combine the results.
+We could also use the applicative functor \citep{mcbride2008applicative} instance for push streams to combine consumers together, specifying how to transform and combine the results.
 The applicative functor implementation is similar to the \Hs/dup_ooo/ function specified above.
 This \Hs/dup_ooo/ function could then be written equivalently as (\Hs/dup_ooo a1 a2 = (,) <$> a1 <*> a2/).
 
@@ -577,8 +598,8 @@ unzip :: Push a r -> Push b r' -> Push (a,b) (r,r')
 unzip push_a push_b = dup_ooo (contramap fst push_a) (contramap snd push_b)
 \end{haskell}
 
-Pairs of @a@ and @b@ flow from the returned push stream into the argument streams; when there are no more input pairs, the stream results are paired together and flow from the argument streams to the returned stream.
-This inverted control flow is because the stream elements are contravariant and the stream results are covariant.
+Pairs of \Hs@a@ and \Hs@b@ flow from the returned push stream into the argument streams; when there are no more input pairs, the stream results are paired together and flow from the argument streams to the returned stream.
+This inverted control flow is because the stream representation forces operations on the elements to be contravariant, and operations on the stream results to be covariant.
 
 With these combinators, we can write the \Hs/priceOverTime/ query using push streams:
 
@@ -603,7 +624,7 @@ At every step the combinator chooses which stream to pull from, pulling on the s
 With push streams, a consumer cannot choose which input stream to pull from, or when: the consumer is a function waiting to be called with its input, always ready to accept values as they come.
 
 This inability to join two streams by date is a symptom of a more general limitation of push streams.
-Push streams also cannot implement @zip@, which pairs two inputs together, because the consumer needs to control the computation to alternate between each input.
+Push streams also cannot implement \Hs@zip@, which pairs two inputs together, because the consumer needs to control the computation to alternate between each input.
 Except for one special case, push streams do not support combinators with multiple inputs.
 The special case is that a push stream can react to multiple inputs in the order they are received.
 As a list program, this is similar to taking two lists and at each step non-deterministically choosing which list to pull an element from.
@@ -619,7 +640,7 @@ Combining pull and push streams in the form of \emph{polarised streams} allows u
 
 
 Although we cannot share the elements of a pull stream among multiple pull consumers, we can share the elements of a pull stream among one push consumer and one pull consumer.
-We call this operation @dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull):
+We call this operation \Hs@dup_ioi@ because it \emph{dup}licates an \emph{i}nput source (pull) into an \emph{o}utput sink (push), returning a new \emph{i}nput source (pull):
 
 \begin{haskell}
 dup_ioi_ignore_result :: Pull a -> Push a r -> Pull a
@@ -636,18 +657,18 @@ dup_ioi_ignore_result (Pull pull_a) push_b = Pull pull_a'
       return (Just a)
 \end{haskell}
 
-We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source @push_a@, pushes the value to sink @push_b@, and returns the value to the caller.
+We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source \Hs@push_a@, pushes the value to sink \Hs@push_b@, and returns the value to the caller.
 The result of the push stream is ignored because the pull stream representation has no way to return a result at the end of the stream.
 
 Encoding the result of a stream inside the stream itself is not important for single-consumer pull streams, because it is usually the consumer of the stream that computes the result.
 When mixing stream representations to allow multiple consumers, however, we need to be able to capture the result of all the consumers.
-We extend the pull stream representation so that instead of returning a @Maybe@ with @Nothing@ to signal the end of the stream, streams now return an @Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream:
+We extend the pull stream representation so that instead of returning a \Hs@Maybe@ with \Hs@Nothing@ to signal the end of the stream, streams now return an \Hs@Either@ with (@Left a@) to signal an element and (@Right r@) to signal the result at the end of the stream:
 
 \begin{haskell}
 data PullResult a r = PullResult (IO (Either a r))
 \end{haskell}
 
-With this extended pull stream representation, we can implement a version of @dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together:
+With this extended pull stream representation, we can implement a version of \Hs@dup_ioi@ that keeps the results of the input stream and the output stream, and pairs them together:
 
 \begin{haskell}
 dup_ioi :: PullResult a r -> Push a r' -> PullResult a (r,r')
@@ -664,11 +685,11 @@ dup_ioi (PullResult pull_a) push_b = PullResult pull_a'
       return (Left a)
 \end{haskell}
 
-% There is very little change between the two versions of @dup_ioi@
-Modifying @dup_ioi_ignore_result@ to work on the new representation only required changing the constructors for the stream and adding the return value; other combinators are modified similarly.
-We use the same naming convention for suffixes, for example @map_i@ for mapping pull streams, and @map_o@ for contravariantly mapping push streams.
+% There is very little change between the two versions of \Hs@dup_ioi@
+Modifying \Hs@dup_ioi_ignore_result@ to work on the new representation only required changing the constructors for the stream and adding the return value; other combinators are modified similarly.
+We use the same naming convention for suffixes, for example \Hs@map_i@ for mapping pull streams, and \Hs@map_o@ for contravariantly mapping push streams.
 When consuming a pull stream by folding over it, we return the fold result as well as the stream result.
-The type signature for @foldl_i@ changes to include the stream result; the implementation change is similar to the change for @dup_ioi@:
+The type signature for \Hs@foldl_i@ changes to include the stream result; the implementation change is similar to the change for \Hs@dup_ioi@:
 
 \begin{haskell}
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
@@ -692,21 +713,21 @@ drain_io (Pull pull_a) push_a = loop
       return (r, r')
 \end{haskell}
 
-We can combine @drain_io@ and @dup_ooo@ together to duplicate a pull stream into two push streams, which we call @dup_ioo@:
+We can combine \Hs@drain_io@ and \Hs@dup_ooo@ together to duplicate a pull stream into two push streams, which we call \Hs@dup_ioo@:
 
 \begin{haskell}
 dup_ioo :: Pull a r -> Push a r' -> Push a r'' -> IO (r,(r',r''))
 dup_ioo pull0 push1 push2 = drain_io pull0 (dup_ooo push1 push2)
 \end{haskell}
 
-We can also implement @dup_oii@ by flipping the arguments of @dup_ioi@, and compose the various @dup@ functions together to duplicate an arbitrary number of outputs.
-With @dup_ioi@, @dup_oii@, @dup_ioo@ and @dup_ooo@, we can duplicate a stream when there is no more than one pull consumer.
-Joining multiple input streams together, as in the @join@ combinator, is the dual: there can be no more than one push producer.
-Recall that the @join@ combinator required both inputs to be pull streams, and could not be implemented with push streams alone.
-With the polarised naming convection, this version of @join@ is called @join_iii@.
+We can also implement \Hs@dup_oii@ by flipping the arguments of \Hs@dup_ioi@, and compose the various \Hs@dup@ functions together to duplicate an arbitrary number of outputs.
+With \Hs@dup_ioi@, \Hs@dup_oii@, \Hs@dup_ioo@ and \Hs@dup_ooo@, we can duplicate a stream when there is no more than one pull consumer.
+Joining multiple input streams together, as in the \Hs@join@ combinator, is the dual: there can be no more than one push producer.
+Recall that the \Hs@join@ combinator required both inputs to be pull streams, and could not be implemented with push streams alone.
+With the polarised naming convection, this version of \Hs@join@ is called \Hs@join_iii@.
 Because the input streams have result values, we ensure that the joined stream's result contains the results of both inputs.
 To compute both results, when one stream ends before the other we drain the unfinished stream until we reach the result.
-Other than this draining, the implementation of @join_iii@ shown in \cref{figs/impl/polar/join_iii} follows the implementation of @join@.
+Other than this draining, the implementation of \Hs@join_iii@ shown in \cref{figs/impl/polar/join_iii} follows the implementation of \Hs@join@.
 
 \begin{haskell}[float,caption=Polarised implementation of \Hs/join_iii/,label=figs/impl/polar/join_iii]
 join_iii :: (a -> b -> Ordering) -> PullResult a r
@@ -757,18 +778,18 @@ join_ioo comparekey (PullResult pull_a) push_ab = Push push_b done_b
 \end{haskell}
 
 
-We can also join two streams when one is a pull stream and the other is a push stream: this is called @join_ioo@.
-Conceptually, this combinator has an input pull stream of type @a@ and an input push stream of type @b@, with an output push stream of pairs of @a@ and @b@.
-The definition for @join_ioo@ is given in \cref{figs/impl/polar/join_ioo}.
+We can also join two streams when one is a pull stream and the other is a push stream: this is called \Hs@join_ioo@.
+Conceptually, this combinator has an input pull stream of type \Hs@a@ and an input push stream of type \Hs@b@, with an output push stream of pairs of \Hs@a@ and \Hs@b@.
+The definition for \Hs@join_ioo@ is given in \cref{figs/impl/polar/join_ioo}.
 The output push stream is given as an argument while the input push stream is the return value.
 
-In the implementation of \Hs/join_ioo/, the returned push stream accepts values of type @b@.
+In the implementation of \Hs/join_ioo/, the returned push stream accepts values of type \Hs@b@.
 When a new value is pushed, it repeatedly reads values from the input pull stream until the pulled value is equal to or greater than the pushed value using the given ordering function to compare the keys.
 When the ordering function says the two keys are equal, it pushes the pair to the output stream.
 When the pull stream ends before the push stream, this implementation reads the end of the pull stream multiple times; the pull stream always returns the stream result after the end of the stream.
-Other multiple-input combinators can be inverted similarly to support pull-push-push (@_ioo@) and push-pull-push (@_oio@) versions.
+Other multiple-input combinators can be inverted similarly to support pull-push-push (\Hs@_ioo@) and push-pull-push (\Hs@_oio@) versions.
 
-We can implement the two @priceAnalyses@ queries, @priceOverTime@ and @priceOverMarket@, by mixing pull and push streams.
+We can implement the two \Hs@priceAnalyses@ queries, \Hs@priceOverTime@ and \Hs@priceOverMarket@, by mixing pull and push streams.
 We assign a polarity of push or pull to all streams in both queries, starting with the input streams.
 \Cref{figs/polar/priceOverTime-priceOverMarket} shows the dependency graph with polarised combinators and explicit duplications.
 The polarity of each stream is depicted as a filled or unfilled circle.
@@ -778,9 +799,9 @@ Unfilled circles $\circ$ represent push streams because they are a hole which va
 \input{figs/polarity-pot-pom.tex}
 
 We begin by classifying both input streams as pull streams: we can convert pull streams into push streams but not vice versa.
-The @stock@ input stream is used twice, so at least one of the use-sites must be push.
-Since we were able to express @priceOverTime@ entirely as a push stream, we duplicate @stock@ into a push stream for @priceOverTime@ and a pull stream for @priceOverMarket@.
-For @priceOverMarket@, we can join both pull streams and map over it.
+The \Hs@stock@ input stream is used twice, so at least one of the use-sites must be push.
+Since we were able to express \Hs@priceOverTime@ entirely as a push stream, we duplicate \Hs@stock@ into a push stream for \Hs@priceOverTime@ and a pull stream for \Hs@priceOverMarket@.
+For \Hs@priceOverMarket@, we can join both pull streams and map over it.
 To compute both regression and correlation, one of the folds must be a push; in this case either consumer can be pull or push.
 The decision is inconsequential.
 There are many ways to assign polarities to this program, but they all compute the same result.
@@ -821,10 +842,10 @@ priceAnalyses_ii stock index = do
 
 Assigning polarities is a global analysis, in that we need to inspect the dependency graph containing all queries, rather than looking at each query or each combinator in isolation.
 If we add a new query to \Hs/priceAnalyses/, we need to consider the existing polarities when assigning polarities to the new query.
-Suppose we have an \emph{industry index} which, like the market index, contains average prices of representative subset of stocks.
-For lists, we can reuse the @priceOverMarket@ query to compute how closely our stock follows the industry.
-For polarised streams, we cannot reuse @priceOverMarket_ii@ in @priceAnalyses_ii@ to compare the stock against both indices, because this would require duplicating the stock stream into two pull consumers.
-We need to implement another version of the same query with different polarities: @priceOverMarket_oi@.
+Suppose we have an \emph{industry index} which, like the market index, contains average prices of a representative subset of stocks.
+For lists, we can reuse the \Hs@priceOverMarket@ query to compute how closely our stock follows the industry.
+For polarised streams, we cannot reuse \Hs@priceOverMarket_ii@ in \Hs@priceAnalyses_ii@ to compare the stock against both indices, because this would require duplicating the stock stream into two pull consumers.
+We need to implement another version of the same query with different polarities: \Hs@priceOverMarket_oi@.
 Polarised streams are not composible and can require code duplication.
 
 \subsection{Diamonds and cycles}
@@ -846,7 +867,7 @@ digraph G {
   graph [style="rounded corners"];
 
   subgraph cluster_priceOverTime  {
-    lblstyle="left,xshift=0.2cm";
+    lblstyle="left,xshift=0.12cm";
     label="priceOverTime_c";
     texlbl="\Hs/priceOverTime_c/";
     pot_dup [texlbl="\Hs/dup_ioi/"];
@@ -856,7 +877,7 @@ digraph G {
     pot_dup -> pot_price[style="o-o"];
 
     subgraph cluster_correlation {
-      lblstyle="below=4.4cm";
+      lblstyle="below=4.25cm";
       // lblstyle="above";
       label="correlation_io";
       texlbl="\Hs/correlation_io/";
@@ -892,14 +913,54 @@ zip_ioo (Pull pull_a) push_ab = Push push_b done_b
 \end{haskell}
 
 
-With polarised streams, we cannot execute @priceOverTime@ with the pair-of-lists version, although we can assign polarities.
-\Cref{figs/polar/correlation-zip} shows a polarised graph for a version of @priceOverTime@ that only computes the correlation and uses zip.
-The @zip_ioo@ combinator, implemented in \cref{figs/polar/impl/zip_ioo}, is similar to the @join_ioo@ combinator; it has an input pull, an input push, and an output push.
-When the input push stream receives a value, @zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
+With polarised streams, we cannot execute \Hs@priceOverTime@ with the pair-of-lists version, although we can assign polarities.
+\Cref{figs/polar/correlation-zip} shows the polarised graph for a hypothetical version of \Hs@priceOverTime@ that only computes the correlation and uses zip.
+The \Hs@zip_ioo@ combinator, implemented in \cref{figs/polar/impl/zip_ioo}, is similar to the \Hs@join_ioo@ combinator; it has an input pull, an input push, and an output push.
+When the input push stream receives a value, \Hs@zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
+
+\begin{figure}
+\center
+\begin{dot2tex}[dot]
+digraph G {
+  node [shape="none"];
+  stock;
+  stock [texlbl="\Hs/stock/"];
+  stock -> pot_dup;
+
+  graph [style="rounded corners"];
+
+  subgraph cluster_priceOverTime  {
+    lblstyle="left,xshift=0.12cm";
+    label="priceOverTime_c";
+    texlbl="\Hs/priceOverTime_c/";
+    pot_dup [texlbl="\Hs/dup_ioi/"];
+    pot_time [texlbl="\Hs/map_i time/"];
+    pot_price [texlbl="\Hs/map_o price/"];
+    pot_dup -> pot_time;
+    pot_dup -> pot_price[style="<-"];
+
+    subgraph cluster_correlation {
+      lblstyle="below=4.25cm";
+      // lblstyle="above";
+      label="correlation_io";
+      texlbl="\Hs/correlation_io/";
+      potc_zip [texlbl="\Hs/zip_ioo/"];
+      pot_cor [texlbl="\Hs/foldl_o/"];
+      potc_zip -> pot_cor[style="<-"];
+    };
+    pot_time -> potc_zip;
+    pot_price -> potc_zip[style="<-"];
+  };
+}
+\end{dot2tex}
+\caption{Control flow graph for polarised diamond}
+\label{figs/control/correlation-zip}
+\end{figure}
 
 Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
 The polarised diagram shows \emph{elements} flowing down, but the \emph{control flow} for push streams is upwards.
-With downward arrows for pull streams and upward arrows for push streams, there is a cycle between @dup_ioi@, @zip_ioo@ and the two maps.
+\Cref{figs/control/correlation-zip} shows the control flow for the polarised diagram, after replacing the edges corresponding to pull streams with downward arrows and upward arrows for edges corresponding to push streams.
+In this graph, the recursive dependency is illustrated by the cycle between \Hs@dup_ioi@, \Hs@zip_ioo@ and the two maps.
 This cycle complicates translating the graph to an implementation.
 
 \begin{haskell}[float,caption={Incomplete polarised implementation of \Hs/priceOverTime_c/},label=figs/polar/impl/priceOverTime_c]
@@ -919,8 +980,8 @@ correlation_io :: PullResult Double r -> Push Double (Double, r)
 correlation_io stream_a = zip_ioo stream_a correlation_o
 \end{haskell}
 
-The incomplete implementation in \cref{figs/polar/impl/priceOverTime_c} also demonstrates the recursive dependency between @stock'@, @times@, @prices@ and @cor@.
-The @priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result.
+The incomplete implementation in \cref{figs/polar/impl/priceOverTime_c} also demonstrates the recursive dependency between \Hs@stock'@, \Hs@times@, \Hs@prices@ and \Hs@cor@.
+The \Hs@priceOverTime_c@ function defines a set of stream transformers, but we have no way to execute this stream transformer and extract the result.
 The incomplete implementation constructs a stream transformer, but does not directly compute the stream result.
 All the combinators are \emph{passive combinators}, constructing a stream transformer that responds to push or pull requests rather than actively pulling or pushing.
 \emph{Active combinators} like \Hs/drain_io/ and \Hs/foldl_i/ actively consume pull streams rather than transforming them, and return an \Hs/IO/ action containing the stream result.
@@ -929,7 +990,7 @@ Active combinators can consume pull streams and output to push streams.
 Active combinators cannot actively consume push streams, because the control flow for push streams is in the producer.
 Similarly, they cannot actively produce pull streams.
 None of the combinators in this query can be implemented as active combinators because they all consume push streams or produce pull streams.
-Instead we must hand-optimise the program, combining the duplicate, maps and zip into one combinator, as in the original version of @priceOverTime@.
+Instead we must hand-optimise the program, combining the duplicate, maps and zip into one combinator, as in the original version of \Hs@priceOverTime@.
 
 
 % 
@@ -947,12 +1008,12 @@ Instead we must hand-optimise the program, combining the duplicate, maps and zip
 \section{Kahn process networks}
 \label{taxonomy/kpn}
 
-The three streaming models we have seen --- pull, push, and polarised streams --- differ in where the computation is controlled.
-In pull streams, the consumer controls the computation.
-In push streams, the producer controls the computation.
-In polarised streams, the active combinator, which may be a pull consumer and a push producer, controls the computation.
-All these systems have one place controlling the computation.
-When we have multiple queries to execute, it can be hard to choose just one combinator to control the entire computation.
+The three streaming models we have seen --- pull, push, and polarised streams --- differ in what drives the computation.
+With pull streams, the consumer drives the computation.
+With push streams, the producer drives the computation.
+With polarised streams, the active combinator, which may be a pull consumer and a push producer, drives the computation.
+All these systems have one place driving the computation.
+When we have multiple queries to execute, it can be hard to choose just one combinator to drive the entire computation.
 
 An alternate streaming model, which allows many places to control the computation and supports executing multiple queries, is a \emph{Kahn process network}.
 A Kahn process network is a concurrent process network with restrictions to ensure deterministic execution.
@@ -960,20 +1021,21 @@ Each combinator inside each query becomes a communicating process in the network
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
 Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
 
-Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies how processes are interleaved during execution, depends on the environment.
+Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies the interleaving of process execution, depends on the environment outside of the process.
+\TODO{be more specific about environment}
 Because the environment is not controlled by the processes themselves, we say the schedule is chosen \emph{non-deterministically}.
 Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
-Kahn process networks are a restricted form of static process network that ensures that processes compute the same result across different schedules \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
+Kahn process networks are a restricted form of static process network where all processes compute the same result, independent of the schedule \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
 Kahn process networks ensure deterministic results by imposing restrictions on how processes communicate so that scheduling decisions cannot be observed.
 % The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels are written to by a single process, broadcasting each value to all consumers of the channel.
 All communication between processes is through first-in-first-out channels.
-Processes with shared mutable state can non-deterministically compute different results: if one process were reading from mutable state while another were writing a new value, the reading process may get the old value or new value, depending on how the processes were scheduled.
-Restricting all communication to go through channels outlaws processes from communicating via shared mutable state.
-Reading from channels is blocking: processes are not allowed to \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
+The Kahn process network model specifically rules out processes with shared mutable state, as they can non-deterministically compute different results.
+If one process were reading from mutable state while another were writing a new value, then the reading process may get the old value or new value, depending on how the processes were scheduled.
+Reading from channels is blocking: processes cannot to \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
 Channels are written to by a single process, broadcasting each value to all consumers of the channel.
-Only one process is allowed to push to a channel: if two processes were able to push to the same channel at the same time, the scheduler would have to decide the order the values were received.
+Only one process is allowed to push to a channel: if two processes were able to push to the same channel at the same time, the scheduler would have to decide the order in which values were received.
 
-With Kahn process networks, we can implement a process which joins sorted streams by pulling from each input channel as in the @join@ combinator, and we can share streams among multiple consumers because pushed values are broadcast to each consumer.
+With Kahn process networks, we can implement a process which joins sorted streams by pulling from each input channel as in the \Hs@join@ combinator, and we can share streams among multiple consumers because pushed values are broadcast to each consumer.
 We can also convert both push streams and pull streams to processes.
 
 Kahn process networks can use bounded channels to ensure communication between processes executes in bounded memory.
@@ -1002,14 +1064,14 @@ execute :: Network (Result a) -> IO a
 
 \Cref{figs/kpn/combinators} shows the datatypes and type signatures of a Kahn process network implementation.
 We leave discussion of the implementation for \cref{chapter:process:processes}, and for now focus solely on this simplified version of the interface.
-The @Channel@ type denotes a communication channel between processes.
-The @Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
-The @map@ and @join@ combinators have type signatures similar to the list versions, with lists replaced by @Channel@s and the return value inside the @Network@ monad.
+The \Hs@Channel@ type denotes a communication channel between processes.
+The \Hs@Network@ monad describes how to construct a process network; execution is deferred until after the entire network has been constructed.
+The \Hs@map@ and \Hs@join@ combinators have type signatures similar to the list versions, with lists replaced by \Hs@Channel@s and the return value inside the \Hs@Network@ monad.
 
-Because execution is deferred, the @foldl@ combinator cannot return the fold result immediately; the result is wrapped in a @Result@ type.
-The @Result@ type describes the result of executing a process network; it is a promise that the value will be available after all the processes in the network finish.
-The @Result@ has an applicative functor instance, allowing multiple results to be combined together.
-The @execute@ function takes a process network description containing the result promise, and executes the processes before extracting the result.
+Because execution is deferred, the \Hs@foldl@ combinator cannot return the fold result immediately; the result is wrapped in a \Hs@Result@ type.
+The \Hs@Result@ type describes the result of executing a process network; it is a promise that the value will be available after all the processes in the network finish.
+The \Hs@Result@ has an applicative functor instance, allowing multiple results to be combined together.
+The \Hs@execute@ function takes a process network description containing the result promise, and executes the processes before extracting the result.
 
 
 
@@ -1040,15 +1102,16 @@ priceAnalysis stock index = do
   return ((,) <$> pot <*> pom)
 \end{haskell}
 
-\Cref{figs/kpn/impl/priceAnalyses} shows the @priceAnalyses@ queries implemented as a Kahn process network.
-There are some differences from the list version: the process network is constructed inside the @Network@ monad and the results are paired together using @Result@ applicative functor instance.
-The conversion here from list to process network is almost a purely syntactic transform, in contrast to the polarity analysis required for polarised streams.
+\Cref{figs/kpn/impl/priceAnalyses} shows the \Hs@priceAnalyses@ queries implemented as a Kahn process network.
+There are some differences from the list version: the process network is constructed inside the \Hs@Network@ monad and the results are paired together using \Hs@Result@ applicative functor instance.
+Converting the implementation from the list form to the process network form is almost purely syntactic, in contrast to the polarity analysis required for polarised streams.
 
 Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
-In \cref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating a @Maybe@ value, which can sometimes be removed by general purpose compiler optimisations.
-Communication between processes requires more overhead than allocating @Maybe@ values, and is not removed by general purpose optimisations.
+In \cref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating \Hs@Maybe@ values, which can sometimes be removed by general purpose compiler optimisations (and sometimes not).
+Communication between processes requires more overhead than allocating \Hs@Maybe@ values, and is not removed by general purpose optimisations.
 To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
-Concurrent process network implementations often amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
+\TODO{lock too low level}
+Concurrent process network implementations amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
 Chunking reduces the cost of sending messages, but increases memory and cache pressure.
 Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
 However, larger chunks also mean that each chunk array requires more memory and are less likely to fit in cache.
@@ -1071,11 +1134,11 @@ The optimal chunk size is a trade-off between communication overhead and memory 
 
 From a functional programming perspective, small, fine-grained processes like those used in our example are desirable because they allow us to write a process for each combinator and compose them together.
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
-We can reduce the amount of communication by combining multiple connected processes together into one larger process.
+We can reduce the amount of communication by fusing multiple connected processes together into one larger process.
 The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
 In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
-For @priceAnalysis@, our algorithm can combine all the processes together into a single processes.
-A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
+For \Hs@priceAnalysis@, our algorithm can automatically combine all the processes together into a single processes.
+A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from task parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
 Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than a parallel implementation~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}

@@ -31,9 +31,10 @@ At the time of writing in 2018, this implementation is currently running in prod
 \label{icicle/gold-panning}
 
 In the following example queries, we extend the daily stock price records from \cref{taxonomy/gold-panning} to contain the open price and the close price for the day.
-As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company; Icicle cannot express the @priceOverMarket@ example, which contains multiple input streams.
+As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company.
+Icicle cannot express the @priceOverMarket@ example, which contains multiple input streams, but we will return to this limitation in \cref{chapter:process:processes}.
 Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
-We also want the mean of the open price for days in which the open price exceeded the close price.
+We also want to compute the mean of the open price for days in which the open price exceeded the close price.
 In Icicle, we write the three queries as follows:
 
 \begin{icicle}
@@ -95,14 +96,15 @@ We must instead lift each predicate to an expression-level conditional and compu
 
 % As we see, the result of query fusion tends to have many common sub expressions, and we wish to guarantee that the duplicates in the fused result are eliminated.
 
-Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data.
+Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data \citep{arasu2003cql}.
 As a counter-example, suppose we have a table with two fields @key@ and @value@, and we wish to find the mean of values whose key matches the last one in the table.
 We might try something like:
 
 \begin{icicle}
   table kvs { key : Date; value : Int }
-  query avg = let k = last key
-              in  filter (key == k) of mean value;
+  query meanOfLatest
+   = let k = last key in
+     filter (key == k) of mean value;
 \end{icicle}
 
 Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally.

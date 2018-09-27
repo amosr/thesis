@@ -3,18 +3,18 @@
 \label{icicle:s:Benchmarks}
 \input{copy/03-body/icicle/figures/Bench-All.tex}
 
-This section shows the results of benchmarks carried out in 2016 while working at Ambiata.
+This section shows the results of benchmarks carried out in 2016.
 At Ambiata we are using Icicle in production to query medium-sized datasets that fit on a single disk.
 For larger datasets, we have implemented a scheduler to distribute datasets across multiple nodes and run Icicle on each node separately.
-The data we are working with is tens of terabytes compressed which, at the time of benchmarking, would not fit on a single disk.
+The data we are working with is several terabytes compressed which, at the time of benchmarking, would not fit on a single disk.
 However, each row has a natural primary key and the features we need to compute depend only on the data within single key groups, which makes the workload very easy to distribute.
 
 % These initial results have been very promising, and we are currently implementing distribution across multiple machines to handle datasets that are tens of terabytes compressed, and do not fit on a single disk.
 % Incremental computation is even more important for this distributed case, as we can avoid copying terabytes of data over the network.
 
 In our proof of concept testing we replaced an existing R script that performed feature generation with new Icicle code.
-The R script computed features from a 317GB dataset supplied by a customer.
-It computed 12 queries over each of 31 input tables, for 372 query evaluations in total.
+The R script computed features from a 317GB dataset supplied by a customer, containing records for roughly a million different end-users.
+For each end-user, the R script computed 12 queries over each of 31 input tables, for 372 query evaluations in total.
 The R script took 15 hours to run and consisted of 3,566 lines of code.
 The replacement Icicle version is only 191 lines of code and takes seven minutes to run.
 
@@ -24,7 +24,7 @@ We compared the throughput of several programs over the same dataset:
 \item our original R implementation (R);
 \item Icicle running single-threaded (1 CPU);
 \item Icicle running on multiple processors (32 CPU);
-\item finding empty lines with @grep "^$"@;
+\item finding empty lines with @grep "^$"@ over the same data;
 \item counting characters, words and lines with @wc@;
 \item reading and throwing away the results with @cat > /dev/null@.
 \end{itemize}
@@ -53,7 +53,7 @@ The R code is single threaded and would require at least 150 processors to reach
 \Cref{icicle:fig:bench:queries} shows how the total read throughput scales as the number of fused queries is increased.
 For each number of queries, we ran two versions of the fused result: one version that wrote the output to disk, and the other that piped the result to @/dev/null@.
 The graph shows the throughput of the disk version decreasing roughly linearly in the number of queries, while the version ignoring the output remains constant.
-This suggests that we are IO bound on the write side.
+This suggests that we are IO bound on the write side, as we write the query results for each of the million end-users.
 The time spent evaluating the queries themselves is small relative to our current IO load.
 
 % This suggests that the output code is the bottleneck, which is unsurprising given the output format is text-based PSV.

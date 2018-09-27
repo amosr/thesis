@@ -109,9 +109,10 @@ return { mean : Int = sc; }
 
 To fuse the three query plans together we freshen the names of each binding, then simply concatenate the corresponding parts of the anatomy.
 The single-pass restriction on queries makes the fusion process so simple, because it ensures that there are no fusion-preventing dependencies between any two query plans. 
+We discuss fusion-preventing dependencies further in \cref{clustering}.
 After concatenating the plans, we merge the filter blocks for \IcC@more@ and \IcC@mean@, as both use the same predicate.
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
-Now the queries are interspersed but the stages are expressed separately, we are free to rearrange each stage without affecting the other stages.
+Now the queries are interspersed but the stages are expressed separately, we are free to rearrange the bindings in each stage without affecting the other stages.
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
@@ -162,7 +163,9 @@ queries = do
 To demonstrate the relative difficulty of removing the duplicate work in the general case, \cref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
 In this version, the \IcC@more_c@ and \IcC@mean_c@ references both hold the same value, but this fact is only evident with non-local reasoning about the program.
 The reference initialisations and updates are located in different parts of the program, with potentially interfering writes in-between.
-We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms are generally polynomial time.
+We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms generally require polynomial time in the size of the program.
+For the benchmarks in \cref{icicle:s:Benchmarks} we have twelve queries to fuse together, while some of our production workloads have thousands of queries over the same input.
+A polynomial time algorithm is unlikely to be practical for such workloads.
 With the intermediate representation of Icicle we can use a common subexpression elimination algorithm~\cite{chitil1997common}, which requires $O(n \log n)$ time.
 
 \subsection{A more complicated example}
@@ -172,9 +175,10 @@ That query, again, is:
 
 \begin{icicle}
   table kvs { key : Date; value : Int } 
-  query avg = let k    = last  key in
-              let avgs = group key of mean value
-              in  lookup k avgs
+  query meanOfLatest
+   = let k    = last  key in
+     let avgs = group key of mean value in
+     lookup k avgs
 \end{icicle}
 
 We first define the \IcC@mean@ and \IcC@last@ functions used in the query.
@@ -200,13 +204,13 @@ function last (d : Element Date)
 Inlining the above functions into the ``mean of latest'' query yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
 \begin{icicle}
-query avg
- =    let lst = (fold l = NO_DATE then key)
-   in let map = group key of
-                ( (fold s = 0 then s + value)
-                / (fold c = 0 then c + 1) )
-   in let ret = lookup lst map
-   in     ret
+query meanOfLatest
+ = let lst  = (fold l = NO_DATE then key) in
+   let avgs = group key of
+              ( (fold s = 0 then s + value)
+              / (fold c = 0 then c + 1) ) in
+   let ret  = lookup lst avgs
+   ret
 \end{icicle}
 
 To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
@@ -217,7 +221,7 @@ folds    { fold fL  : Date = NO_DATE then key  }
 after    {      lst : Date = fL                }
 \end{icicle-core}
 
-For the \IcC@map@ binding, each fold accumulator inside the body of the \IcC@group@ construct is nested within a \IcC@group@ in the intermediate language.
+For the \IcC@avgs@ binding, each fold accumulator inside the body of the \IcC@group@ construct is nested within a \IcC@group@ in the intermediate language.
 Inside the context of the \IcC@group@, the binding for \IcC@s@ refers to the \IcC@Int@ value for the current key; outside the \IcC@group@, in the \IcC@after@ section, \IcC@s@ refers to a value of (\IcC@Map Date Int@) containing the values of all keys.
 Each time we receive a row from the table the accumulator associated with the \IcC@key@ is updated, using the default value @0@ if an entry for that key is not yet present.
 After we have processed the entire table we join the maps and divide each sum by its corresponding count to yield a map of means for each key.
@@ -226,7 +230,7 @@ folds  { group key
           { fold s : Int = 0 then s + value
           ; fold c : Int = 0 then c + 1 } }
 
-after  { map : Map Date Int
+after  { avgs : Map Date Int
           = mapMap (\sc. fst sc / snd sc) (mapZip s c) }
 \end{icicle-core}
 
@@ -236,7 +240,7 @@ after  { map : Map Date Int
 
 Finally, the \IcC@ret@ binding from the original query is evaluated in the \IcC@after@ stage. In the \IcC@return@ stage we specify that the result of the overall query \IcC@avg@ is the result of the \IcC@ret@ binding.
 \begin{icicle-core}
-  after  { ret : Int = lookup lst map }
+  after  { ret : Int = lookup lst avgs }
   return { avg : Int = ret }
 \end{icicle-core}
 
@@ -244,7 +248,8 @@ Finally, the \IcC@ret@ binding from the original query is evaluated in the \IcC@
 We then combine the plans from each binding.
 This query plan is then fused with any other queries that process the same input; the fused query plan is then translated to an imperative loop nest in a similar way to our prior work on flow fusion~\cite{lippmeier2013data}.
 When translating folds nested inside \IcC@filter@s, the update statements are nested inside \IcC@if@ statements.
-When translating folds nested inside \IcC@group@s, each accumulator becomes a map, and the update statements modify the element corresponding to the current key.
+When translating folds nested inside \IcC@group@s, each accumulator becomes a key-value map, and the update statements modify the element corresponding to the current key.
 As with \IcC@filter@s, \IcC@group@s with the same key can be merged together.
-The nested structure of \IcC@group@s allows us to share the same set of keys across multiple accumulators, further reducing duplicate work.
+We implement key-value maps as two separate arrays: one array contains the keys, and the other contains the corresponding values.
+The nested structure of \IcC@group@s allows us to re-use the same keys array for multiple accumulators, further reducing duplicate work.
 

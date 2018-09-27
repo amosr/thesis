@@ -1021,8 +1021,7 @@ Each combinator inside each query becomes a communicating process in the network
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
 Each process can have multiple inputs and outputs, and the process chooses the order to pull from its inputs and push to its outputs.
 
-Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies the interleaving of process execution, depends on the environment outside of the process.
-\TODO{be more specific about environment}
+Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies the interleaving of process execution, depends on environmental factors outside the program itself --- for example, the number of physical processors available, and which other processes are also being executed.
 Because the environment is not controlled by the processes themselves, we say the schedule is chosen \emph{non-deterministically}.
 Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
 Kahn process networks are a restricted form of static process network where all processes compute the same result, independent of the schedule \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
@@ -1109,8 +1108,7 @@ Converting the implementation from the list form to the process network form is 
 Concurrent process networks have the desired high-level semantics for executing concurrent queries, but they do not provide the ideal execution strategy.
 In \cref{taxonomy/pull/streaming-overhead}, we saw that communication between pull stream combinators involves allocating \Hs@Maybe@ values, which can sometimes be removed by general purpose compiler optimisations (and sometimes not).
 Communication between processes requires more overhead than allocating \Hs@Maybe@ values, and is not removed by general purpose optimisations.
-To send a value from one process to another, the sending process must generally lock the communication channel to ensure it is the only process with access to the channel before copying the value into a buffer where it can be read by the other process.
-\TODO{lock too low level}
+To send a value from one process to another, the sending process may need to lock the communication channel to ensure that it has exclusive access to the channel, before copying the value into a buffer where it can be read by the other process.
 Concurrent process network implementations amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
 Chunking reduces the cost of sending messages, but increases memory and cache pressure.
 Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
@@ -1132,12 +1130,12 @@ The optimal chunk size is a trade-off between communication overhead and memory 
 % Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 % Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
 
-From a functional programming perspective, small, fine-grained processes like those used in our example are desirable because they allow us to write a process for each combinator and compose them together.
+From a functional programming perspective, small, fine-grained processes like those used in our \Hs/priceAnalysis/ example are desirable because they allow us to write a process for each combinator and compose them together.
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
 We can reduce the amount of communication by fusing multiple connected processes together into one larger process.
-The combined process performs the task of multiple individual processes, but communicates by local variables instead of channels.
-In \cref{chapter:process:processes} we describe an algorithm to combine processes together to reduce overhead.
-For \Hs@priceAnalysis@, our algorithm can automatically combine all the processes together into a single processes.
+The fused process performs the task of multiple individual processes, but communicates by local variables instead of channels.
+In \cref{chapter:process:processes} we describe an algorithm to fuse processes together to reduce overhead.
+For \Hs@priceAnalysis@, our algorithm can automatically fuse all the processes together into a single processes.
 A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from task parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
 Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than a parallel implementation~\cite{mcsherry2015scalability}.
 

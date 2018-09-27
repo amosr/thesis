@@ -9,8 +9,9 @@ However, as we saw in the previous section, although a particular \emph{algorith
 Here is the unstreamable example from the previous section again:
 \begin{icicle}
   table kvs { key : Date; value : Int }
-  query avg = let k = last key
-              in  filter (key == k) of mean value;
+  query meanOfLatest
+   = let k = last key in
+     filter (key == k) of mean value;
 \end{icicle}
 
 The problem is that the value of \Ic@last key@ is only available once we have reached the end of the stream, but \Ic@filter@ needs this value to process the very first element in the same stream.
@@ -19,9 +20,10 @@ We distinguish between these two access patterns by giving them different names:
 The trick to compute our average in a streaming fashion is to recognise that \Ic@filter@ is selecting a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
 \begin{icicle}
   table kvs { key : Date; value : Int } 
-  query avg = let k    = last  key in
-              let avgs = group key of mean value
-              in  lookup k avgs
+  query meanOfLatest
+   = let k    = last  key in
+     let avgs = group key of mean value in
+     lookup k avgs
 \end{icicle}
 
 Here we use the \Ic@group@ construct to assign key-value pairs to groups as we obtain them, and compute the running mean of the values of each group. The \Ic@avgs@ value becomes a map of group keys to their running means. Once we reach the end of the stream we will have access to the last key and can lookup the final result.
@@ -61,7 +63,7 @@ Suppose we query a large table and record the result.
 Tomorrow morning, we receive more data and add it to the table.
 We would like to update the result without needing to process all data from the start of the table.
 We can do this by remembering the values of all intermediate aggregates that were computed in the query, and updating them as new data arrives.
-In the \Ic@avg@ example from \cref{icicle:s:ElementsAndAggregates}, these aggregates are \Ic@k@ and \Ic@avgs@. 
+In the \Ic@meanOfLatest@ example from \cref{icicle:s:ElementsAndAggregates}, these aggregates are \Ic@k@ and \Ic@avgs@. 
 
 We also provide impure contextual information to the query, such as the current date, by assigning it an aggregate type.
 As element-wise computations cannot depend on aggregate computations, we ensure that reused parts of an incremental computation are the same regardless of which day they are executed.

@@ -140,7 +140,7 @@ After successfully pulling a new element from the input stream, the instruction 
 Execution then proceeds back to the pull instruction at label @F0@.
 In \cref{s:Drop:in:synchrony} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
-When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the eject function applied to the final fold state to the output stream @sOut@.
+When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the result of the eject function applied to the final fold state to the output stream @sOut@.
 Execution then proceeds to the instruction at label @F3@.
 The comment above the instruction highlights the change in state of the input stream.
 
@@ -204,7 +204,12 @@ priceOverTime =
 As with the process templates, the network is parameterised by the output streams, which are in this case the output of @regression@ and @correlation@.
 We use the nu-binder syntax to instantiate a fresh name for the @timeprices@ internal stream, which is the output of the @map@ combinator.
 We implement @regression@ and @correlation@ as folds with eject functions.
-The details of the worker functions given to @map@ and @foldl@ are irrelevant for fusion, and are defined externally.
+The details of the worker functions given to @map@ and @foldl@ are defined externally.
+
+In \cref{part:icicle}, Icicle used the details of worker functions to perform common subexpression elimination after fusing queries together.
+We could remove duplicate work from a process after performing fusion if we inlined the definitions of the worker functions into the process.
+The processes here are more general than Icicle's intermediate language, as is necessary to support both multiple inputs and multiple queries; removing all duplicate work from processes may require a polynomial-time global value numbering algorithm \citep{gulwani2004polynomial} rather than the $O(n \log n)$ common subexpression elimination algorithm.
+The fusion algorithm itself does not require the details of the worker functions, however, and we leave them externally defined for the present discussion.
 
 \subsection{Fusing processes together}
 \label{s:FusingProcesses}
@@ -561,12 +566,13 @@ These two groups of instructions drop the input stream with the lesser key and p
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
 As with the polarised stream implementation of @join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
 This draining is required because each consumer has a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
+% This draining is required because each consumer has a finite buffer for each input stream; the producer can only push when all consumers' buffers are not full.
 Without draining, the producer would be blocked indefinitely on a terminated process, and any other consumers of the stream would be unable to receive input values.
 
 As an alternative to draining, we could extend the process network semantics to include a ``disconnect'' instruction, which indicates that a process is no longer interested in consuming a particular input stream.
 Here, we use the simpler process semantics without disconnection, at the expense of having to explicitly drain streams.
-It may be tempting to instead modify the network semantics so that producers do not push to terminated processes, effectively disconnecting from all inputs upon termination.
-However, a fused process, which performs the job of two input processes, only terminates once both input processes have terminated; as such, the fused process would only disconnect once both input processes have terminated, which may be later than necessary.
+It may be tempting to instead modify the network semantics so that producers do not push to terminated processes, effectively disconnecting the consumer from all inputs upon termination.
+However, a fused result process, which performs the job of two source processes, only terminates once both source processes have terminated; as such, the result process would only disconnect once both source processes have terminated, which may be later than necessary.
 
 % In the @priceAnalyses@ example, the @stock@ input stream is used by two consumers, the @join@ in @priceOverMarket@, and the @map@ in @priceOverTime@.
 % When a stream has multiple consumers, all consumers must agree when to read the next value, otherwise execution might require an unbounded buffer.

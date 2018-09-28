@@ -366,7 +366,7 @@ node[shape=none,texmode="raw"];
 \label{figs/fsm/fuse-pulls}
 \end{figure}
 
-Each of the joint result labels represents a combination of two source labels, one from each of the source machines.
+Each of the joint result labels represents a combination of two source labels, one from each of the source processes.
 For example, the first joint label \FuTiReLa{M0}{F0}{none} represents a combination of the @map@ process being in its initial state @M0@ and the @regression@ process being in its own initial state @F0@. 
 We also associate each of the joint labels with the \emph{input state}: a description of whether the @regression@ process has a value available to read from the shared @timeprices@ stream.
 There is no value available, so the input state for @timeprices@ is set to @none@.
@@ -738,7 +738,7 @@ Because these systems perform dynamic scheduling and deadlock detection, process
 Our fusion system is formalised in Coq\footnote{\url{https://github.com/amosr/papers/tree/master/2017mergingmerges/proof}}, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels, then this is one of the possible sequences that would be produced by the two source processes.
 Note that due to the non-determinism of process execution, the converse is not true for all source processes: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders.
 However, because the result of evaluating a Kahn process network to completion \emph{is} deterministic, we should be able to prove that, if fusion succeeds, the result process produces the same overall result despite using potentially different interleavings.
-This proof is left to future work.
+The proof of result determinism is left to future work.
 % However, because the result of evaluating a Kahn process network
 
 The proof of soundness is stated as follows:
@@ -764,7 +764,7 @@ The @Streams@ type corresponds to the channel value map used to accumulate strea
 
 To aid mechanisation, the Coq formalisation has some small differences from the system presented earlier in this thesis.
 Firstly, the Coq formalisation uses a separate @update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
-Performing this desugaring makes the low level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
+Performing this desugaring makes the low-level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
 Having a separate @update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
 This difference is fairly minor.
 
@@ -777,10 +777,22 @@ Like the earlier presentation, each program has a mapping from labels to instruc
 We also associate each label with a precondition, which is expressed as a predicate of the evaluation state.
 The precondition for the initial label must be true for the initial evaluation state.
 Whenever the program takes an evaluation step, assuming the precondition for the original label was satisfied at the start of the step, the precondition for the result label must be satisfied by the updated evaluation state.
-With these two conditions satisfied, we can show that all evaluations respect the preconditions by performing induction over the evaluation relation.
 
-The proof technique is not novel, except for the fact that it is mechanised.
-We believe that the proof gives sufficient confidence in the correctness of the presentation given earlier, despite the differences in formulation.
+For the fused result process, we generate a new precondition that all evaluations must uphold.
+The precondition is similar to the definition of \Hs/Soundness/ above.
+The precondition defines the simulation relation between evaluations of the result process and evaluations of the original source processes.
+Each result process label is defined as the pair of source process labels, along with the static input states.
+For a particular result process label, the precondition states that, assuming the result process evaluates to this label with a particular value heap and channel value map, then both the source processes evaluate to the corresponding label with their corresponding subset of the heap, and a similar channel values map.
+The channel values map for the source processes may differ slightly.
+If, for example, the first source process has pushed a new value to a shared stream, and the second source process has not yet pulled the new value, the new value will appear in the channel value map for the first process, but not the channel value map for the second process.
+In this example, the second source process has an input state of \Hs/pending/, which denotes that the most recent value has not yet been pulled, and should not be included in the evaluated channel value map for that source process.
+% The precondition for the result process also requires that the corresponding precondition for both source processes are satisfied.
+
+To prove that the precondition is established initially, we show that the precondition for the initial label holds for the initial evaluation state.
+To prove that the precondition is maintained for a particular label in the fused result process, we perform case distinction on the instruction corresponding to the label, then, as necessary, perform case distinction on the original source process instructions.
+With the preconditions established and maintained, we show that all evaluations of the result process respect the preconditions by performing induction over the evaluation relation.
+The \Hs/Soundness/ theorem can then be proved directly.
+We believe that this proof gives sufficient confidence in the correctness of the presentation given earlier, despite the differences in formulation.
 
 % To prove soundness of fusion, we assert the invariant that defines how evaluation of the fused program relates to evaluation of the two original programs. 
 % For the fused process, the precondition is that, when the fused process evaluates to a particular evaluation state, then each original process must

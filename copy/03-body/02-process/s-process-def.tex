@@ -47,8 +47,8 @@ The list of update bindings is attached directly to instructions to make the fus
 The dynamic execution of a process network consists of:
 
 \begin{enumerate}
-\item \emph{Injection} of an action, which is an optional stream value or stream close message, into a process or a network.
-  Each individual process only accepts an injected value when it is ready for it, and injection into a network succeeds only when \emph{all} processes accept it.
+\item \emph{Injection} of an action, which can denote an empty message, a pushed channel value, or a channel being closed, into a process or a network.
+  Each individual process only accepts an injected action when it is ready for it, and injection into a network succeeds only when \emph{all} processes accept it.
 
 \item \emph{Advancing} a single process from one state to another, producing an output action.
   Advancing a network succeeds when \emph{any} of the processes in the network can advance, and the output action can be injected into \emph{all} the other processes.
@@ -81,7 +81,7 @@ Our model is ``pure data flow'' as there are no side-channels between processes 
 \input{copy/03-body/02-process/figures/ProcessInject}
 % -----------------------------------------------------------------------------
 \subsubsection{Injection}
-\Cref{fig:Process:Eval:Inject} gives the rules for injecting values into processes.
+\Cref{fig:Process:Eval:Inject} defines the grammar of actions produced by advancing a process in a process network, and gives the rules for injecting these actions into processes.
 Injection is a meta-level operation, in contrast to @pull@ and @push@, which are instructions in the object language.
 The statement $(\ProcInject{p}{a}{p'})$ reads ``given process $p$, injecting action $a$ yields an updated process $p'$''.
 An action $a$ is a message describing the state change that can occur to a channel, with three options: $(\cdot)$, the empty action, used when a process simply updates internal state; $(\Push~\Chan~\Value)$, which encodes the value a process pushes to one of its output channels; and $(\Close~\Chan)$, which denotes the end of the stream.
@@ -117,7 +117,7 @@ As the channel remains closed, there is no need to update the channel state as i
 
 Rule (Push) evaluates the expression $e$ under heap bindings $bs$ to a value $v$, and produces a corresponding action which carries this value.
 The judgment $(bs \vdash e \Downarrow v)$ expresses standard untyped lambda calculus reduction, using the heap $bs$ for the values of free variables.
-As this evaluation is completely standard, we omit it to save space.
+This evaluation is completely standard, and we do not discuss it further.
 
 Rule (Close) emits a @close@ action; once injected, this action will transition the recipients' channel states to @closed@.
 Once a channel is closed it can no longer be pushed to, as the recipients' channel states cannot transition back to the @none@ state required by the (InjectPush) rule.

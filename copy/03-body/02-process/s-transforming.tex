@@ -1,13 +1,17 @@
 \section{Transforming process networks}
 \label{s:Optimisation}
 
-The fusion algorithm described in \cref{s:Fusion} operates on a pair of input processes.
+The fusion algorithm described in \cref{s:Fusion} operates on a pair of source processes.
 For process networks which contain more than two processes, we repeatedly fuse pairs of processes in the network together until only one process remains.
 
-When fusing a pair of processes, the fused process tends to have more states than each input process individually, because the fused process has to do the work of both input processes.
-In general, the larger the input processes, the larger the fused process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
-If the fused process becomes too large such that the process does not fit in memory, then fusing in the next process will take longer, and code generation will take longer.
-When repeatedly fusing the pairs of processes in a network, we perform some simplifications between each fusion step, to remove unnecessary states and simplify the input for the next fusion step.
+When fusing a pair of processes, the fused result process tends to have more states than each source process individually, because the fused process has to do the work of both source processes.
+In general, the larger the source processes, the larger the result process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
+If the result process becomes too large such that the process does not fit in memory, then fusing in the next process will take longer, and code generation will take longer.
+When repeatedly fusing the pairs of processes in a network, we perform some simplifications between each fusion step.
+Since output channels can have multiple consumers, the result of fusing two sources processes pushes to all output channels in either source process, even though all the consumers may have been fused in to the producer.
+We simplify the result program by removing any output channels which are not read by the rest of the network, and replacing the corresponding \Hs/push/ and \Hs/close/ instructions with \Hs/jump/ instructions.
+We then remove these \Hs/jump/ instructions, as well as those introduced by the fusion algorithm, by inlining the destination of each \Hs/jump/ instruction into its use-sites.
+This iterative simplification removes some unnecessary states and simplifies the process given to the next fusion step.
 
 % The fusion algorithm also introduces some spurious states.
 % It is designed for simplicity of the fusion algorithm, at the expense of simplicity of the output.
@@ -120,13 +124,13 @@ append2zip a b c =
 \begin{dot2tex}[dot]
 digraph G {
   node [shape="none"];
-  a [texlbl="\Hs/a/"];
   b [texlbl="\Hs/b/"];
+  a [texlbl="\Hs/a/"];
   c [texlbl="\Hs/c/"];
   app1 [texlbl="\Hs/append/"];
   app2 [texlbl="\Hs/append/"];
-  a -> app1;
-  b -> app1; b -> app2;
+  b -> app1; b -> app2 [constraint=false];
+  a -> app1 ;
   c -> app2;
   zip [texlbl="\Hs/zip/"];
   app1 -> zip;
@@ -150,16 +154,18 @@ These two streams, @ba@ and @bc@, when paired together, will result in each elem
 
 \Cref{figs/swim/append2zip} shows an example execution of @append2zip@, displayed as a sequence diagram.
 In this diagram, we omit the @drop@ and @pull@ internal messages for all processes, and focus instead on the communication between processes.
-Each input stream pushes its elements to its consumers; input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
-Input stream @b@ has multiple consumers, so when it pushes elements, it pushes to both its consumers at the same time.
+In the definition of feeding for process networks, the (FeedEnvPush) rule takes values from external input streams and injects them into the process network as push messages.
+We visualise feeding as the input stream itself pushing elements to its consumers, just as if it were a separate process repeatedly pushing the elements.
+Input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
+Input stream @b@ has multiple consumers, so its elements are pushed to both consumers at the same time.
 
 
 \begin{figure}
 \center
 \begin{sequencediagram}
-\newthreadGAP{a}{@a@}{0.0}
-\newthreadGAP{b}{@b@}{0.7}
-\newthreadGAP{c}{@c@}{0.7}
+\newthreadGAP{a}{@a@ [1,2]}{0.0}
+\newthreadGAP{b}{@b@ [3,4]}{0.7}
+\newthreadGAP{c}{@c@ [5,6]}{0.7}
 \newthreadGAP{appba}{@b++a@}{0.7}
 \newthreadGAP{appbc}{@b++c@}{0.7}
 \newthreadGAP{zip}{@zip@}{0.7}
@@ -225,7 +231,7 @@ When each append process is waiting, its producer---the input stream---must also
 This waiting propagates the @zip@ process' access pattern upwards through the append processes and to the input streams.
 
 This example contains three processes.
-We could perform fusion in twelve different orders.
+The fusion algorithm is not commutative or associative, so we could perform fusion in twelve different orders.
 Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the append processes with each other, or start by fusing the @zip@ process with one of the append processes.
 % The first category, we fuse the two append processes together, then fuse with the @zip@ process.
 % In the second category, we fuse the @zip@ process with one of the append processes, then fuse with the other append process.
@@ -254,17 +260,20 @@ We repeatedly fuse each sink process with its closest parent until there are no 
 
 After fusing each sink process with all its ancestors, there may remain multiple processes.
 This only occurs if the remaining processes do not share ancestors.
-The remaining processes also cannot share descendents, since if they had descendents they would not be sink.
+The remaining processes also cannot share descendents, since if they had descendents they would not be sinks.
 This means the processes are completely separate and could be executed separately, in any order or even in parallel.
 Having unconnected processes in the same process network is a degenerate case, as it could be represented as multiple process networks.
-We err on the side of caution, telling the programmer about anything even slightly unexpected.
-Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
+We execute the remaining unconnected processes concurrently, as a dynamically-scheduled concurrent process network.
+% We err on the side of caution, telling the programmer about anything even slightly unexpected.
+% Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
 
 The fusion algorithm for pairs of processes fails and does not produce a result process when two processes have conflicting access patterns on their shared inputs.
-As the access patterns are determined statically, apparent conflicts may never occur at runtime; we instead make a pessimistic approximation.
-In the implementation, if at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time error telling the programmer that the network cannot be fused.
+As the access patterns are determined statically, apparent conflicts may never occur at runtime; we instead make a static approximation.
+In the implementation, we fuse as many pairs of processes together as possible.
+If at any point we encounter a pair of processes which we cannot fuse together, we display a compile-time warning telling the programmer that the network cannot be completely fused.
+The remaining partially-fused processes are executed concurrently.
 
-Unfortunately, this heuristic cannot always choose the correct fusion ordering.
+Unfortunately, the above heuristic cannot always choose the correct fusion ordering.
 It is not possible, in general, to choose the correct ordering based on the dependency graph alone.
 Consider the following list program, @append3@, which appends three input lists in various orders, producing three output lists.
 As with the @append2zip@ example, we present the example as a list program for syntactic convenience, while we interpret it as a process network:
@@ -338,6 +347,7 @@ If we take the @append3@ example and replace the append processes with @zip@ pro
 We propose to solve this in future work by modifying the fusion algorithm to be commutative and associative.
 These properties would allow us to apply fusion in any order, knowing that all orders produce the same result.
 We discuss this enhancement further in \cref{related/future}.
+In the meantime, we fall back to dynamic scheduling and execute the partially-fused process networks concurrently.
 
 
 % \subsection{Fusing a pair of processes}

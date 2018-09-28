@@ -565,13 +565,13 @@ These two groups of instructions drop the input stream with the lesser key and p
 
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
 As with the polarised stream implementation of @join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
-This draining is required because each consumer has a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
-% This draining is required because each consumer has a finite buffer for each input stream; the producer can only push when all consumers' buffers are not full.
+This draining is required because, when fusing processes together, we treat each consumer as having a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
 Without draining, the producer would be blocked indefinitely on a terminated process, and any other consumers of the stream would be unable to receive input values.
 
 As an alternative to draining, we could extend the process network semantics to include a ``disconnect'' instruction, which indicates that a process is no longer interested in consuming a particular input stream.
 Here, we use the simpler process semantics without disconnection, at the expense of having to explicitly drain streams.
 It may be tempting to instead modify the network semantics so that producers do not push to terminated processes, effectively disconnecting the consumer from all inputs upon termination.
+Such a change to the semantics would allow concurrent execution of unfused process networks with bounded buffers, without the processes having to perform draining.
 However, a fused result process, which performs the job of two source processes, only terminates once both source processes have terminated; as such, the result process would only disconnect once both source processes have terminated, which may be later than necessary.
 
 % In the @priceAnalyses@ example, the @stock@ input stream is used by two consumers, the @join@ in @priceOverMarket@, and the @map@ in @priceOverTime@.
@@ -690,6 +690,11 @@ Clause (LocalExit) applies when the left process wants to finish execution, whic
 
 Clause (Blocked) returns @Nothing@ when no other clauses apply, meaning that this process is waiting for the other process to advance.
 
+All the clauses in the \ti{tryStep} function work together to perform a static version of the dynamic process execution.
+Each clause checks whether the left process can advance given the statically known channel state.
+When the left process advances normally in the dynamic execution rules, it produces an output action to be injected into other processes in the network.
+The clauses in \ti{tryStep} statically coordinate with the right process, checking whether the result action from advancing the left process can be injected into the right process, given the statically known channel state of the right process.
+Although there are many clauses, the translation from the advance and injection rules to the clauses is relatively straightforward.
 
 \smallskip
 
@@ -701,6 +706,22 @@ Function \ti{channels} computes the $\ChanType_2$ map for a pair of processes.
 Function \ti{outlabels} gets the set of output labels for an instruction, which is used when computing the fixpoint of reachable states.
 Function \ti{swaplabels} flips the order of the compound labels in an instruction.
 
+\subsection{Static deadlock detection}
+
+In the definition of \ti{tryStep}, clause (Blocked) applies when the source process is waiting for the other process to advance.
+If both processes are blocked waiting for each other, the two processes are stuck.
+Clause (Deadlock) from \ti{tryStepPair} applies, and fusion fails.
+
+This fusion failure corresponds to a static approximation of deadlock detection.
+As observed by \citet{buck1993scheduling}, static deadlock detection for Kahn process networks is in general undecidable.
+Our deadlock detection is sound, but not complete: if we detect a deadlock statically, the original Kahn process network is executed concurrently, where it may or may not deadlock at runtime.
+If we do not detect a deadlock, the original Kahn process network is guaranteed to be free from deadlocks.
+
+Deadlock detection algorithms for Kahn process networks do exist, but perform deadlock detection dynamically rather than statically \citep{allen2007distributed,jiang2008hierarchical}.
+% \citep{allen2007distributed,bharath2004runtime,jiang2008hierarchical,olson2005deadlock}.
+These algorithms tend to focus on \emph{artificial deadlocks}, which are deadlocks introduced by restricting the size of channel buffers.
+Artificial deadlocks are identified dynamically, and resolved by increasing the buffer size \citep{geilen2003requirements,parks1995bounded}.
+Because these systems perform dynamic scheduling and deadlock detection, process networks using these systems tend to require larger, more coarse-grained processes to offset the dynamic scheduling overhead \citep{chen1990impact}.
 
 
 % \input{copy/03-body/02-process/s-fusibility.tex}
@@ -714,8 +735,8 @@ Function \ti{swaplabels} flips the order of the compound labels in an instructio
 \section{Proofs}
 \label{s:Proofs}
 
-Our fusion system is formalised in Coq\footnote{\url{https://github.com/amosr/papers/tree/master/2017mergingmerges/proof}}, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels, then the two source processes may also produce that same sequence.
-Note that due to the non-determinism of process execution, the converse is not true for all input processes: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders.
+Our fusion system is formalised in Coq\footnote{\url{https://github.com/amosr/papers/tree/master/2017mergingmerges/proof}}, and we have proved soundness of \ti{fusePair}: if the fused result process produces a particular sequence of values on its output channels, then this is one of the possible sequences that would be produced by the two source processes.
+Note that due to the non-determinism of process execution, the converse is not true for all source processes: just because the two concurrent processes can produce a particular output sequence does not mean the fused result process will as well --- the fused result process uses only one of the many possible orders.
 However, because the result of evaluating a Kahn process network to completion \emph{is} deterministic, we should be able to prove that, if fusion succeeds, the result process produces the same overall result despite using potentially different interleavings.
 This proof is left to future work.
 % However, because the result of evaluating a Kahn process network
@@ -758,7 +779,7 @@ The precondition for the initial label must be true for the initial evaluation s
 Whenever the program takes an evaluation step, assuming the precondition for the original label was satisfied at the start of the step, the precondition for the result label must be satisfied by the updated evaluation state.
 With these two conditions satisfied, we can show that all evaluations respect the preconditions by performing induction over the evaluation relation.
 
-The proof itself is not novel, except for the fact that it is mechanised.
+The proof technique is not novel, except for the fact that it is mechanised.
 We believe that the proof gives sufficient confidence in the correctness of the presentation given earlier, despite the differences in formulation.
 
 % To prove soundness of fusion, we assert the invariant that defines how evaluation of the fused program relates to evaluation of the two original programs. 

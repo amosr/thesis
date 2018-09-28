@@ -91,10 +91,11 @@ To highlight the synchronisation between @regression@ and @correlation@ processe
 In the definition of the @fold@ process template, the @drop@ instruction also updates the fold state with the most recently pulled value.
 We use the shorthand (drop [update $A$]) to signify that the process updates its fold state with the pulled value $A$ after dropping the element.
 
-Execution starts with the @map@ process pushing the value $A$ to both @regression@ and @correlation@ processes.
+Execution starts with the @map@ process pushing the value $A$ to both of its consumers, the @regression@ and @correlation@ processes.
 In the execution semantics from \cref{s:Process:Eval}, this push changes the input state of each recipient process from @none@ to @pending@, to signify that there is a value available to pull.
 At this point, the @map@ process cannot push again until both consumers have pulled and dropped the $A$ value.
 Next, the @regression@ process pulls the value $A$, temporarily changing its input state to @have@, before using and dropping the value, changing the input state back to @none@.
+In the execution semantics, the pull instruction updates the process' local state, but does not communicate with any other process; the diagram shows the pull instruction as the process sending a message to itself.
 The @correlation@ process now performs the same.
 After both consumers have dropped the input value, the @map@ process is able to push the next value, $B$, which the consumers operate on similarly.
 Finally, the @map@ process sends close messages to both consumers, which both push the results of the folds to their corresponding output streams before closing them.

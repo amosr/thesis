@@ -2,7 +2,13 @@
 \label{s:Optimisation}
 
 The fusion algorithm described in \cref{s:Fusion} operates on a pair of source processes.
-For process networks which contain more than two processes, we repeatedly fuse pairs of processes in the network together until only one process remains.
+For process networks that contain more than two processes, we repeatedly fuse pairs of processes in the network together until only one process remains, or until no more fusion is possible.
+The remaining process performs the job of the entire original process network.
+When the process network contains a producer with multiple consumers, the result process coordinates between all the consumers to reach consensus on when the producer can push the next value.
+We use global knowledge of the network to coordinate with all consumers statically, confident that we have not missed any consumers.
+In contrast, shortcut fusion systems such as \cite{gill1993short} use rewrite rules to remove intermediate buffers and require only local knowledge, looking at each edge in the network in isolation, but cannot coordinate between multiple consumers.
+In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
+This silence is also due to the local nature of rewrite rules: to know whether all the processes have been fused, we need to know about all the processes.
 
 When fusing a pair of processes, the fused result process tends to have more states than each source process individually, because the fused process has to do the work of both source processes.
 In general, the larger the source processes, the larger the result process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.

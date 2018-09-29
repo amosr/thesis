@@ -6,22 +6,23 @@ This chapter shows runtime benchmark results for fused programs, and the result 
 
 \section{Benchmarks}
 
-To benchmark our algorithm, we have implemented the fusion algorithm described in \cref{chapter:process:processes}, in a library called \emph{Folderol}\footnote{\url{https://github.com/amosr/folderol}}.
-% Folderol is a Haskell implementation of the fusion algorithm described in the previous chapter (\cref{chapter:process:processes}).
-This fusion system uses the topology of the entire process network to perform fusion.
-When fusing one producer with multiple consumers, the fusion algorithm must coordinate between all the consumers to reach consensus on when to pull the next value.
-This coordination between all consumers means the fusion algorithm requires global knowledge of the process network.
-In contrast, shortcut fusion systems such as \cite{gill1993short} use rewrite rules to remove intermediate buffers and require only local knowledge, but cannot coordinate between multiple consumers.
-In cases where shortcut fusion cannot fuse it fails silently, leaving the programmer unaware of the failure.
-This silence is also due to the local nature of rewrite rules: if we wish to know whether all the processes have been fused, we need to know about all the processes.
-To fuse the entire process network at compile-time, as well as to inform the programmer when fusion fails, Folderol uses Template Haskell, a form of metaprogramming.
+The process fusion algorithm described in \cref{chapter:process:processes} is implemented in a library called \emph{Folderol}\footnote{\url{https://github.com/amosr/folderol}}.
+% To benchmark our algorithm, we have implemented the fusion algorithm described in \cref{chapter:process:processes}, in a library called \emph{Folderol}\footnote{\url{https://github.com/amosr/folderol}}.
+Our implementation uses the topology of the entire process network to perform fusion, statically coordinating between all processes in the network.
+To fuse the entire process network at compile-time, Folderol uses Template Haskell, a form of metaprogramming.
 
+\newcommand\Streaming[0] {{\sc Streaming}\xspace}
 % For the benchmarks, We use the \emph{Folderol} Template Haskell implementation. % described in \cref{chapter:process:implementation}.
 Benchmarks are available at \url{https://github.com/amosr/folderol/tree/master/bench}.
 As well as the ``gold panning'' example from \cref{taxonomy/gold-panning}, we present one spatial algorithm, two file-based benchmarks, and one audio signal processing benchmark.
-In the benchmarks, we compare Folderol variously against hand-fused implementations, the array library `Vector'\cite{hackage:vector}, as well as streaming libraries `Conduit'\cite{hackage:conduit}, `Pipes'\cite{hackage:pipes} and `Streaming'\cite{hackage:streaming}.
+In the benchmarks, we compare Folderol variously against hand-fused implementations, the array library Vector \cite{hackage:vector}, as well as streaming libraries Conduit \cite{hackage:conduit}, Pipes \cite{hackage:pipes} and \Streaming\footnote{We use this typography to distinguish \Streaming the library from streaming the abstract concept.} \cite{hackage:streaming}.
+We restrict our attention to Haskell libraries to isolate the cost of streaming from language implementation details.
+The concepts in the chosen libraries are applicable to other languages, and we expect other implementations to show comparable benchmark results.
+Strymonas \citep{kiselyov2016stream}, which has OCaml and Scala implementations, uses a similar stream representation to Vector, but uses staged computation to perform fusion.
+Functional streams for Scala \citep{package:scala:fs2} uses a similar representation to Pipes and Conduit.
 
-The `Vector' library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
+
+The Vector library provides high-performance boxed and unboxed arrays with pull-based shortcut fusion.
 It is the \emph{de facto} standard for array programming in Haskell, and implements a shortcut fusion system called \emph{stream fusion}, introduced by \citet{coutts2007stream}.
 Array operations are implemented by converting the input array to a stream, then performing the corresponding stream operation, and converting back to an array.
 The shortcut fusion rule removes the superfluous conversion when a stream is converted to an intermediate array and immediately back to a stream.
@@ -42,28 +43,85 @@ After inspecting the generated code, if we discover that fusion has not occurred
 % This way, the effects do not need to be interleaved.
 % It is possible to write this using several unsafe operations, but one must be \emph{very} careful for this, taking into account that laziness must be conquered to ensure the correct interleaving.
 
-
-The first two Haskell streaming libraries, `Conduit' and `Pipes', both have limited APIs that ensure that any computation can be run with bounded buffers.
-These streaming libraries are pull-based, and do not naturally support multiple queries: when a stream is shared among multiple consumers, part of the program must be hand-fused, or somehow rewritten as a straight-line computation.
+The first two Haskell streaming libraries, Conduit and Pipes, both have limited APIs that ensure that any computation can be run with bounded buffers.
+These streaming libraries do not naturally support multiple queries: when a stream is shared among multiple consumers, part of the program must be hand-fused, or somehow rewritten as a straight-line computation.
 These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values.
 This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
 % This price is paid even when the dataflow graph is static, as the same monadic structure is used: because repetition is expressed as an unfolding dynamic graph, even computations that would be static in other systems must be expressed dynamically, reducing the possibility for fusion.
-If the function that computes the next step of the stream is hidden inside a monadic computation, it is hard for the compiler to pull it out and construct it.
-% Why is this? Is this an inherent problem with monadic computations, because the structure of the monad depends dynamically on the input values?
-Because the structure --- the function that computes the rest of the stream --- is dynamic, it is hard for the compiler to reason statically about the structure.
-In Vector's stream fusion, great effort is taken to make the step function non-recursive and statically known, by splitting the stream into a static step function and a dynamic state.
-Vector's static step function can be optimised at compile-time, while the state can change dynamically.
-In contrast, in Conduit and Pipes, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside the continuation for a monadic operation.
 
-The final streaming library, `Streaming', is similar to the previous two libraries, in that it is a monadic streaming library with limited static fusion.
-Unlike the previous two, Streaming supports explicit duplication of streams, in a similar way to polarised streams (\cref{taxonomy/polarised}).
-To duplicate the stream, the \Hs@store@ function takes a computation to perform on the copy of the stream, while the original stream is passed through.
+\begin{haskell}[float,caption=Conduit datatypes,label=l:bench:def:conduit]
+data ConduitT i o m r =
+    NeedInput  (i -> ConduitT i o m r) (ConduitT i o m r)
+  | HaveOutput (ConduitT i o m r) o
+  | Done r
+  | ConduitM   (m (ConduitT i o m r))
+  | Leftover   (ConduitT i o m r) i
+
+instance Monad m => Monad (ConduitT i o m)
+\end{haskell}
+
+\Cref{l:bench:def:conduit} shows a simplified version of the core datatype for Conduit.
+The \Hs/ConduitT/ type defines a stream transformer that consumes elements of type \Hs/i/ and produces elements of type \Hs/o/.
+The transformer may perform effects in the \Hs/m/ monad, and return a final result value of type \Hs/r/.
+The \Hs/NeedInput/ constructor pulls from the input and takes two arguments: a function which takes the input element and returns a new stream transformer, and a stream transformer to use when the input stream is finished.
+The \Hs/ConduitM/ constructor performs a monadic effect, which returns a new stream transformer for the rest of the stream.
+Because the data structure describing remainder of the stream is nested inside a closure that performs a monadic computation, the compiler may not be able to statically reason about the remainder of the stream.
+The constructors and closures for the remainder of the stream will be allocated at runtime, instead of being statically optimised away.
+To reduce this overhead, Conduit also implements a fusion system based on Vector's stream fusion \citep{coutts2007stream}.
+In stream fusion, the stream is decomposed into a static, non-recursive step function and a dynamic state.
+The static, non-recursive step function is simpler to inline and optimise than the recursive structure.
+Many of the combinators are implemented in terms of both stream fusion as well as the Conduit implementation.
+Rewrite rules are used to replace the Conduit implementation with the stream fusion implementation where possible.
+Some Conduit operations, such as monadic bind, cannot be efficiently implemented in terms of stream fusion, because the structure of the stream can dynamically depend on the bound value.
+
+The Pipes library uses a recursive, monadic data structure to represent stream transformers.
+This representation is similar to the representation used by Conduit, and involves similar runtime overhead.
+Instead of using stream fusion, Pipes has an extensive set of rewrite rules to statically optimise particular sequences of operations.
+
+% In stream fusion, the stream is represented as a static step function and a dynamic state.
+% Vector's static step function can be optimised at compile-time, while the state can change dynamically.
+% In contrast, in Conduit and Pipes, the step function and state are mixed together: the remainder of the stream is only available dynamically as a function closure, hidden inside the continuation for a monadic operation.
+
+\begin{haskell}[float,caption=\Streaming library datatypes,label=l:bench:def:streaming]
+data Stream f m r =
+    Step   (f (Stream f m r))
+  | Effect (m (Stream f m r))
+  | Return r
+instance (Functor f, Monad m) => Monad (Stream f m)
+
+data Of a b = a :> b
+instance Functor (Of a)
+
+store :: Monad m =>
+      (Stream (Of a) (Stream (Of a) m) r -> t) ->
+      Stream (Of a) m r -> t
+
+sum  :: (Num a, Monad m) =>
+      Stream (Of a) m r -> m (Of a r)
+\end{haskell}
+
+The \Streaming library is a monadic streaming library, similar to Conduit and Pipes.
+\Cref{l:bench:def:streaming} shows the core datatypes for \Streaming.
+The \Hs/Stream/ type defines a stream producer parameterised by a functor \Hs/f/, a monad \Hs/m/, and a result type \Hs/r/.
+The functor for a stream producer is often instantiated to (\Hs/Of a/), where \Hs/a/ is the type of the producer's stream elements.
+When the functor is instantiated to (\Hs/Of a/), the \Hs/Step/ constructor for \Hs/Stream/ will contain the produced stream element of type \Hs/a/, as well as the remaining stream.
+The \Hs/Effect/ constructor, like the \Hs/ConduitM/ constructor in Conduit, performs an effect and returns the remaining stream.
+The \Hs/Return/ constructor signals the end of the stream, and returns the result \Hs/r/.
+\Streaming can execute multiple queries by explicitly duplicating streams, similar to polarised streams (\cref{taxonomy/polarised}).
+To duplicate the stream, the \Hs@store@ function takes a computation to perform on the copy of the stream.
 This operation is analogous to the \Hs/dup_ioi/ combinator, which duplicates a pull stream into a push stream and returns a new pull stream; however, the implementation encodes stream polarity with a monad transformer stack rather than directly using pull and push streams.
+The computation passed to \Hs/store/ is a function that takes a \Hs/Stream/ representing the duplicated stream, with the original stream nested inside the monad transformer stack.
+We can sum the elements of the duplicated stream while passing through the original elements like so:
+\begin{haskell}
+store sum :: Num a => Stream (Of a) m r -> Stream (Of a) m (Of a r)
+\end{haskell}
 
-
+The input stream has the result type \Hs/r/, while the modified stream contains the same elements and has the result type (\Hs/Of a r/), which is effectively a pair of the sum and the original result.
+By putting the original stream in the duplicated stream's monad transformer stack, the original stream's elements are encoded as effects to be performed by the sum computation, while it pulls from the duplicated stream.
+Unfortunately, because each stream element involves constructing the \Hs/Stream/ recursive data structure with a stack of monad transformers, the corresponding runtime allocations and closures are not always statically optimised away.
 
 The benchmark results presented in this chapter were all run on a MacBook Pro, with a 2GHz Intel Core i7, and 16GB of RAM.
-The operating system is OS X El Capitan.
+The operating system is OS X El Capitan with GHC 8.0.2.
 To run the benchmarks, we used the Criterion\footnote{\url{http://hackage.haskell.org/package/criterion}} library.
 Criterion offers a fairly reliable way to evaluate runtime performance, as it runs each benchmark multiple times to compute the mean runtime, and warns if the variance is too high or if there are outliers.
 It can also collect statistics on allocations, which can be a more stable performance indicator than runtime, as it is less affected by the underlying operating system's scheduling decisions.
@@ -117,7 +175,7 @@ After inserting the communication channels, the concurrent version uses the same
 For Pipes, which does not naturally support multiple queries, we implement a two-pass version which computes \Hs/priceOverTime/ and \Hs/priceOverMarket/ in separate loops over the input.
 The implementation is available in \cref{l:a:bench:priceAnalysesPipes}.
 
-For Streaming, we duplicate the stream explicitly to compute \Hs@priceOverTime@ as a push stream.
+For \Streaming, we duplicate the stream explicitly to compute \Hs@priceOverTime@ as a push stream.
 The implementation is available in \cref{l:a:bench:priceAnalysesStreaming}.
 
 \input{figs/runtime/gold-panning.tex}
@@ -126,13 +184,15 @@ The implementation is available in \cref{l:a:bench:priceAnalysesStreaming}.
 We ran with different sizes of data ranging from $10^3$ to $10^8$ but do not show these additional values; the results for this size are representative of the relationship between the different implementations.
 We compare the concurrent execution of Kahn process networks (KPN) with one, two, four, and eight processors.
 For the concurrent executions, we vary the chunk size along the x axis, to try to find the best trade-off between memory usage and communication overhead.
-For the sequential implementations --- Folderol, Pipes, and Streaming --- the inter-process chunk size does not affect execution.
+For the sequential implementations --- Folderol, Pipes, and \Streaming --- the inter-process chunk size does not affect execution.
 
 Interpreting the results in \cref{fig:runtime:gold-panning}, we see that the fused Folderol implementation is the fastest.
-For multiple processors, a chunk size of one hundred appears to be ideal.
+For concurrent execution of the Kahn process network implementation with multiple processors, a chunk size of one hundred appears to be ideal.
 For this example with only a few queries, there is a significant improvement between one and two processors, but little further improvement as more processors are added.
-With the ideal chunk size, the concurrent execution is 1.5 times faster than the Pipes implementation, and $3.7$ times slower than the fused version.
-
+With the ideal chunk size, the concurrent execution of the Kahn process network is $1.5$ times faster than the Pipes implementation, and $3.7$ times slower than the fused version.
+The Folderol version is completely statically fused, and allocates very few intermediate data structures, while the concurrent Kahn process network is dynamically scheduled and involves some channel communication overhead.
+The Pipes and \Streaming implementations cannot statically fuse all operations, so allocate more intermediate data structures.
+The Pipes implementation also performs two passes over the input, and must read the file twice.
 
 \subsection{Quickhull}
 
@@ -191,7 +251,7 @@ filterMaxVectorShare l ps
 % Then \Hs@point@ computes the maximum with \Hs@maximumBy@, comparing each distance.
 % Next, \Hs@above@ filters each point.
 
-Instead of manifesting the distances vector and sharing it among the two consumer loops, we can also recompute the distances for each consumer.
+Instead of constructing \Hs/annot/ as a manifest vector and sharing it among the two consumer loops, we can also recompute the distances for each consumer.
 The recomputed distances implementation is available in \cref{l:a:bench:filterMaxVectorRecompute}.
 To recompute the vectors, we modify the shared version, duplicating the binding for the \Hs@annot@ vector to \Hs@annot1@ and \Hs@annot2@. The maximum now uses \Hs@annot1@, and filter uses \Hs@annot2@.
 This way, both maps to compute the distance can be fused into their consumers.
@@ -199,6 +259,52 @@ This way, both maps to compute the distance can be fused into their consumers.
 In the results below, recomputing the distances is faster and allocates less than the shared distances version.
 For this benchmark we used only two-dimensional points, but it is possible that at higher dimensions the cost of recomputing distances may outweigh the cost of allocation.
 The choice to recompute the distances requires intimate knowledge of how shortcut fusion works and might be surprising to the naive user: duplicating work does not usually \emph{improve} performance.
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitTwoPass,caption=Conduit two-pass implementation of \Hs/filterMax/]
+filterMaxConduitTwoPass l ps = do
+  maxim <- runConduit cmaxim
+  above <- runConduit cabove
+  return (fst maxim, above)
+ where
+  cabove =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filter ((>0) . snd)           .|
+    map fst                       .|
+    sinkVectorSize ps
+
+  cmaxim =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    maximumBy (compare `on` snd)
+\end{lstlisting}
+
+\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitOnePass,caption=Conduit one-pass (hand-fused) implementation of \Hs/filterMax/]
+filterMaxConduitOnePass l ps = do
+  r      <- MUnbox.unsafeNew (Unbox.length ps)
+  (a,ix) <- runConduit $ both r
+  r'     <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix r
+  return (a, r')
+ where
+  both r =
+    sourceVector ps               .|
+    map (\p -> (p, distance p l)) .|
+    filterAndMax r 0 (0,0) (-1/0)
+
+  filterAndMax !r !ix (!x,!y) !d1 = do
+    e <- await
+    case e of
+     Just (!p2,!d2) -> do
+      let (!p',!d') = if d1 > d2 then ((x,y),d1) else (p2,d2)
+      case d2 > 0 of
+       True -> do
+        MUnbox.unsafeWrite r ix p2
+        filterAndMax r (ix+1) p' d'
+       False -> do
+        filterAndMax r ix p' d'
+     Nothing -> do
+      return ((x,y), ix)
+\end{lstlisting}
 
 For Conduit, we also have two versions: the first uses two passes over the data (\cref{l:a:bench:filterMaxConduitTwoPass}), while the second is hand-fused into a single pass (\cref{l:a:bench:filterMaxConduitOnePass}).
 The two-pass version defines two `conduits', or stream computations; \Hs@cabove@ for the filtered vector and \Hs@cmaxim@ for the maximum.
@@ -209,7 +315,19 @@ The hand-fused Conduit version is more complicated, and loses some of the abstra
 
 For Pipes, we only have a hand-fused version (\cref{l:a:bench:filterMaxPipes}), which follows much the same structure as the Conduit hand-fused version.
 
-Finally, the Streaming version (\cref{l:a:bench:filterMaxStreaming}) executes in a single pass, with the stream explicitly duplicated into both consumers.
+\begin{lstlisting}[float,label=l:a:bench:filterMaxStreaming,caption=Streaming implementation of \Hs/filterMax/]
+filterMaxStreaming l ps = do
+  (vec,pt :> ()) <- sinkVectorSize ps
+            $ map fst
+            $ filter (\(_,d) -> d /= 0)
+            $ store maximumBy (compare `on` snd)
+            $ map (\p -> (p, distance p l))
+            $ sourceVector ps
+  return (pt, vec)
+\end{lstlisting}
+
+
+Finally, the \Streaming version (\cref{l:a:bench:filterMaxStreaming}) executes in a single pass, with the stream explicitly duplicated into both consumers.
 We start by converting the vector to a stream with \Hs@sourceVector@, and then use \Hs@map@ to annotate each point with the distance from the line.
 To duplicate the stream we use the \Hs@store@ combinator, which takes a computation to perform on the copy of the stream --- in this case computing the maximum with \Hs@maximumBy@.
 The original stream is also passed through, which is filtered and then the annotations discarded.
@@ -238,12 +356,13 @@ Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 
 \Cref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
 The hand-fused version is the fastest, followed by Folderol.
+The loop generated by Folderol stores the result vector as a boxed object, and reboxes the vector for every iteration it is written to.
 The Vector versions are somewhat slower because they require two iterations over the data, but still generate high-quality loops.
 Intimate knowledge of shortcut fusion was required to find `recompute', the faster of the two vector benchmarks, and there is no indication in the source program, or from the compiler, that the two could not be fused together.
 The streaming libraries are significantly slower, spending most of the time allocating closures and forcing thunks.
 On the plus side, the limited APIs and linearity constraints for Conduit and Pipes made it more obvious that they would not be fused into a single loop, but even with partial hand-fusion, are still significantly slower.
-The `Streaming' program allows explicit sharing, and was the simplest of the three streaming libraries, requiring no hand fusion.
-Surprisingly, the simpler `Streaming' program is faster than the hand-fused `Conduit' and `Pipes' programs, but is still significantly slower than Folderol.
+The \Streaming program allows explicit sharing, and was the simplest of the three streaming libraries, requiring no hand fusion.
+Surprisingly, the simpler \Streaming program is faster than the hand-fused `Conduit' and `Pipes' programs, but is still significantly slower than Folderol.
 
 % It would be nice to know why the Folderol version is slower than the hand-fused version.
 % Inspecting the assembly, the code is very similar.
@@ -421,7 +540,7 @@ The Vector version then has two loops, as well as an extra manifest array.
 
 
 \subsection{File operations}
-For the file benchmarks, we compare against a hand-fused implementation, as well as the three previously mentioned Haskell streaming libraries: `Conduit', `Pipes', and `Streaming'.
+For the file benchmarks, we compare against a hand-fused implementation, as well as the three previously mentioned Haskell streaming libraries: `Conduit', `Pipes', and \Streaming.
 We do not compare against `Vector'.
 % The first of these two streaming libraries are pull-based, and do not naturally support multiple outputs: the split in the dataflow graph must be hand-fused, or somehow rewritten as a straight-line computation.
 % These libraries also have a monadic interface, which allows the structure of the dataflow graph to depend on the values. This expressiveness has a price: if the dataflow graph can change dynamically, we cannot statically fuse it.
@@ -502,7 +621,7 @@ The second file benchmark takes a file and partitions it into two files: one wit
 The output lines are also counted.
 \Cref{l:bench:part2Folderol} shows the Folderol implementation.
 Even with partial hand-fusion because of the multiple outputs, the Pipes (\cref{l:a:bench:part2Pipes}) and Conduit (\cref{l:a:bench:part2Conduit}) programs are slower than ours, as well as losing the abstraction benefits from using a high-level library.
-The Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
+The \Streaming implementation (\cref{l:a:bench:part2Streaming}) allows streams to be shared in a fairly straightforward way and does not require hand-fusion, but is also the slowest in this benchmark.
 \Cref{table:bench:part2} shows the runtimes for partitioning a file with one million lines, around 6.5MB.
 
 \subsection{Partition / append}

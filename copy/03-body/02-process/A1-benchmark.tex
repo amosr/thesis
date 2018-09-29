@@ -164,52 +164,6 @@ filterMaxVectorRecompute l ps
    in return (point, above)
 \end{lstlisting}
 
-\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitTwoPass,caption=Conduit two-pass implementation of \Hs/filterMax/]
-filterMaxConduitTwoPass l ps = do
-  maxim <- runConduit cmaxim
-  above <- runConduit cabove
-  return (fst maxim, above)
- where
-  cabove =
-    sourceVector ps               .|
-    map (\p -> (p, distance p l)) .|
-    filter ((>0) . snd)           .|
-    map fst                       .|
-    sinkVectorSize ps
-
-  cmaxim =
-    sourceVector ps               .|
-    map (\p -> (p, distance p l)) .|
-    maximumBy (compare `on` snd)
-\end{lstlisting}
-
-\begin{lstlisting}[float,label=l:a:bench:filterMaxConduitOnePass,caption=Conduit one-pass (hand-fused) implementation of \Hs/filterMax/]
-filterMaxConduitOnePass l ps = do
-  r      <- MUnbox.unsafeNew (Unbox.length ps)
-  (a,ix) <- runConduit $ both r
-  r'     <- Unbox.unsafeFreeze $ MUnbox.unsafeSlice 0 ix r
-  return (a, r')
- where
-  both r =
-    sourceVector ps               .|
-    map (\p -> (p, distance p l)) .|
-    filterAndMax r 0 (0,0) (-1/0)
-
-  filterAndMax !r !ix (!x,!y) !d1 = do
-    e <- await
-    case e of
-     Just (!p2,!d2) -> do
-      let (!p',!d') = if d1 > d2 then ((x,y),d1) else (p2,d2)
-      case d2 > 0 of
-       True -> do
-        MUnbox.unsafeWrite r ix p2
-        filterAndMax r (ix+1) p' d'
-       False -> do
-        filterAndMax r ix p' d'
-     Nothing -> do
-      return ((x,y), ix)
-\end{lstlisting}
-
 \begin{lstlisting}[float,label=l:a:bench:filterMaxPipes,caption=Pipes implementation of \Hs/filterMax/]
 filterMaxPipes l ps = do
   r  <- MUnbox.unsafeNew (Unbox.length ps)
@@ -236,17 +190,6 @@ filterMaxPipes l ps = do
       filterAndMax vecR ixR ptR (ix+1) p' d'
      False -> do
       filterAndMax vecR ixR ptR ix p' d'
-\end{lstlisting}
-
-\begin{lstlisting}[float,label=l:a:bench:filterMaxStreaming,caption=Streaming implementation of \Hs/filterMax/]
-filterMaxStreaming l ps = do
-  (vec,pt :> ()) <- sinkVectorSize ps
-            $ map fst
-            $ filter (\(_,d) -> d /= 0)
-            $ store maximumBy (compare `on` snd)
-            $ map (\p -> (p, distance p l))
-            $ sourceVector ps
-  return (pt, vec)
 \end{lstlisting}
 
 % \begin{lstlisting}[float,label=l:a:bench:compressorFolderol,caption=Folderol implementation of \Hs/compressor/]

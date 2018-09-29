@@ -16,6 +16,7 @@ All queries in a program execute in lock-step on the same element at the same mo
 
 Shortcut fusion techniques such as foldr/build~\cite{gill1993short} and stream fusion~\cite{coutts2007stream} rely on inlining to expose fusion opportunities.
 In Haskell compilers such as GHC, the decision of when to inline is made by internal compiler heuristics, which makes it difficult for the programmer to predict when fusion will occur.
+When shortcut fusion cannot fuse a program, it fails silently, leaving the programmer unaware of the failure.
 In this environment, array fusion is considered a ``bonus'' optimisation rather than integral part of the compilation method.
 In contrast, for our feature generation application we really must ensure that multiple queries over the same table are fused, so we cannot rely on heuristics.
 

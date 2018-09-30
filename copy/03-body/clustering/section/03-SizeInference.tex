@@ -1,10 +1,14 @@
 %!TEX root = ../Main.tex
 \section{Size inference}
-Before performing clustering, we infer the relative sizes of each array in the program.
-We now present a simple constraint-based inference algorithm.
+Before performing clustering, we need to infer the relative sizes of each array in the program to determine which array operations can be assigned to the same cluster.
+The array operations in a cluster are fused into a loop with a specific number of iterations, so array operations that process different sized arrays cannot usually be assigned to the same cluster.
+Our $\Hs/map/_n$ combinator requires all input arrays to be the same size, and returns an output array of the same size.
+Compared to \Hs/zipWith/, which returns a statically unknown size, this extra restriction gives size inference more information about the size of the output array, which in turn may allow more array operations to be assigned to the same cluster.
+If we cannot statically determine that all input arrays given to $\Hs/map/_n$ are the same size, size inference will fail: the program may still be compiled, but fusion is not performed.
+
+This section presents a simple constraint-based inference algorithm.
 Size inference has been previously described in the context of array fusion by \citet{chatterjee1991size}.
 In constrast to our algorithm, \citet{chatterjee1991size} does not support size-changing functions such as filter.
-If size inference fails, the programs may still be compiled, but fusion is not performed.
 
 Although our constraint-based formulation of size inference is reminiscent of type inference for HM(X)~\cite{odersky1999type}, there are important differences.
 Firstly, our type schemes include existential quantifiers, which express the fact that the sizes of arrays produced by filter operations are statically unknown, in general.

@@ -91,7 +91,7 @@ The proof is described in \cref{s:Proofs}.
 
 \item[Clustering for array-backed streams:]
 a clustering algorithm for array combinators, which supports size-changing operators such as filter.
-We allow size-changing operators to be assigned to the same cluster as operations on both their source array and their output array; existing clustering algorithms for imperative loop nests cannot assign size-changing operators to the same cluster as operations on the output array.
+We allow size-changing operators to be assigned to the same cluster as operations that process their input and output arrays; existing clustering algorithms for imperative loop nests cannot assign size-changing operators to the same cluster as operations on the output array.
 Our algorithm encodes the clustering constraints of a set of array combinators as an integer linear program to be solved externally.
 The clustering algorithm is described in \cref{clustering}.
 

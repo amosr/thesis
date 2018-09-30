@@ -11,7 +11,7 @@ In \cref{part:icicle} we introduced \emph{Icicle}, an alternate presentation of 
 Here, values from the input stream can be shared among multiple consumers without explicitly duplicating the stream.
 
 In \cref{taxonomy/polarised} we saw \emph{polarised streams}, which are a careful combination of push streams and pull streams, that can be used execute multiple queries concurrently.
-Writing a group of queries as polarised streams requires putting all the queries together in a single dataflow graph, then performing a manual polarity analysis on the graph, so that push or pull polarities can be assigned to each edge of the dataflow grpah.
+Writing a group of queries as polarised streams requires putting all the queries together in a single dataflow graph, then performing a manual polarity analysis on the graph, so that push or pull polarities can be assigned to each edge of the dataflow graph.
 
 In \cref{chapter:process:processes} we introduced \emph{process fusion}, where a Kahn process network is used to execute multiple queries; the processes are then fused together so the queries can be executed as a single process, without communication overhead.
 Here, the queries require no polarity analysis, and fusion is performed automatically.
@@ -47,17 +47,19 @@ The fusion algorithm is not commutative because when two processes are trying to
 The fusion algorithm applies some heuristics to decide which instruction to execute first, but when evaluating the processes as a process network, the choice is non-deterministic.
 Fusion commits too early to a particular interleaving of the instructions from each process, when there are many possible interleavings that would work.
 By explicitly introducing non-determinism in the fused process, we could represent all possible interleavings, and do not have to commit to one too early.
-We are moving the non-determinism from the fusion algorithm deciding which process to execute, and reifying it in the result process itself.
+We want to stop the fusion algorithm from committing to a scheduling decision too early, and allow the result process to represent all possible schedules.
 
 Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.
-Different orders will not affect the result, or whether things fuse.
-Different orders do affect the size of the intermediate process, after performing some fusion but before all processes are fused together.
-Fusing two unconnected processes which read from different streams introduces a lot of non-determinism: at each step of the fused process, either of the original processes can take a step.
-The two processes do not constrain each other, and the result process will have a lot of states.
-Fusing connected processes, for example a producer and a consumer, introduce less non-determinism because there are points when only one of the processes can run.
+Fusing the whole network in different orders will not affect the result, or whether processes can be fused together.
+The order in which the whole network is fused does affect the intermediate process, though, and some fusion orders may produce larger intermediate processes.
+Two unconnected processes, which read from different streams, can execute without coordinating with each other.
+If we fuse these two unconnected processes together, at every step the fused result process can non-deterministically choose which source process to execute.
+In this case, the number of distinct states for the result process is the cross product of the states in each source process.
+Fusing connected processes, for example a producer and a consumer, introduce less non-determinism because there are times when only one of the processes can run.
 When the consumer is waiting for a value, only the producer can run.
+With less non-determinism, the result process is likely to be smaller.
 We suspect that, in general, fusing connected processes will produce a smaller process than fusing unconnected processes.
-The size of the overall result for the entire network is not any different, but the intermediate process will be smaller.
+The size of the overall result for the entire network is the same, but the intermediate process will be smaller.
 Larger intermediate programs generally take longer to compile, so some heuristic order which fuses connected processes is likely to be useful, even if the order does not affect the result.
 
 The advantage of Kahn process networks is that they guarantee a deterministic result, despite the non-deterministic evaluation order.

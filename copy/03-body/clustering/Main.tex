@@ -3,12 +3,12 @@
 
 \input{copy/03-body/clustering/style/utils.tex}
 
-This chapter presents a clustering algorithm for scheduling array programs, which may perform multiple passes over input or intermediate arrays.
+This chapter presents a clustering algorithm for scheduling array programs, where the programs may perform multiple passes over input or intermediate arrays.
 % This chapter presents a clustering algorithm for scheduling array programs, which can perform multiple passes over input arrays, and introduce intermediate arrays.
 This work was first published as \citet{robinson2014fusing}.
 
-In the streaming models we have seen so far, all streams are \emph{ephemeral}: once the elements have been read, they cannot be recovered unless they are explicitly buffered.
-Input streams such as reading from a network socket are ephemeral, but arrays stored in memory can be re-read any number of times.
+In the streaming models we have seen so far, all streams are \emph{ephemeral}: once the elements have been read, they cannot be recovered unless they are explicitly materialized into buffers.
+Input streams such as those that read from a network socket are ephemeral, but arrays stored in memory or in secondary storage can be re-read any number of times.
 For array computations, intermediate and output arrays can be stored and re-read as well.
 Array computations that perform multiple passes over input or intermediate arrays can be executed as multiple streaming programs.
 We execute each pass as its own streaming process network, fused by the process fusion algorithm from \cref{chapter:process:processes}, with the input streams being read from arrays, and the output streams written to arrays.
@@ -24,7 +24,7 @@ We identify an opportunity for improvement over existing imperative clustering a
 
 \item   
 We extend the clustering algorithm of \citet{megiddo1998optimal} and \citet{darte2002contraction} with support for size-changing operators.
-In our system, size-changing operators can be clustered with operations on both their source array and output array (\cref{clustering:s:ILP});
+In our system, size-changing operators can be assigned to the same cluster as operations that process their input and output arrays (\cref{clustering:s:ILP});
 
 \item
 We present a simplification to constraint generation that is also applicable to some ILP formulations such as Megiddo's:
@@ -36,7 +36,8 @@ For example, we encode that memory traffic is more expensive than the overhead o
 
 \item
 We present benchmarks of our algorithm applied to several common programming patterns.
-Our algorithm is complete and optimising for the chosen cost model yields good results in practice, though a cost model which maps exactly to program runtime is infeasible in general (\cref{clustering:s:Benchmarks}).
+Our algorithm is complete and finds the optimal clustering for the chosen cost model, which yields good results in practice.
+A cost model which maps exactly to program runtime performance is infeasible in general (\cref{clustering:s:Benchmarks}).
 \end{itemize}
 
 Our implementation is available at \url{https://github.com/amosr/clustering}.

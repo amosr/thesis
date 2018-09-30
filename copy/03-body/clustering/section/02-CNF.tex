@@ -14,7 +14,7 @@ The \Hs@normalize2@ example from \cref{clustering:s:Introduction} is already in 
 its corresponding cluster diagrams are shown in \cref{clustering:f:normalize2-clusterings}.
 Our cluster diagrams are similar to Loop Dependence Graphs (LDGs) from related work in imperative array fusion~\cite{gao1993collective}.
 We name edges after the corresponding variable from the CNF form, and edges which are fusion preventing are drawn with a dash through them (as per the edge labeled \Hs@sum1@ in \cref{clustering:f:normalize2-clusterings}).
-In cluster diagrams, as with dependency graphs, we tend to elide the worker functions to combinators when they are not important to the discussion --- so we don't show the @(+)@ operator on each use of \Hs@fold@.
+In cluster diagrams, as with dependency graphs, we tend to elide the worker functions of combinators when they are not important to the discussion --- so we don't show the @(+)@ operator on each use of \Hs@fold@.
 
 
 Clusters of operators, which are to be fused into a single pass by process fusion, are indicated by dotted lines, and we highlight materialized arrays by drawing them in boxes.
@@ -29,7 +29,7 @@ Although not part of the grammar, we give the type of each combinator at the bot
 The $\Hs@map@_n$ combinator takes a worker function, $n$ arrays of the same length, and applies the worker function to all elements at the same index.
 As such, it is similar to Haskell's \Hs@zipWith@, with an added length restriction on the argument arrays.
 The \Hs@generate@ combinator takes an array length and a worker function, and creates a new array by applying the worker to each index.
-The \Hs@gather@ combinator takes an array of elements, an array of indices, and produces the array of elements that are positioned at each index.
+The \Hs@gather@ combinator takes an array of elements, an array of indices, and produces the array of elements that are located at each index.
 In Haskell, \Hs@gather@ would be implemented as (\Hs@gather arr ixs = map (index arr) ixs@).
 The \Hs@cross@ combinator returns the cartesian product of two arrays. 
 

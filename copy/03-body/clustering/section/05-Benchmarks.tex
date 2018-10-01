@@ -34,7 +34,7 @@ Using the same fusion algorithm isolates the true cost of the various clustering
 % As mentioned in~\citet{lippmeier2013data}, the current Haskell stream fusion mechanism introduces overhead in terms of a large number of duplicate loop counters, which increases register pressure unnecessarily.
 % Hand-fusing all code and compiling it with the same compiler (GCC) isolates the true cost of the various clusterings from low-level differences in code generation.
 
-We have used both GLPK and CPLEX as external ILP solvers.
+We have used both GLPK \citep{glpk} and CPLEX \citep{cplex} as external ILP solvers.
 For small programs such as \Hs@normalizeInc@, both solvers produce solutions in under 100ms.
 For a larger randomly generated example with twenty-five combinators, GLPK took over twenty minutes to produce a solution, while the commercial CPLEX solver was able to produce a solution in under one second --- which is still quite usable.
 We will investigate the reason for this wide range in performance in future work.

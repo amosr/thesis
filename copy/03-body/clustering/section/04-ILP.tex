@@ -58,10 +58,12 @@ For each intermediate variable, we add a directed edge ($E$) from the binding th
 Each edge is also marked as either \emph{fusible} or \emph{fusion-preventing}.
 Fusion-preventing edges are used when the producer must finish its execution before the consumer node can start.
 For example, a \Hs@fold@ operation must complete execution before it can produce the scalar value needed by its consumers.
-Conversely, the \Hs@map@ operation produces an output value for each value it consumes; as the values are produced incrementally, its edge is marked as fusible. 
+Conversely, the \Hs@map@ operation produces an output value for each value it consumes; as the input array is processed from start to end and values are produced incrementally, its edge is marked as fusible. 
 
 The \Hs@gather@ operation is a hybrid: it takes an indices array and an elements array, and for each element in the indices array returns the corresponding data element.
 This means that \Hs/gather/ can be fused with the operation that produces its indices, but not the operation that produces its elements --- because those are accessed in a random-access manner. 
+
+The \Hs/cross/ operation computes the cartesian product by looping over its second array for every element in the first array.
 
 % Each node may simply be the name of its output binding (or bindings, in the case of \Hs@external@); as we require names to only be bound once, this is assured to be unique. Creating edges between these nodes is simply when one binding references an earlier one. The only complication is designating edges as \emph{fusible} or \emph{fusion-preventing}.
 
@@ -96,28 +98,43 @@ The values of these variables are used to construct the final clustering, such t
 % This group of variables is equivalent to $x$ in \citet{megiddo1998optimal}.
 
 % \subsubsection{Topological ordering}
-The second group of variables in \cref{fig:clustering:ilp-vars}, $\pi$, is parameterised by a single node.
+The second group of variables in \cref{fig:clustering:ilp-vars}, $\pi$, is parameterised by a single node index.
 This group of variables is used to ensure that the clustering is acyclic.
 An acyclic clustering is necessary to be able to execute the resulting clustering: we need to ensure that for each node in the graph, the dependencies of that node can be executed before the node itself.
 For each node $i$, we associate a real number $\pi_i$, such that for every node $j$ that depends on $i$ and is not fused with $i$, we have $\pi_j > \pi_i$.
 Our linear constraints will ensure that if two nodes are fused into the same cluster, then their $\pi$ values will be identical --- though nodes in different clusters can also have the same $\pi$ value.
-Here is an example of a cyclic clustering, with the cluster (C1) or (C2) specified on the right:
-\begin{haskell}
-  cycle xs  = let ys  = map (+1) xs     -- (C1)
-                  sum = fold ys         -- (C2)
-                  zs  = map (+sum) ys   -- (C1)
-              in  zs
-\end{haskell}
 
-There is no fusion-preventing edge directly between the \Hs@ys@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@.
-If the \Hs@ys@ and \Hs@zs@ bindings were in the same cluster (C1) and \Hs@sum@ was in cluster (C2), there would be a dependency cycle between (C1) and (C2), and neither could be executed before the other.
+\begin{figure}
+\begin{minipage}{0.5\textwidth}
+\begin{haskell}
+mapFoldMap xs 
+ = let ys  = map  (+1)   xs
+       sum = fold (+) 0  ys
+       zs  = map  (+sum) ys
+   in  zs
+\end{haskell}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{center}
+\includegraphics[scale=0.5]{copy/03-body/clustering/figures/ex3-cyclic.pdf}
+\end{center}
+\end{minipage}
+\caption{Program \Hs/mapFoldMap/, with an example of a cyclic clustering}
+\label{clustering:f:cyclic}
+\end{figure}
+
+
+The left of \Cref{clustering:f:cyclic} shows an example program, \Hs/mapFoldMap/, with an invalid clustering shown on the right.
+In this program, there is no fusion-preventing edge directly between the \Hs@ys@ and \Hs@zs@ bindings, but there is a fusion-preventing edge between \Hs@sum@ and \Hs@zs@.
+The cluster diagram shows the \Hs@ys@ and \Hs@zs@ bindings in the same cluster, while \Hs@sum@ is in a different cluster.
+This clustering contains a dependency cycle between the two clusters, and neither can be executed before the other.
 We constrain the $\pi$ variables to reject this clustering, by requiring that $\pi_{\Hs@ys@} \le \pi_{\Hs@sum@} < \pi_{\Hs@zs@}$.
 Since $\pi_{\Hs@ys@} < \pi_{\Hs@zs@}$, the two cannot be in the same cluster.
 
 % The $\pi$ group is equivalent to $\pi$ in \citet{megiddo1998optimal}, and $\rho$ in \citet{darte2002contraction}.
 
 % \subsubsection{Array contraction}
-The final group of variables in \cref{fig:clustering:ilp-vars}, $c$, is parameterised by a single node.
+The final group of variables in \cref{fig:clustering:ilp-vars}, $c$, is parameterised by a single node index.
 This group of variables is used to help define the cost model encoded by the objective function.
 Each node is assigned a variable $c_i$ that indicates whether the array produced by the associated binding is \emph{fully contracted}.
 When an array is fully contracted, it means that all consumers of that array are fused into the same cluster, so we have $c_i = 0 \iff (\forall (i',j) \in E.\ i = i' \implies x_{i,j} = 0)$.
@@ -286,6 +303,7 @@ Minimise   \>     $\Sigma_{(i,j) \in E} W_{i,j} \cdot x_{i,j}$
 \\         \> $W_{i,j} = 1$   \> $~|$ \> $\Hs@otherwise@$
 \\         \> \> \> (the only benefit is loop overhead)
 \\         \> $N = |V|$
+\\         \> \> \> (the number of nodes in the graph)
 \end{tabbing}
 \caption{Integer linear program with objective function}
 \label{fig:clustering:ilp-obj}

@@ -578,6 +578,44 @@ Two combinators $a$ and $b$ of different iteration size may be fused together on
 That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
 If the two combinators have the same iteration size, the two compatible concestors will be the combinators themselves, and the above requirements for fusing different sized combinators are trivially satisfied, since a combinator is always fused with itself.
 
+% \begin{listing-c}[float,label=figs/clustering/normalize2-c,caption=Unfused imperative implementation of \Hs/normalize2/]
+% void normalize2(int* xs, int xs_length, int* out_ys1, int* out_ys2)
+% {
+%     // sum1 = fold (+) 0 xs
+%     int sum1 = 0;
+%     for (int i = 0; i != xs_length; ++i) {
+%         sum1 += xs[i];
+%     }
+% 
+%     // gts = filter ($>$ 0) xs
+%     int* gts = malloc(sizeof(int) * xs_length);
+%     int gts_length = 0;
+%     for (int i = 0; i != xs_length; ++i) {
+%         if (xs[i] > 0) {
+%             gts[gts_length] = xs[i];
+%             gts_length += 1;
+%         }
+%     }
+% 
+%     // sum2 = fold (+) 0 gts
+%     int sum2 = 0;
+%     for (int i = 0; i != gts_length; ++i) {
+%         sum2 += gts[i];
+%     }
+%     free(gts);
+% 
+%     // ys1 = map (/ sum1) xs
+%     for (int i = 0; i != xs_length; ++i) {
+%         out_ys1[i] = xs[i] / sum1;
+%     }
+% 
+%     // ys2 = map (/ sum2) xs
+%     for (int i = 0; i != xs_length; ++i) {
+%         out_ys2[i] = xs[i] / sum2;
+%     }
+% }
+% \end{listing-c}
+
 The definition of $\concestors'$ returns the pair of compatible concestors as well as the distance, determined by counting how many other ancestor transducers there are between the combinator and the compatible concestors.
 The $\mi{closest}$ function compares the distances of two pairs of compatible concestors and chooses the closest pair.
 The $\mi{increment}$ function increases the distance by one.
@@ -600,8 +638,18 @@ Because fusing the combinators with any pair of compatible common ancestors requ
 % To fuse a combinator with a particular ancestor, we must also fuse the combinator with all the nodes in the path between the combinator and its ancestor.
 % In the definition of $\concestors$, we find the closest ancestors because it allows the most fusion; finding the furthest ancestors would be more restrictive, as it would also require fusing the inputs with any other ancestor transducers between the input combinators and the furthest ancestors.
 
+\begin{haskell}[float,label=figs/clustering/normalize2-sizeinf,caption=Normalize2 function]
+normalize2 :: Array Int -> (Array Int, Array Int)
+normalize2 xs
+ = let sum1 = fold   (+)  0   xs
+       gts  = filter (>   0)  xs
+       sum2 = fold   (+)  0   gts
+       ys1  = map    (/ sum1) xs
+       ys2  = map    (/ sum2) xs
+   in (ys1, ys2)
+\end{haskell}
 
-In the previous \Hs/normalize2/ example, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
+In the previous \Hs/normalize2/ example, repeated in \cref{figs/clustering/normalize2-sizeinf}, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
 The two folds have different iteration sizes, and their compatible concestors are $\concestors(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
 The compatible concestors \Hs/sum1/ and \Hs/gts/ both consume the input \Hs/xs/ and have the same iteration size.
 In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, we require that: \Hs@sum1@ and \Hs@gts@ are fused together; \Hs@sum1@ and \Hs@sum1@ are fused together, which is trivial as fusion is reflexive;  and \Hs@gts@ and \Hs@sum2@ are fused together.

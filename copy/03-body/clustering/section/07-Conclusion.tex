@@ -12,8 +12,8 @@
 % Having a predictable clustering algorithm is particularly important when combined with other transformations, such as the vectorisation done by Data Parallel Haskell~\cite{chakravarty2007data}.
 % In the case of Data Parallel Haskell, the actual combinators to be clustered are not written directly by the programmer, so being able to find a good clustering without the programmer tweaking the combinators is important.
 
-One obvious shortcoming of our clustering formulation is the limited selection of combinators.
-Other combinators can currently be used as external computations, but this is not ideal as they will not be fused.
+One obvious opportunity for further work in our clustering formulation is to improve selection of combinators.
+Other combinators can currently be introduced as external computations, but this is not ideal as they will not be fused.
 We now present some ideas of how to support common combinators in future work.
 
 The size inference rules for single-input \Hs@map@ can be re-used for single-input combinators that produce one output element for every input element, such as \Hs@postscanl@, \Hs@prescanl@, and \Hs@indexed@.

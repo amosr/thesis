@@ -53,11 +53,53 @@ If we wrote this program to use stream fusion \citep{coutts2007stream}, which is
 
 
 The rightmost diagram in \cref{clustering:f:normalize2-clusterings} shows the clustering determined by the best existing ILP approach for imperative array-based loop fusion.
+To obtain this clustering, we first implemented each combinator as a separate imperative loop, shown in \cref{figs/clustering/normalize2-c}.
 Imperative clustering algorithms, such as \citet{megiddo1998optimal}, only cluster together loops of the same iteration size.
-The result of the filter operation, stored in the array \Hs/gts/, has a different size to the input array \Hs/xs/.
-The fold over \Hs/gts/ is performed separately to the filter operation because the two have different loop iteration sizes.
-This clustering combines the \Hs@sum1@ fold and \Hs@gts@ filter into one loop, as well as combining the two map operations.
+% The loop that performs the filter operation consumes the array \Hs/xs/, which has size \Hs/xs_length/, and produces the array \Hs/gts/, which has size \Hs/gts_length/.
+In the imperative code, the loop that performs the fold over \Hs/gts/ has an iteration size of \Hs/gts_length/, while all the other loops have an iteration size of \Hs/xs_length/.
+The final value of \Hs/gts_length/ is not known until the loop that performs the filter completes, so there is a fusion-preventing dependency between the loop that performs the filter and the loop that performs the fold over \Hs/gts/, as well as having different iteration sizes.
+The low-level imperative details obscure the high-level meaning of the program, and complicate fusing the filter operation with the subsequent fold.
+% The imperative clustering combines the \Hs@sum1@ fold and \Hs@gts@ filter into one loop, as well as combining the two map operations.
+% The imperative clustering combines the \Hs@sum1@ fold and \Hs@gts@ filter into one loop, as well as combining the two map operations.
 % , but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations.
+
+\begin{listing-c}[float,label=figs/clustering/normalize2-c,caption=Unfused imperative implementation of \Hs/normalize2/]
+void normalize2(int* xs, int xs_length, int* out_ys1, int* out_ys2)
+{
+    // sum1 = fold (+) 0 xs
+    int sum1 = 0;
+    for (int i = 0; i != xs_length; ++i) {
+        sum1 += xs[i];
+    }
+
+    // gts = filter ($>$ 0) xs
+    int* gts = malloc(sizeof(int) * xs_length);
+    int gts_length = 0;
+    for (int i = 0; i != xs_length; ++i) {
+        if (xs[i] > 0) {
+            gts[gts_length] = xs[i];
+            gts_length += 1;
+        }
+    }
+
+    // sum2 = fold (+) 0 gts
+    int sum2 = 0;
+    for (int i = 0; i != gts_length; ++i) {
+        sum2 += gts[i];
+    }
+    free(gts);
+
+    // ys1 = map (/ sum1) xs
+    for (int i = 0; i != xs_length; ++i) {
+        out_ys1[i] = xs[i] / sum1;
+    }
+
+    // ys2 = map (/ sum2) xs
+    for (int i = 0; i != xs_length; ++i) {
+        out_ys2[i] = xs[i] / sum2;
+    }
+}
+\end{listing-c}
 
 Our approach, shown in the middle of \cref{clustering:f:normalize2-clusterings}, produces the optimal clustering in this case: one loop for the filter and folds, another for the maps.
 For this example, we could execute each cluster as either push streams (\cref{taxonomy/push}) or as a process network fused by process fusion (\cref{chapter:process:processes}).

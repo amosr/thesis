@@ -3,7 +3,7 @@
 
 This appendix includes the implementations of benchmark programs that were mentioned previously in \cref{s:Benchmarks}, but were not shown there.
 
-% \begin{lstlisting}[float=h,caption=Folderol implementation of \Hs/priceAnalyses/,label=l:a:bench:priceAnalysesFolderol]
+% \begin{lstlisting}[float=ht,caption=Folderol implementation of \Hs/priceAnalyses/,label=l:a:bench:priceAnalysesFolderol]
 % priceAnalysesFolderol :: (FilePath,FilePath) -> IO (Double,Double)
 % priceAnalysesFolderol (fpStock, fpMarket) = do
 %   (pot,(pom,())) <- scalarIO $ \snkPOT -> scalarIO $ \snkPOM ->
@@ -26,7 +26,7 @@ This appendix includes the implementations of benchmark programs that were menti
 %   Stats.regressionCorrelation pp
 % \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:priceAnalysesPipes,caption=Pipes two-pass implementation of \Hs/priceAnalyses/]
+\begin{lstlisting}[float=ht,label=l:a:bench:priceAnalysesPipes,caption=Pipes two-pass implementation of \Hs/priceAnalyses/]
 priceAnalysesPipes (fpStock,fpMarket) =
   (,) <$> priceOverTime fpStock <*> priceOverMarket fpStock fpMarket
 
@@ -48,7 +48,7 @@ priceOverMarket fpStock fpMarket =
    P.>-> P.map (\(s,m) -> (cost s, cost m)) 
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:priceAnalysesStreaming,caption=Streaming implementation of \Hs/priceAnalyses/]
+\begin{lstlisting}[float=ht,label=l:a:bench:priceAnalysesStreaming,caption=Streaming implementation of \Hs/priceAnalyses/]
 priceAnalysesStreaming (fpStock,fpMarket) = do
   (pom S.:> (pot S.:> (),_)) <- priceOverMarket
       (S.store priceOverTime $ sourceRecords fpStock)
@@ -66,7 +66,7 @@ priceOverMarket stock market
    stock market
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:quickhull,caption=Quickhull skeleton parameterised by filterMax and pivots]
+\begin{lstlisting}[float=ht,label=l:a:bench:quickhull,caption=Quickhull skeleton parameterised by filterMax and pivots]
 quickhull :: (Vector Point -> IO (Point,Point))
           -> (Line -> Vector Point -> IO (Point, Vector Point))
           -> Vector Point
@@ -90,7 +90,7 @@ quickhull fPivots fFilterMax ps0
      return (left ++ singleton pt ++ right)
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,label=l:a:bench:filterMaxFolderol,caption=Folderol implementation of \Hs/filterMax/]
+% \begin{lstlisting}[float=ht,label=l:a:bench:filterMaxFolderol,caption=Folderol implementation of \Hs/filterMax/]
 % filterMaxFolderol l ps = do
 %   (maxim,(above,())) <- scalar          $ \snkMaxim ->
 %                         vectorSize   ps $ \snkAbove ->
@@ -105,7 +105,7 @@ quickhull fPivots fFilterMax ps0
 %   return (fst maxim, above)
 % \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:filterMaxHand,caption=Hand-fused implementation of \Hs/filterMax/]
+\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxHand,caption=Hand-fused implementation of \Hs/filterMax/]
 filterMaxHand l ps
  | Unbox.length ps == 0
  = return ((0,0), Unbox.empty)
@@ -145,7 +145,7 @@ filterMaxHand l ps
            False -> go mv (ix + 1) writeIx x2 y2 d2
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:filterMaxVectorShare,caption=Vector / share implementation of \Hs/filterMax/]
+\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxVectorShare,caption=Vector / share implementation of \Hs/filterMax/]
 filterMaxVectorShare l ps
  = let annot = Unbox.map (\p -> (p, distance p l)) ps
        point = fst
@@ -155,7 +155,7 @@ filterMaxVectorShare l ps
    in return (point, above)
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:filterMaxVectorRecompute,caption=Vector / recompute implementation of \Hs/filterMax/]
+\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxVectorRecompute,caption=Vector / recompute implementation of \Hs/filterMax/]
 filterMaxVectorRecompute l ps
  = let annot1 = Unbox.map (\p -> (p, distance p l)) ps
        point  = fst
@@ -166,7 +166,7 @@ filterMaxVectorRecompute l ps
    in return (point, above)
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:filterMaxPipes,caption=Pipes implementation of \Hs/filterMax/]
+\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxPipes,caption=Pipes implementation of \Hs/filterMax/]
 filterMaxPipes l ps = do
   r  <- MUnbox.unsafeNew (Unbox.length ps)
   ix <- newIORef 0
@@ -194,7 +194,7 @@ filterMaxPipes l ps = do
       filterAndMax vecR ixR ptR ix p' d'
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,label=l:a:bench:compressorFolderol,caption=Folderol implementation of \Hs/compressor/]
+% \begin{lstlisting}[float=ht,label=l:a:bench:compressorFolderol,caption=Folderol implementation of \Hs/compressor/]
 % compressorFolderol :: Vector Double -> IO (Vector Double)
 % compressorFolderol vecIns = do
 %   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
@@ -215,7 +215,7 @@ filterMaxPipes l ps = do
 % \end{lstlisting}
 
 
-\begin{lstlisting}[float=h,label=l:a:bench:compressorVector,caption=Vector implementation of \Hs/compressor/]
+\begin{lstlisting}[float=ht,label=l:a:bench:compressorVector,caption=Vector implementation of \Hs/compressor/]
 compressorVector :: Vector Double -> IO (Vector Double)
 compressorVector ins = do
   let squares = Unbox.map        (\x -> x * x) ins
@@ -225,7 +225,7 @@ compressorVector ins = do
   return out
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,label=l:a:bench:compressorLopFolderol,caption=Folderol implementation of \Hs/compressor/ with low-pass]
+% \begin{lstlisting}[float=ht,label=l:a:bench:compressorLopFolderol,caption=Folderol implementation of \Hs/compressor/ with low-pass]
 % compressorLopFolderol :: Vector Double -> IO (Vector Double)
 % compressorLopFolderol ins = do
 %   (vecOut,()) <- vectorSize vecIns $ \snkOut -> do
@@ -240,7 +240,7 @@ compressorVector ins = do
 %   return vecOut
 % \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:compressorLopVector,caption=Vector implementation of \Hs/compressor/ with low-pass]
+\begin{lstlisting}[float=ht,label=l:a:bench:compressorLopVector,caption=Vector implementation of \Hs/compressor/ with low-pass]
 compressorLopVector :: Vector Double -> IO (Vector Double)
 compressorLopVector ins = do
   let lopped  = Unbox.postscanl' lop20k 0 xs
@@ -251,7 +251,7 @@ compressorLopVector ins = do
   return out
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,caption=Folderol implementation of \Hs/append2/]
+% \begin{lstlisting}[float=ht,caption=Folderol implementation of \Hs/append2/]
 % append2Folderol :: FilePath -> FilePath -> FilePath -> IO Int
 % append2Folderol fpIn1 fpIn2 fpOut = do
 %   (count,()) <- scalarIO $ \snkCount ->
@@ -266,7 +266,7 @@ compressorLopVector ins = do
 %   return count
 % \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:append2Conduit,caption=Conduit implementation of \Hs/append2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:append2Conduit,caption=Conduit implementation of \Hs/append2/]
 append2Conduit in1 in2 out =
   C.runConduit (sources C..| sinks)
  where
@@ -285,7 +285,7 @@ append2Conduit in1 in2 out =
      counting (i + 1)
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:append2Pipes,caption=Pipes implementation of \Hs/append2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:append2Pipes,caption=Pipes implementation of \Hs/append2/]
 append2Pipes in1 in2 out = do
   h  <- IO.openFile out IO.WriteMode
   i  <- P.runEffect $ go h
@@ -307,7 +307,7 @@ append2Pipes in1 in2 out = do
      counting s' (i + 1)
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:append2Hand,caption=Hand-fused implementation of \Hs/append2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:append2Hand,caption=Hand-fused implementation of \Hs/append2/]
 append2Hand in1 in2 out = do
   f1 <- IO.openFile in1 IO.ReadMode
   f2 <- IO.openFile in2 IO.ReadMode
@@ -338,14 +338,14 @@ append2Hand in1 in2 out = do
      go2 h f2 (lns + 1)
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:append2Streaming,caption=Streaming implementation of \Hs/append2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:append2Streaming,caption=Streaming implementation of \Hs/append2/]
 append2Streaming in1 in2 out = do
   sinkFile out $ go (sourceFile in1) (sourceFile in2)
  where
   go s1 s2 = S.store S.length_ $ (s1 >> s2)
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,label=l:a:bench:part2Folderol,caption=Folderol implementation of \Hs/part2/]
+% \begin{lstlisting}[float=ht,label=l:a:bench:part2Folderol,caption=Folderol implementation of \Hs/part2/]
 % part2Folderol :: FilePath -> FilePath -> FilePath -> IO (Int, Int)
 % part2Folderol fpIn1 fpOut1 fpOut2 = do
 %   (c1,(c2,())) <- scalarIO $ \snkC1 -> scalarIO $ \snkC2 ->
@@ -363,7 +363,7 @@ append2Streaming in1 in2 out = do
 %   return (c1, c2)
 % \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:part2Pipes,caption=Pipes implementation of \Hs/part2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:part2Pipes,caption=Pipes implementation of \Hs/part2/]
 part2Pipes in1 out1 out2 = do
   o1 <- IO.openFile out1 IO.WriteMode
   o2 <- IO.openFile out2 IO.WriteMode
@@ -389,7 +389,7 @@ part2Pipes in1 out1 out2 = do
   prd l = ByteString.length l `mod` 2 == 0
 \end{lstlisting}
 
-\begin{lstlisting}[float=h,label=l:a:bench:part2Hand,caption=Hand implementation of \Hs/part2/]
+\begin{lstlisting}[float=ht,label=l:a:bench:part2Hand,caption=Hand implementation of \Hs/part2/]
 part2Hand in1 out1 out2 = do
   f1 <- IO.openFile in1 IO.ReadMode
   o1 <- IO.openFile out1 IO.WriteMode
@@ -415,7 +415,7 @@ part2Hand in1 out1 out2 = do
         go i1 o1 o2 c1 (c2 + 1)
 \end{lstlisting}
 
-% \begin{lstlisting}[float=h,label=l:a:bench:partitionAppendFail,caption=Partition / append fusion failure]
+% \begin{lstlisting}[float=ht,label=l:a:bench:partitionAppendFail,caption=Partition / append fusion failure]
 % partitionAppendFailure :: Vector Int -> IO (Vector Int)
 % partitionAppendFailure xs = do
 %   (ys,()) <- vectorSize xs $ \snkYs ->
@@ -429,7 +429,7 @@ part2Hand in1 out1 out2 = do
 %   return ys
 % \end{lstlisting}
 % 
-% \begin{lstlisting}[float=h,label=l:a:bench:partitionAppend2Source,caption=Partition / append with two sources]
+% \begin{lstlisting}[float=ht,label=l:a:bench:partitionAppend2Source,caption=Partition / append with two sources]
 % partitionAppend2Source xs = do
 %   (ys,()) <- vectorSize xs $ \snkYs ->
 %     $$(fuse $ do
@@ -442,7 +442,7 @@ part2Hand in1 out1 out2 = do
 %   return ys
 % \end{lstlisting}
 % 
-% \begin{lstlisting}[float=h,label=l:a:bench:partitionAppend2Loop,caption=Partition / append with two loops]
+% \begin{lstlisting}[float=ht,label=l:a:bench:partitionAppend2Loop,caption=Partition / append with two loops]
 % partitionAppend2Loop xs = do
 %   (as,(bs,())) <- vectorSize xs $ \snkAs ->
 %                   vectorSize xs $ \snkBs ->
@@ -461,7 +461,7 @@ part2Hand in1 out1 out2 = do
 % \end{lstlisting}
 
 
-\begin{lstlisting}[float=h,label=l:a:bench:partitionAppendVector,caption=Vector implementations of \Hs/partitionAppend/]
+\begin{lstlisting}[float=ht,label=l:a:bench:partitionAppendVector,caption=Vector implementations of \Hs/partitionAppend/]
 partitionAppendV2Loop :: Unbox.Vector Int -> IO (Unbox.Vector Int)
 partitionAppendV2Loop !xs = do
   let (evens,odds) = Unbox.partition (\i -> i `mod` 2 == 0) xs

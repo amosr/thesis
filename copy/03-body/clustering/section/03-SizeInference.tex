@@ -1,12 +1,10 @@
 %!TEX root = ../Main.tex
 \section{Size inference}
-Before performing clustering, we need to infer the relative sizes of each array in the program to determine which array operations can be assigned to the same cluster.
-The array operations in a cluster are fused into a loop with a specific number of iterations, so array operations that process different sized arrays cannot usually be assigned to the same cluster.
-Our $\Hs/map/_n$ combinator requires all input arrays to be the same size, and returns an output array of the same size.
-Compared to \Hs/zipWith/, which returns a statically unknown size, this extra restriction gives size inference more information about the size of the output array, which in turn may allow more array operations to be assigned to the same cluster.
-If we cannot statically determine that all input arrays given to $\Hs/map/_n$ are the same size, size inference will fail: the program may still be compiled, but fusion is not performed.
-
-This section presents a simple constraint-based inference algorithm.
+The array operations in a cluster are fused together into a loop with a specific number of iterations.
+Array operations that process different sized arrays cannot usually be assigned to the same cluster, because they require different sized loops.
+Consumers of arrays produced by size-changing operations can be assigned to the same cluster as operations that process different sized arrays, but only in specific circumstances, which we shall see in \cref{clustering/size/transducers}.
+Before performing clustering, we need to infer the relative sizes of each array in the program, as the sizes determine the relative loop sizes of each array operation, and whether they can be assigned to the same cluster.
+We use a simple constraint-based inference algorithm.
 Size inference has been previously described in the context of array fusion by \citet{chatterjee1991size}.
 In constrast to our algorithm, \citet{chatterjee1991size} does not support size-changing functions such as filter.
 
@@ -17,6 +15,10 @@ HM(X) style type inferences use the $\exists$ quantifier to bind local type vari
 Secondly, our types are first-order only, as program graphs cannot take other program graphs as arguments.
 Provided we generate the constraints in the correct form, solving them is straightforward.
 
+Size inference cannot statically infer array sizes for all programs.
+The $\Hs/map/_n$ combinator requires all input arrays to be the same size, and returns an output array of the same size.
+Compared to \Hs/zipWith/, which returns a statically unknown size, this extra restriction gives size inference more information about the size of the output array, which in turn may allow more array operations to be assigned to the same cluster.
+If we cannot statically determine that all input arrays given to $\Hs/map/_n$ are the same size, size inference will fail: the program may still be compiled, but fusion is not performed.
 
 % -----------------------------------------------------------------------------
 \begin{figure}
@@ -53,7 +55,8 @@ MMMMMMMMM \= MM  \= MM \= MMMMMM \= \kill
 % -----------------------------------------------------------------------------
 \subsection{Size types, constraints and schemes}
 \label{clustering:s:SizeTypes}
-\Cref{clustering:f:constraints} shows the grammar for size types, constraints and schemes. A size scheme is like a type constraint from Hindley-Milner type systems, except that it only mentions the size of each input array, and ignores the element types.
+\Cref{clustering:f:constraints} shows the grammar for size types, constraints and schemes.
+A size scheme is like a type scheme from Hindley-Milner style type systems, except that it only mentions the size of each input array, and ignores the element types.
 
 A size may either be a variable $k$ or a cross product of two sizes.
 We use the latter to represent the result size of the \Hs@cross@ operator discussed in the previous section.
@@ -386,7 +389,8 @@ With process fusion, such an operation would be compiled into a process containi
 
 Iteration sizes are used to decide which operators can be fused with each other.
 As in prior work, operators with the same iteration size can be fused.
-However, in our system we also allow operators of different iteration sizes to be fused, provided those sizes are descendants of the same parent size.
+However, in prior work, operators with different iteration size cannot be assigned to the same cluster, as imperative loop fusion systems cannot generally fuse loops of different iteration sizes.
+In our system, we also allow operators of different iteration sizes to be fused, provided those sizes are descendants of the same parent size.
 
 We use $T$ to range over iteration sizes, and write $\bot$ for the case where the iteration size is unknown. The $\bot$ size is needed to handle the \Hs@external@ operator, as we cannot statically infer its true iteration size, and it cannot be fused with any other operator.
 
@@ -442,6 +446,7 @@ $\iiter_{\Gamma,C}$
 
 % -----------------------------------------------------------------------------
 \subsection{Transducers and compatible common ancestors}
+\label{clustering/size/transducers}
 %     we've said that several times before
 % Unlike previous work, we do allow combinators with different iteration sizes to be fused together. For example, an operation on filtered data may be fused with the filter operation that generates the data, even though the iteration sizes are different.
 
@@ -481,16 +486,16 @@ $\trans'(bs,o)$    \\
 \label{fig:clustering:trans}
 \end{figure}
 
-With the $\trans$ function, we can express the restriction on programs we view as valid for clustering as the following lemma:
+With the $\trans$ function, we can express the restriction on programs we view as valid for clustering as the following:
 
-\textbf{Lemma: sole transducers}.
+\textbf{Definition: sole transducers}.
 If a program $p$ is \emph{valid}, then its bindings will have at most one transducer:
 \[
 \forall p, \sigma, n.\ p :_s \sigma \implies |\trans(\mi{binds}(p), n)| \le 1
 \]
 
-Intuitively, only the $\Hs/map/_n$ clause in $\trans$ can introduce multiple transducers in the result, and only the \Hs/filter/ clause can introduce a transducer.
-Since the constraint generation for $\Hs/map/_n$ requires all inputs to have the same size, the inputs should also have the same transducer.
+Intuitively, by inspecting the definition of $\trans'$ and performing case analysis on the combinator binding, we see that only the $\Hs/map/_n$ clause in $\trans'$ can return multiple transducers, and only the \Hs/filter/ clause returns a singleton set containing a transducer.
+Since the constraint generation for $\Hs/map/_n$ requires all inputs to have the same size, the inputs will also have the same transducer.
 If the inputs had different transducers, then their size would be generated by different filters, and each would have its own separate existential variable as a size type, not fulfilling the same-size requirement for $\Hs/map/_n$.
 
 % \textbf{Proof:} by induction on $bs$. If $n = \Hs@map@_n~f~ns$,
@@ -569,7 +574,7 @@ $\mi{increment}((a,b,d)) = (a,b,d+1)$ \\
 To determine whether two combinators of different iteration sizes may be fused together, \cref{fig:clustering:concestors} defines the $\concestors$ function, which finds the pair of most recent common ancestor transducers such that both ancestors have the same iteration size.
 In the field of biological systematics, the term \emph{concestor} is defined as the most recent common ancestor; here, we define the \emph{compatible concestors} of a transducer to be the pair of most recent common ancestors with the same iteration size.
 In the definition of $\concestors$, we use the syntax $(name \times name)_\bot$ to denote an optional pair of names.
-Two combinators $a$ and $b$ of different size may be fused together only if they have compatible concestors $(c, d) \in \concestors(a,b)$, and the combinators and their compatible concestors are also fused together.
+Two combinators $a$ and $b$ of different iteration size may be fused together only if they have compatible concestors $(c, d) \in \concestors(a,b)$, and the combinators and their compatible concestors are also fused together.
 That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
 If the two combinators have the same iteration size, the two compatible concestors will be the combinators themselves, and the above requirements for fusing different sized combinators are trivially satisfied, since a combinator is always fused with itself.
 

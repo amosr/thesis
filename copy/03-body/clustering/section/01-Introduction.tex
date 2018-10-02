@@ -64,18 +64,18 @@ The low-level imperative details obscure the high-level meaning of the program, 
 % , but requires an extra loop for the fold operation which consumes the filter output, since it cannot fuse filter operations.
 
 \begin{listing-c}[float,label=figs/clustering/normalize2-c,caption=Unfused imperative implementation of \Hs/normalize2/]
-void normalize2(int* xs, int xs_length, int* out_ys1, int* out_ys2)
+void normalize2(int* xs, size_t xs_length, int* out_ys1, int* out_ys2)
 {
     // sum1 = fold (+) 0 xs
     int sum1 = 0;
-    for (int i = 0; i != xs_length; ++i) {
+    for (size_t i = 0; i != xs_length; ++i) {
         sum1 += xs[i];
     }
 
     // gts = filter ($>$ 0) xs
     int* gts = malloc(sizeof(int) * xs_length);
-    int gts_length = 0;
-    for (int i = 0; i != xs_length; ++i) {
+    size_t gts_length = 0;
+    for (size_t i = 0; i != xs_length; ++i) {
         if (xs[i] > 0) {
             gts[gts_length] = xs[i];
             gts_length += 1;
@@ -84,18 +84,18 @@ void normalize2(int* xs, int xs_length, int* out_ys1, int* out_ys2)
 
     // sum2 = fold (+) 0 gts
     int sum2 = 0;
-    for (int i = 0; i != gts_length; ++i) {
+    for (size_t i = 0; i != gts_length; ++i) {
         sum2 += gts[i];
     }
     free(gts);
 
     // ys1 = map (/ sum1) xs
-    for (int i = 0; i != xs_length; ++i) {
+    for (size_t i = 0; i != xs_length; ++i) {
         out_ys1[i] = xs[i] / sum1;
     }
 
     // ys2 = map (/ sum2) xs
-    for (int i = 0; i != xs_length; ++i) {
+    for (size_t i = 0; i != xs_length; ++i) {
         out_ys2[i] = xs[i] / sum2;
     }
 }

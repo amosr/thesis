@@ -15,5 +15,9 @@ We introduce a method for taking multiple processes in a Kahn process network an
 The fused process communicates through local variables rather than costly communication channels.
 This fusion method generalises previous work on stream fusion and demonstrates the connection between fusion and the synchronised product operator, which is generally used in the context of verification and model checking, rather than as an optimisation.
 
-\TODO{mention clustering}
+Some queries must be executed in multiple passes, as they need to read the input data multiple times, or may produce intermediate outputs which are then read back in.
+For such queries, there are usually many different ways to schedule the work among the separate passes.
+Prior work demonstrated how integer linear programming (ILP) can be used to find optimal schedules for imperative array programs.
+However, these approaches can only handle operations which preserve the size of the array, missing out on some optimisation opportunities.
+We introduce a clustering algorithm for scheduling queries written using array combinators, and extend prior work to support size-changing operations.
 

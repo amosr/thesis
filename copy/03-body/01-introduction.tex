@@ -46,7 +46,7 @@ Array programs can read from input arrays multiple times, and can produce interm
 The produced arrays can also be read from multiple times.
 % Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
 We can execute array programs by splitting them into \emph{passes}, which generally correspond to a loop that reads or produces an array, and executing each pass as a separate streaming program, where the input and output streams are backed by in-memory arrays.
-For array programs that require multiple passes, there are generally many different ways to divide the work among the passes.
+For array programs that require multiple passes, there are often many different ways to schedule the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each array operation among the different passes.
 The choice of clustering affects runtime performance.
 To minimise the time spent reading and re-reading arrays, we would like to use a clustering which requires the minimum number of passes and intermediate arrays.

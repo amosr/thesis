@@ -85,7 +85,7 @@ The hylomorphism allows us to compute the result without generating the intermed
 If two traversals of an input data structure can be expressed as folds over the same intermediate structure, both traversals can be computed together.
 Tupling algorithms attempt to automatically derive a hylomorphism for a given input data structure and traversal function, but these algorithms only work for a limited set of functions.
 The algorithm in \citet{launchbury1995warm} is not total and cannot fuse a @zip@ combinator with both of its consumers.
-The language in \citet{hu1996deriving} is restricted to ensure totality of the algorithm, but cannot express the data-dependent access pattern of the @join@ combinator.
+The language in \citet{hu1996deriving} is restricted to ensure totality of the algorithm, but cannot express the data-dependent access pattern of the @join@ combinator described in \cref{taxonomy/pull}.
 
 % [talk about tupling: \cite{hu1996deriving,hu1996cheap,hu1996extension,bransen2014exploiting,launchbury1995warm}]
 
@@ -145,8 +145,8 @@ Synchronous languages such as {\sc Lustre}~\cite{halbwachs1991synchronous}, Lucy
 These languages describe \emph{passive} processes where values are fed in to streams from outside environments, such as data coming from sensors.
 In this case, the passive process has no control over the rate of input coming in, and if they support multiple input streams, they must accept values from them in any order.
 In contrast, the processes we describe are \emph{active} processes that have control over the input that is coming in.
-This is necessary for combinators such as mergesort-style @merge@, as well as @append@.
-Note that in the synchronous language literature, it is common to refer to a different merge operation, also known as @default@, which computes a stream that is defined whenever either input is defined.
+Active control is necessary for combinators such as the streaming @join@ operator, as well as @append@.
+% Note that in the synchronous language literature, it is common to refer to a different merge operation, also known as @default@, which computes a stream that is defined whenever either input is defined.
 We discussed the relationship between synchronous languages and Icicle earlier, in \cref{icicle:s:Conclusion}.
 
 \section{Synchronous dataflow}
@@ -156,14 +156,14 @@ Synchronous dataflow (not to be confused with synchronous languages above) is a 
 The main advantage of synchronous dataflow is that it is simple enough for static scheduling to be decidable, but this comes at a cost of expressivity.
 StreamIt~\cite{thies2002streamit} uses synchronous dataflow for scheduling when possible, otherwise falling back to dynamic scheduling~\cite{soule2013dynamic}.
 Boolean dataflow and integer dataflow~\cite{buck1993scheduling,buck1994static} extend synchronous dataflow with boolean and integer valued control ports, and attempt to recover the structure of ifs and loops from select and switch actors.
-These systems allow some dynamic structures to be scheduled statically, but are very rigid and only support limited control flow structures: it is unclear how @merge@ or @append@ could be scheduled by this system.
+These systems allow some dynamic structures to be scheduled statically, but are very rigid and only support limited control flow structures: it is unclear how streaming @join@ or @append@ could be scheduled by this system.
 Finite state machine-based scenario aware dataflow (FSM-SADF)~\cite{stuijk2011scenario,van2015scenario} is quite expressive compared to boolean and integer dataflow, while still ensuring static scheduling.
 A finite state machine is constructed, where each node of the FSM denotes its own synchronous dataflow graph.
 The FSM transitions from one dataflow graph to another based on control outputs of the currently executing dataflow graph.
 For example, a filter is represented with two nodes in the FSM.
 The dataflow graph for the initial state executes the predicate, and the value of the predicate is used to determine which transition the FSM takes: either the predicate is false and the FSM stays where it is, or the predicate is true and moves to the next state.
 The dataflow graph for the next state emits the value, and moves back to the first state.
-This does appear to be able to express value-dependent operations such as @merge@, but lacks the composability --- and familiarity --- of combinators.
+FSM-SADF does appear to be able to express value-dependent operations such as @join@, but lacks the composability --- and familiarity --- of combinators.
 
 % StreamIt:
 % Only allows limited splits and joins: round robin and duplication for splits, round robin and combination for joins. 
@@ -173,4 +173,45 @@ This does appear to be able to express value-dependent operations such as @merge
 % Schedulable parametric dataflow (SPDF),  \cite{fradet2012spdf}
 
 % Recent work on stream fusion by \citet{kiselyov2016stream} uses staged computation to ensure all combinators are inlined, but for splits this causes excessive inlining which duplicates work, due to values of the source arrays being read multiple times.
+
+\section{Summary}
+
+\newcommand\Y{$\checkmark$}
+\newcommand\N{$\times$}
+\begin{table}
+\begin{tabular}{l|cccccc}
+ & \multicolumn{4}{c}{Operators} & Multiple & Static \\
+ & Append & Zip & Join & User def. & consumers & fusion \\
+\hline
+Kahn process networks   & \Y & \Y & \Y & \Y & \Y & ~~~$\checkmark^{\textsc{C4}}$  \\
+\\
+Pull streams            & \Y & \Y & \Y & \Y & \N & \Y \\
+\quad \citet{coutts2007stream} \\
+\quad \citet{kiselyov2016stream} \\
+Push streams            & \N & \N & \N & \Y & \Y & \Y \\
+\\
+Polarised streams       & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{PM}}$ & \Y \\
+\quad \citet{bernardy2015duality} \\
+Neumann push model      & \Y & \N & \N & \Y & \N & \Y \\
+\quad \citet{biboudis2017expressive} \\
+Data flow fusion        & \Y & \Y & \N & \N & \Y & \Y \\
+\quad \citet{lippmeier2013data} \\
+Iteratees        & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{IM}}$ & ~~~$!^{\textsc{IF}}$ \\
+\quad \citet{kiselyov2012iteratees} \\
+Synchronous languages & \N & \Y & \N & \Y & \Y & \Y \\
+\quad \citet{mandel2010lucy} \\
+\end{tabular}
+
+\begin{description}
+\item[C4]Kahn process networks can be statically fused with process fusion (\cref{chapter:process:processes})
+\item[PM]Polarised streams can be used to execute queries with multiple consumers, and requires manual polarity analysis (\cref{taxonomy/polarised})
+\item[IM]Iteratees-style library \Streaming \citep{hackage:streaming} supports multiple consumers similar to polarised streams by encoding push streams as an effect in a monad transformer stack (\cref{s:Benchmarks})
+\item[IF]Iteratees-style libraries Conduit \citep{hackage:conduit} and Pipes \citep{hackage:pipes} both use rewrite rules to reduce overhead; Conduit also uses a Stream fusion representation where possible (\cref{s:Benchmarks})
+\end{description}
+\caption{Comparison of features supported by different streaming models}
+\label{03-body/02-process/07-related/table}
+\end{table}
+
+\Cref{03-body/02-process/07-related/table} shows a summary of some of the combinator-based streaming models we have discussed.
+We limit the comparison to the closely related work.
 

@@ -124,15 +124,16 @@ Just as push-based shortcut fusion supports neither @zip@ nor @unzip@ \cite{sven
 
 In relation to process calculi, synchronised product has been suggested as a method for fusing Kahn process networks together~\cite{fradet2004network}, but there is no evidence that this has been implemented or evaluated.
 The synchronised product of two processes allows either process to take independent or local steps at any time, but shared actions, such as when both processes communicate on the same channel, must be taken in both processes at the same time.
-This fusion method is much simpler than ours, but is also much stricter.
+The synchronised product operator is much simpler than our fusion algorithm, but is also much stricter.
 When two processes share multiple channels, synchronised product will fail unless both processes read the channels in exactly the same order.
-Our system can be seen as an extension of synchronised product that allows some leeway in when processes must take shared steps: they do not have to take shared steps at the same time, but if one process lags behind the other, it must catch up before the other one gets too far ahead.
+Our system can be seen as an extension of synchronised product that allows some leeway in when processes must take shared steps: the two processes do not have to take shared steps at the same time, but if one process lags behind the other, the lagging process must catch up before the leading process gets too far ahead.
 
 It may be possible, in future work, to simplify our fusion system by preprocessing input processes to automatically insert some leeway for shared channels, before using synchronised product for fusion.
 We believe that this leeway can, in fact, be inserted using synchronised product itself, but our experiments in this direction have been limited.
 
 Like synchronised product and our process fusion, \emph{filter fusion}~\citep{proebsting1996filter} also statically interleaves the code of producer and consumer processes.
-In filter fusion, each process can have at most a single input and output channel; common operators like \Hs@zip@, \Hs@unzip@, \Hs@append@, \Hs@partition@ and so on are not supported.
+In filter fusion, each process can have at most a single input and a single output channel; common operators like \Hs@zip@, \Hs@unzip@, \Hs@append@, \Hs@partition@ and so on are not supported.
+Channels cannot be shared among multiple consumers.
 Given an adjacent producer and consumer pair, filter fusion alternately assigns control to the code of each.
 When the consumer needs input, control is passed to the producer; when the producer produces its value, control is passed back to the consumer.
 This simple scheduling algorithm works only for straight line pipelines of processes.
@@ -145,7 +146,7 @@ Synchronous languages such as {\sc Lustre}~\cite{halbwachs1991synchronous}, Lucy
 These languages describe \emph{passive} processes where values are fed in to streams from outside environments, such as data coming from sensors.
 In this case, the passive process has no control over the rate of input coming in, and if they support multiple input streams, they must accept values from them in any order.
 In contrast, the processes we describe are \emph{active} processes that have control over the input that is coming in.
-Active control is necessary for combinators such as the streaming @join@ operator, as well as @append@.
+Active control is necessary for combinators such as the streaming @join@ operator, which must choose which input to pull from on every iteration.
 % Note that in the synchronous language literature, it is common to refer to a different merge operation, also known as @default@, which computes a stream that is defined whenever either input is defined.
 We discussed the relationship between synchronous languages and Icicle earlier, in \cref{icicle:s:Conclusion}.
 
@@ -183,35 +184,41 @@ FSM-SADF does appear to be able to express value-dependent operations such as @j
  & \multicolumn{4}{c}{Operators} & Multiple & Static \\
  & Append & Zip & Join & User def. & consumers & fusion \\
 \hline
-Kahn process networks   & \Y & \Y & \Y & \Y & \Y & ~~~$\checkmark^{\textsc{C4}}$  \\
+Kahn process networks   & \Y & \Y & \Y & \Y & \Y & ~~~$\checkmark^{\textsc{c4}}$  \\
 \\
 Pull streams            & \Y & \Y & \Y & \Y & \N & \Y \\
 \quad \citet{coutts2007stream} \\
 \quad \citet{kiselyov2016stream} \\
-Push streams            & \N & \N & \N & \Y & \Y & \Y \\
+Push streams            & ~~~$!^{\textsc{ap}}$ & \N & \N & \Y & \Y & \Y \\
 \\
-Polarised streams       & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{PM}}$ & \Y \\
+Polarised streams       & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{pm}}$ & \Y \\
 \quad \citet{bernardy2015duality} \\
 Neumann push model      & \Y & \N & \N & \Y & \N & \Y \\
 \quad \citet{biboudis2017expressive} \\
 Data flow fusion        & \Y & \Y & \N & \N & \Y & \Y \\
 \quad \citet{lippmeier2013data} \\
-Iteratees        & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{IM}}$ & ~~~$!^{\textsc{IF}}$ \\
+Iteratees        & \Y & \Y & \Y & \Y & ~~~$!^{\textsc{im}}$ & ~~~$!^{\textsc{if}}$ \\
 \quad \citet{kiselyov2012iteratees} \\
 Synchronous languages & \N & \Y & \N & \Y & \Y & \Y \\
 \quad \citet{mandel2010lucy} \\
 \end{tabular}
 
 \begin{description}
-\item[C4]Kahn process networks can be statically fused with process fusion (\cref{chapter:process:processes})
-\item[PM]Polarised streams can be used to execute queries with multiple consumers, and requires manual polarity analysis (\cref{taxonomy/polarised})
-\item[IM]Iteratees-style library \Streaming \citep{hackage:streaming} supports multiple consumers similar to polarised streams by encoding push streams as an effect in a monad transformer stack (\cref{s:Benchmarks})
-\item[IF]Iteratees-style libraries Conduit \citep{hackage:conduit} and Pipes \citep{hackage:pipes} both use rewrite rules to reduce overhead; Conduit also uses a Stream fusion representation where possible (\cref{s:Benchmarks})
+\item[c4]Kahn process networks can be statically fused with process fusion (\cref{chapter:process:processes})
+\item[ap]Push streams can be appended together using a non-deterministic merge operator, if the push order can be externally controlled (\cref{taxonomy/push})
+\item[pm]Polarised streams can be used to distribute elements among multiple consumers, after performing manual analysis of stream polarities (\cref{taxonomy/polarised})
+\item[im]Iteratees-style library \Streaming \citep{hackage:streaming} supports multiple consumers similar to polarised streams by encoding push streams as an effect in a monad transformer stack (\cref{s:Benchmarks})
+\item[if]Iteratees-style libraries Conduit \citep{hackage:conduit} and Pipes \citep{hackage:pipes} both use rewrite rules to reduce overhead; Conduit also uses a Stream fusion representation where possible (\cref{s:Benchmarks})
 \end{description}
 \caption{Comparison of features supported by different streaming models}
 \label{03-body/02-process/07-related/table}
 \end{table}
 
-\Cref{03-body/02-process/07-related/table} shows a summary of some of the combinator-based streaming models we have discussed.
-We limit the comparison to the closely related work.
+\Cref{03-body/02-process/07-related/table} shows a summary of the features of some of the streaming models we have discussed.
+We limit the comparison to the more recent and closely related work.
+The table displays different features supported by each streaming model.
+The first four features denote whether particular operators are supported, and whether new operators can be defined without changes to the model or fusion algorithm.
+The second-last feature denotes whether a stream can be shared among multiple consumers.
+The last feature denotes whether streaming overhead can be removed statically.
+Where support for a feature is ambiguous or requires clarification, we denote the feature with an exclamation mark (!) and include an explanatory note.
 

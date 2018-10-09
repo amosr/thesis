@@ -46,11 +46,13 @@ This fusion method generalises previous work on stream fusion (\cref{related/str
 % are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
 % We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
 
-When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program, by composing array operations together.
+When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program.
+We can write array programs by composing array operations together.
+The array programs for each individual query can then be combined into a larger array program.
 Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
 The produced arrays can also be read from multiple times.
 We can execute array programs by dividing the operations into \emph{passes}, and fusing all the operations in the same pass into the same loop. % which generally correspond to a loop that reads or produces an array.
-Each individual pass may perform multiple queries over the same input, so we use the above process fusion method to fuse the array operations together.
+Each individual pass may contain operations from multiple queries, so we use the above process fusion method to fuse the array operations together.
 For array programs that require multiple passes, there are often many different ways to schedule the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each array operation among the different passes.
 The choice of clustering affects runtime performance.

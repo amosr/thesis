@@ -32,7 +32,7 @@ In \cref{s:Benchmarks}, we will compare with some more expressive but less effic
 \section{Gold panning}
 \label{taxonomy/gold-panning}
 % Even with the bounded memory and sequential access restrictions of streaming, we can still write interesting queries as streaming programs.
-Let us start by describing a situation in which we would like to execute many queries.
+Let us start by describing a situation in which we would like to execute many queries over the same dataset.
 To avoid mixing up the details of streaming with the details of the example, we initially assume that the dataset fits in memory as a list and ignore details about efficiency.
 Throughout the thesis, we will refer back to this example as \emph{gold panning}.
 
@@ -164,12 +164,12 @@ We want to compare each day's price for our stock against the average price for 
 \input{figs/stock-bc.tex}
 
 \Cref{fig:stock:it:market-over-time} shows the linear regression and correlation of the market index price over time, while \cref{fig:stock:it:stock-over-market} shows the linear regression and correlation of the stock price from \cref{fig:stock:it:stock-over-time} compared to the market index price.
-The comparison of stock price to market index price compares each day's stock price against the corresponding day's market price.
-Each day is visualised as the percentage difference between the day's stock price and the mean stock price for the period for the y axis, compared to the percentage difference between the day's market price and the mean market price for the period for the x axis.
-In the comparison of stock price to index price, we can see that the stock has grown faster than the index.
+The comparison of stock price to market index price compares each day's stock price against the corresponding day's market index price.
+Each day is visualised as the percentage difference between the day's stock price and the mean stock price for the period for the y axis, compared to the percentage difference between the day's market index price and the mean market index price for the period for the x axis.
+Both regression lines are slightly steeper than forty-five degrees, indicating that the stock price has grown faster than the market index price.
+The correlation, represented by the angle between the two regression lines, indicates a relatively strong linear relationship between the stock price and the market index price.
 
-
-We can compute the comparison of stock over market with the following program:
+We can compute the comparison of stock price over market index price with the following program:
 
 \begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
@@ -179,7 +179,7 @@ priceOverMarket stock index =
   in (regression prices, correlation prices)
 \end{haskell}
 
-The \Hs/join/ operator matches each stock day against the corresponding market index day, and discards any days missing from either input.
+The \Hs/join/ operator matches each stock day against the corresponding market index day, and discards the data for any days missing from either input.
 We then extract both prices from the joined result and compute the regression and correlation.
 As with \Hs/priceOverTime/, this function requires two traversals of the \Hs/prices/ list.
 
@@ -211,9 +211,9 @@ Our choice of streaming model dictates how difficult this rewrite will be.
 \label{taxonomy/pull}
 
 The first streaming model we look at are \emph{pull streams}, which are also sometimes called iterators or cursors.
-The essence of a pull stream is that a consumer can \emph{pull} on it to ask for the next value.
-We represent a pull stream as a function with no parameters which either returns a value, or returns \Hs/Nothing/ when the stream is finished.
-Since the stream might want to read from a file or update some local state, the function is wrapped in \Hs/IO/:
+The essence of a pull stream is that a consumer can \emph{pull} on it to gain the next value.
+We represent a pull stream as a function with no parameters which either returns \Hs/Just/ a value, or returns \Hs/Nothing/ when the stream is finished.
+Since the function may need to read from a file or update some local state, it is expressed as an \Hs/IO/ computation:
 
 \begin{haskell}
 data Pull a = Pull (IO (Maybe a))
@@ -234,7 +234,7 @@ map a_to_b (Pull pull_a) = Pull pull_b
 \end{haskell}
 
 Between unwrapping and wrapping the \Hs/Pull/ constructor, the \Hs/map/ function takes a function \Hs/pull_a/ to compute the input stream values, and returns a function \Hs/pull_b/ to compute the transformed stream values.
-Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ and asks for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
+Whenever the consumer of \Hs/map/ calls \Hs/pull_b/ to ask for the next value, \Hs/pull_b/ in turn calls \Hs/pull_a/ asking for the next value.
 When the stream is not finished, we apply the transform function \Hs/a_to_b/ to the pulled element and return the transformed element.
 In pull streams, consumers ask producers for the next value, and control flow bubbles up from consumer to producer.
 
@@ -382,7 +382,7 @@ To execute these shared streams, each time we read from a shared stream, we need
 \subsection{Streaming overhead}
 \label{taxonomy/pull/streaming-overhead}
 
-This pull stream representation can incur some streaming overhead because of the allocated \Hs@Maybe@ values.
+The pull stream representation can incur some overhead due to the need to wrap elements in \Hs@Maybe@ constructors.
 For simple combinators such as map, however, the overhead can be optimised away.
 Consider the following function, which applies two worker functions to the elements in a stream:
 
@@ -396,7 +396,7 @@ map2 f g stream_a
 
 We could write this program in an equivalent way by composing the two functions together and performing a single map: \Hs/Pull.map (g . f) stream_a/.
 Fortunately, after some optimisation, both programs incur the same amount of overhead.
-To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in \Hs@bs@ and \Hs@cs@ above.
+To demonstrate concretely the overhead of composing stream transformers, we take the definition of \Hs/Pull.map/ and inline it into the use-sites in \Hs@stream_b@ and \Hs@stream_c@ above.
 After removing some wrapping and unwrapping of \Hs/Pull/ constructors, we have the following function:
 
 \begin{haskell}
@@ -455,7 +455,7 @@ For other operations, the streaming overhead can be harder to remove.
 The function \Hs/pull_a'/ pulls an element and checks whether it satisfies the given predicate.
 If the element does not satisfy the predicate, \Hs/pull_a'/ performs a recursive loop to check the next element.
 The recursion in this function makes it harder for the compiler to inline and optimise, and the overhead may not be removed. % : for example, inlining recursive functions must be done carefully to avoid non-termination.
-Stream fusion \citep{coutts2007stream}, which uses a more sophisticated pull stream representation, allows pull functions to return a \emph{skip} constructor, instructing the consumer to pull again.
+Stream fusion \citep{coutts2007stream}, which uses a more sophisticated pull stream representation, allows pull functions to return a \emph{skip} constructor in place of filtered-out elements, instructing the consumer to pull again.
 The stream fusion implementation of \Hs/filter/ instructs the consumer to pull the next element when the predicate fails, instead of recursively looping.
 Compilers that use an intermediate language based on sequent calculus may be able to inline and optimise recursive functions directly, without needing to convert stream operations to non-recursive functions \citep{maurer2017compiling}.
 We discuss other representations of pull streams in \cref{related/fusion}.
@@ -480,7 +480,7 @@ filter predicate (Pull pull_a) = Pull pull_a'
 \section{Push streams}
 \label{taxonomy/push}
 
-\emph{Push streams} are the conceptual dual of pull streams: rather than the consumer trying to pull from the producer, in push streams the producer pushes to the consumer.
+\emph{Push streams} are the conceptual dual of pull streams: rather than the consumer pulling elements from the producer, in push streams the producer pushes elements to the consumer.
 As we shall see, the advantage of push streams is that they enable stream elements to be shared among multiple consumers: a producer can push the same value to multiple consumers.
 This sharing of elements makes it easier to perform multiple queries over the same input stream.
 
@@ -618,7 +618,7 @@ This program computes both correlation and regression in a streaming fashion.
 In comparison to the list version of \Hs/priceOverTime/, we have explicitly combined both consumers and reversed the control flow.
 We shall see more examples of push programs in \cref{part:icicle}.
 
-We cannot implement \Hs/priceOverMarket/ with push streams alone, because it requires joining two input streams by date.
+We cannot implement \Hs/priceOverMarket/ in constant space with push streams alone, because it requires joining two input streams by date.
 Recall the \Hs/join/ combinator, which takes two input streams and retrieves a value from each.
 At every step the combinator chooses which stream to pull from, pulling on the stream with the smaller value.
 With push streams, a consumer cannot choose which input stream to pull from, or when: the consumer is a function waiting to be called with its input, always ready to accept values as they come.
@@ -635,7 +635,7 @@ Because the push order is controlled outside of the merge, appending two streams
 \section{Polarised streams}
 \label{taxonomy/polarised}
 
-Stream sharing allows push streams to support multiple queries by broadcasting the elements to multiple consumers, but they do not support multiple inputs; pull streams support multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
+Stream sharing allows push streams to support multiple queries by broadcasting the elements to multiple consumers, but they do not support streaming operators with multiple inputs, except for non-deterministic merge; pull streams support operators with multiple inputs, but they do not support multiple queries~\citep{kay2009you}.
 Combining pull and push streams in the form of \emph{polarised streams} allows us to support multiple inputs and multiple queries~\citep{lippmeier2016polarized}.
 
 
@@ -657,7 +657,7 @@ dup_ioi_ignore_result (Pull pull_a) push_b = Pull pull_a'
       return (Just a)
 \end{haskell}
 
-We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source \Hs@push_a@, pushes the value to sink \Hs@push_b@, and returns the value to the caller.
+We achieve this duplication by constructing a pull stream which, when pulled on, pulls from its source \Hs@pull_a@, pushes the value to sink \Hs@push_b@, and returns the value to the caller.
 The result of the push stream is ignored because the pull stream representation has no way to return a result at the end of the stream.
 
 Encoding the result of a stream inside the stream itself is not important for single-consumer pull streams, because it is usually the consumer of the stream that computes the result.
@@ -695,7 +695,7 @@ The type signature for \Hs@foldl_i@ changes to include the stream result; the im
 foldl_i :: (b -> a -> b) -> b -> PullResult a r -> IO (b,r)
 \end{haskell}
 
-We can also convert a pull stream to a push stream: we call this operation \emph{draining} the pull stream.
+We can also copy elements from a pull stream to a push stream: we call this operation \emph{draining} the pull stream.
 To drain a stream, we loop over all the values in the pull stream and push each one into the push stream.
 At the end, we return a pair of the results of both streams:
 
@@ -798,7 +798,7 @@ Unfilled circles $\circ$ represent push streams because they are a hole which va
 
 \input{figs/polarity-pot-pom.tex}
 
-We begin by classifying both input streams as pull streams: we can convert pull streams into push streams but not vice versa.
+We begin by classifying both input streams as pull streams: we can copy elements from pull streams into push streams, but not vice versa.
 The \Hs@stock@ input stream is used twice, so at least one of the use-sites must be push.
 Since we were able to express \Hs@priceOverTime@ entirely as a push stream, we duplicate \Hs@stock@ into a push stream for \Hs@priceOverTime@ and a pull stream for \Hs@priceOverMarket@.
 For \Hs@priceOverMarket@, we can join both pull streams and map over it.
@@ -987,7 +987,7 @@ All the combinators are \emph{passive combinators}, constructing a stream transf
 \emph{Active combinators} like \Hs/drain_io/ and \Hs/foldl_i/ actively consume pull streams rather than transforming them, and return an \Hs/IO/ action containing the stream result.
 Without an active combinator, the query will not execute.
 Active combinators can consume pull streams and output to push streams.
-Active combinators cannot actively consume push streams, because the control flow for push streams is in the producer.
+Active combinators cannot actively consume push streams, because the control flow for push streams is driven by the producer.
 Similarly, they cannot actively produce pull streams.
 None of the combinators in this query can be implemented as active combinators because they all consume push streams or produce pull streams.
 Instead we must hand-optimise the program, combining the duplicate, maps and zip into one combinator, as in the original version of \Hs@priceOverTime@.
@@ -1012,10 +1012,10 @@ The three streaming models we have seen --- pull, push, and polarised streams --
 With pull streams, the consumer drives the computation.
 With push streams, the producer drives the computation.
 With polarised streams, the active combinator, which may be a pull consumer and a push producer, drives the computation.
-All these systems have one place driving the computation.
+All these systems have one operator driving the computation.
 When we have multiple queries to execute, it can be hard to choose just one combinator to drive the entire computation.
 
-An alternate streaming model, which allows many places to control the computation and supports executing multiple queries, is a \emph{Kahn process network}.
+An alternate streaming model, which allows many operators to control the computation and supports executing multiple queries, is a \emph{Kahn process network}.
 A Kahn process network is a concurrent process network with restrictions to ensure deterministic execution.
 Each combinator inside each query becomes a communicating process in the network.
 Processes communicate through input channels which they can pull values from, and output channels which they can push values to.
@@ -1024,21 +1024,22 @@ Each process can have multiple inputs and outputs, and the process chooses the o
 Concurrent programs can be hard to write and debug because the \emph{schedule}, which specifies the interleaving of process execution, depends on environmental factors outside the program itself --- for example, the number of physical processors available, and which other processes are also being executed.
 Because the environment is not controlled by the processes themselves, we say the schedule is chosen \emph{non-deterministically}.
 Likewise, if a program gives different results for different schedules, we say the result is \emph{non-deterministic}.
-Kahn process networks are a restricted form of static process network where all processes compute the same result, independent of the schedule \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
-Kahn process networks ensure deterministic results by imposing restrictions on how processes communicate so that scheduling decisions cannot be observed.
+Kahn process networks are a restricted form of static process network where the result computed by a particular process is independent of the schedule \cite{kahn1976coroutines}: the schedule may be chosen non-deterministically, but the result is still deterministic.
+Kahn process networks ensure deterministic results by imposing restrictions on how processes communicate so that scheduling decisions cannot be observed inside the process.
 % The restrictions are: all communication between processes is through first-in-first-out channels; reading from channels is blocking; and channels are written to by a single process, broadcasting each value to all consumers of the channel.
 All communication between processes is through first-in-first-out channels.
-The Kahn process network model specifically rules out processes with shared mutable state, as they can non-deterministically compute different results.
+The Kahn process network model specifically rules out processes with shared mutable state, as such a process could non-deterministically compute different results.
 If one process were reading from mutable state while another were writing a new value, then the reading process may get the old value or new value, depending on how the processes were scheduled.
 Reading from channels is blocking: processes cannot to \emph{peek} at a channel to see whether there are waiting values, because another process might be waiting to be scheduled and about to push a new value.
 Channels are written to by a single process, broadcasting each value to all consumers of the channel.
-Only one process is allowed to push to a channel: if two processes were able to push to the same channel at the same time, the scheduler would have to decide the order in which values were received.
+Only one process is ever allowed to push to a given channel: if two processes were able to push to the same channel at the same time, the scheduler would have to decide the order in which values were received.
 
 With Kahn process networks, we can implement a process which joins sorted streams by pulling from each input channel as in the \Hs@join@ combinator, and we can share streams among multiple consumers because pushed values are broadcast to each consumer.
-We can also convert both push streams and pull streams to processes.
+We can convert operators that use both push streams and pull streams to processes.
+We can also introduce a process that copies values from a pull stream into a channel, and a process that copies values from a channel into a push stream.
 
-Kahn process networks can use bounded channels to ensure communication between processes executes in bounded memory.
-Kahn process networks with bounded channels still compute results deterministically, but can introduce \emph{artificial deadlocks} when the computation would succeed with a sufficiently large buffer, but the given bounds are too small.
+One version of the Kahn process network model uses bounded channels to ensure that the entire network executes in bounded memory.
+Kahn process networks with bounded channels still compute results deterministically, but can introduce \emph{artificial deadlocks} in cases where the computation would succeed with a sufficiently large buffer, but the given bounds are too small.
 There are dynamic algorithms to identify artificial deadlocks at runtime and resolve them by increasing buffer sizes \cite{parks1995bounded,geilen2003requirements}.
 
 
@@ -1112,8 +1113,8 @@ To send a value from one process to another, the sending process may need to loc
 Concurrent process network implementations amortise the cost of communication by \emph{chunking} messages together: instead of sending many messages with one value in each, chunked communication sends one message containing an array of values.
 Chunking reduces the cost of sending messages, but increases memory and cache pressure.
 Chunk size determines how many communications are saved, so larger chunks mean less communication overhead.
-However, larger chunks also mean that each chunk array requires more memory and are less likely to fit in cache.
-Since each channel between processes requires its own chunk, larger process networks have more chunks in memory at the same time.
+However, larger chunks also mean that each chunk array requires more memory and is thus less likely to fit in cache.
+Since each channel between a pair of processes requires its own chunk, larger process networks have more chunks in memory at the same time.
 The optimal chunk size is a trade-off between communication overhead and memory usage, which is usually found by experimentation.
 
 
@@ -1130,13 +1131,13 @@ The optimal chunk size is a trade-off between communication overhead and memory 
 % Since each channel between processes requires its own chunk, larger process networks tend to have more chunks in memory at the same time.
 % Finding the optimal chunk size is a trade-off between communication overhead and memory usage, and finding this optimum usually requires experimentation, with no guarantee that we will be able to find it.
 
-From a functional programming perspective, small, fine-grained processes like those used in our \Hs/priceAnalysis/ example are desirable because they allow us to write a process for each combinator and compose them together.
+From a functional programming perspective, small, fine-grained processes like those used in our \Hs/priceAnalysis/ example are desirable because they allow us to write a process to implement each combinator and compose them together.
 From an execution perspective, however, when fine-grained processes perform more communication than computational work, the overall performance is determined by synchronisation and scheduling overheads~\cite{chen1990impact}.
 We can reduce the amount of communication by fusing multiple connected processes together into one larger process.
 The fused process performs the task of multiple individual processes, but communicates by local variables instead of channels.
 In \cref{chapter:process:processes} we describe an algorithm to fuse processes together to reduce overhead.
 For \Hs@priceAnalysis@, our algorithm can automatically fuse all the processes together into a single processes.
-A single process executes sequentially; fusing the entire network into a single process removes any potential speedup from task parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
+A single process executes sequentially, so fusing the entire network into a single process removes any potential speedup from task parallelism, but in our benchmarks in \cref{s:Benchmarks}, the sequential version is faster than the concurrent version even with several processors.
 Often, a well-optimised sequential implementation of a program will consume significantly less power and cost less to run than a parallel implementation~\cite{mcsherry2015scalability}.
 
 % \cite{chen1990impact}
@@ -1153,8 +1154,8 @@ Often, a well-optimised sequential implementation of a program will consume sign
 
 \section{Summary}
 We have seen the relative advantages of various streaming models.
-Pull streams support multiple inputs, and can take advantage of an optimising compiler to reduce overhead.
-Push streams support multiple queries, and are written back-to-front with explicit duplication for sharing streams.
+Pull streams support operators with multiple inputs, and can take advantage of an optimising compiler to reduce overhead.
+Push streams support multiple concurrent queries, and are written back-to-front with explicit duplication for sharing streams.
 Polarised streams support multiple inputs and multiple queries, require polarity analysis of the entire dependency graph, and are written partially back-to-front and partially front-to-back.
 Kahn process networks support multiple inputs and multiple queries, and concurrent execution involves communication overhead.
 

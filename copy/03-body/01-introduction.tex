@@ -30,8 +30,13 @@ However, push streams, and by extension Icicle, generally do not support computa
 In some circumstances, this non-deterministic merge can be used to append streams --- as we shall see in \cref{taxonomy/push}.
 As an alternative to push streams, Kahn process networks~\citep{kahn1976coroutines} support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant runtime overhead.
 In \cref{s:Fusion} we describe \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
-The fused process communicates through local variables rather than costly communication channels.
+The fused process communicates through local variables rather than costly communication channels, and executes faster than the original Kahn process network in our benchmarks (\cref{s:Benchmarks}).
 This fusion method generalises previous work on stream fusion (\cref{related/stream-fusion}) and demonstrates the connection between fusion and the synchronised product operator (\cref{related/synchronised-product}), which is generally used in the context of verifying properties of concurrent processes and model checking, rather than as an optimisation.
+
+% In \cref{s:Benchmarks}, we benchmark our fusion method, where our method is consistently faster than the original dynamically scheduled Kahn process network, and is faster than streaming libraries based on Iteratees \citep{kiselyov2012iteratees}.
+% Our fusion method is also faster than array fusion \citep{coutts2007stream}
+% We also compare against 
+% Our fusion method is also faster than \emph{array fusion}
 
 % When the input data is small enough to fit in memory, we can write each query as an \emph{array program}.
 % Array programs can read from input arrays multiple times, and can produce intermediate and output arrays, which can also be read.
@@ -41,11 +46,11 @@ This fusion method generalises previous work on stream fusion (\cref{related/str
 % are restricted to a single pass over the input, but if the input data is persistent, for example a file on disk or an array in memory, we can perform multiple passes by executing each pass separately as its own streaming operation.
 % We call such streams \emph{rewindable}, as they can be ``rewinded'' back to the start after reading.
 
-When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program.
+When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program, by composing array operations together.
 Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
 The produced arrays can also be read from multiple times.
-% Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
-We can execute array programs by splitting them into \emph{passes}, which generally correspond to a loop that reads or produces an array, and executing each pass as a separate streaming program, where the input and output streams are backed by in-memory arrays.
+We can execute array programs by dividing the operations into \emph{passes}, and fusing all the operations in the same pass into the same loop. % which generally correspond to a loop that reads or produces an array.
+Each individual pass may perform multiple queries over the same input, so we use the above process fusion method to fuse the array operations together.
 For array programs that require multiple passes, there are often many different ways to schedule the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each array operation among the different passes.
 The choice of clustering affects runtime performance.
@@ -53,12 +58,12 @@ To minimise the time spent reading and re-reading arrays, we would like to use a
 Finding such a minimal clustering is NP-hard \cite{darte1999complexity}.
 
 In \cref{clustering}, we find the minimal clustering by representing the array program's possible clusterings as an integer linear program, and using an external solver to find a solution that minimises our cost metric.
-The clustering algorithm of \citet{megiddo1998optimal} also uses integer linear programming, and computes the clustering for an imperative loop nest rather than a set of array combinators.
+Our clustering algorithm extends \citet{megiddo1998optimal} to cluster array combinators, adding support for size-changing operations such as filter.
+The clustering algorithm of \citet{megiddo1998optimal} uses integer linear programming to compute the clustering for an imperative loop nest rather than a set of array combinators.
 Individual loops in the loop nest are assigned to clusters, and all loops in the same cluster are fused together.
 In \citet{megiddo1998optimal}, as with many imperative loop fusion systems, loops can only be fused together if their loop bounds are identical.
 In these systems, a loop that filters an array cannot be fused with a loop that consumes the filtered array, as they have different loop bounds.
 With process fusion, we \emph{can} fuse a filter with its consumer, so a clustering algorithm for imperative loop nests would introduce more passes than necessary.
-Our clustering algorithm extends \citet{megiddo1998optimal} to cluster array combinators, adding support for size-changing operations such as filter.
 % We allow size-changing operations to be assigned to the same cluster as operations on both their source array and their output array.
 % As such, clustering algorithms designed for imperative loop fusion ignore the opportunities for fusing filters together, and may assign more clusters than necessary.
 % By working with high-level combinators rather than loop nests, we extend this clustering algorithm to recognise that filters can be fused with their consumer or their producer.
@@ -79,7 +84,7 @@ Icicle is described in \cref{part:icicle}.
 % 100x r3.4xlarge instances to run 1024 query tasks, taking 4.5 hours each
 
 \item[Process fusion:]
-a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple queries, and user-defined combinators.
+a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple concurrent queries, and user-defined combinators.
 In this streaming model, each combinator in each query is implemented as a sequential process, and together, the combinators of all queries form a concurrent process network.
 Processes are then fused together using an extension of synchronised product.
 The fusion algorithm is described in \cref{chapter:process:processes}.
@@ -91,7 +96,7 @@ The proof is described in \cref{s:Proofs}.
 
 \item[Clustering for array-backed streams:]
 a clustering algorithm for array combinators, which supports size-changing operators such as filter.
-We allow size-changing operators to be assigned to the same cluster as operations that process their input and output arrays; existing clustering algorithms for imperative loop nests cannot assign size-changing operators to the same cluster as operations on the output array.
+We allow size-changing operators to be assigned to the same cluster as operations that process their input and output arrays; existing clustering algorithms for imperative loop nests cannot assign size-changing operators to the same cluster as operations that consume the differently-sized output array.
 Our algorithm encodes the clustering constraints of a set of array combinators as an integer linear program to be solved externally.
 The clustering algorithm is described in \cref{clustering}.
 

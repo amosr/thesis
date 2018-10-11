@@ -195,11 +195,16 @@ priceAnalyses stock index =
   in (pot, pom)
 \end{haskell}
 
-\input{figs/priceOverTime-priceOverMarket.tex}
+% \input{figs/priceOverTime-priceOverMarket.tex}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-priceOverMarket}{figs/procs/priceOverTime-priceOverMarket}{Dependency graph for queries \Hs/priceOverTime/ and \Hs/priceOverMarket/}
 
-\Cref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for all queries.
-The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
-The edges are dependencies from one value to another; \Hs/joined/ is computed by joining together the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to \Hs/joined/.
+\Cref{figs/procs/priceOverTime-priceOverMarket} shows the dependency graph for both queries.
+The nodes in this graph are the two input lists \Hs/stock/ and \Hs/index/, and the list operators in each query.
+The two input lists are drawn inside boxes to distinguish them from the operator nodes.
+% each intermediate list, and the \Hs/correlation/ and \Hs/regression/ functions which summarise the list values.
+The edges are dependencies from one value to another; the \Hs/join/ operator uses both the \Hs/stock/ and \Hs/index/ lists, so there are arrows from both \Hs/stock/ and \Hs/index/ to the \Hs/join/ node.
+Edges that denote intermediate lists between two operators are labelled with the variable name used in the list program.
+Below the bottom of the graph, not shown, the results of the four \Hs/regression/ and \Hs/correlation/ operators are paired together to construct the return value.
 The large boxes bisecting most of the nodes denote which nodes are defined inside the \Hs/priceOverTime/ function and which are defined in \Hs/priceOverMarket/.
 This dependency graph is a directed acyclic graph: the nodes \Hs/stock/, \Hs/timeprices/, and \Hs/prices/ have multiple children; \Hs/joined/ has multiple parents.
 Having multiple children means a list is mentioned multiple times, which generally corresponds to requiring multiple traversals of the list in a sequential evaluation.

@@ -61,7 +61,7 @@ In our comparison, these libraries involved significantly more overhead than our
 
 The benefits of fusion have been known about for a long time, since at least the 1970s.
 Jackson Structured Programming \citep{jackson1975principles,jackson2002jsp} is a design methodology where the structure of a program is derived using the structure of the input files to process.
-Jackson employs a method called ``program inversion'' performs a similar role to fusion, by removing intermediate results.
+Jackson employs a method called ``program inversion'' that performs a similar role to fusion, by removing intermediate results.
 This method is similar to converting a pull computation into a push computation.
 While these methods were generally performed by hand, the concept is similar to mechanised fusion.
 
@@ -72,7 +72,7 @@ While these methods were generally performed by hand, the concept is similar to 
 % We discuss tupling further in \cref{related/tupling}.
 
 \emph{Tupling} combines multiple traversals over a data structure into a single traversal.
-Tupling is more general than stream fusion: it supports simplifying traversals of trees and other data structures, rather than just streams.
+Tupling is more general than stream fusion: it supports simplifying multiple traversals of trees and other data structures, rather than just streams.
 Two types of tupling are \emph{fold/unfold tupling} and \emph{hylomorphism-based tupling}.
 
 Fold/unfold tupling, such as \citet{chiba2010program}, works by repeatedly unfolding or inlining a definition into its use site, performing some local rewrite-based optimisations, then re-folding the definition.

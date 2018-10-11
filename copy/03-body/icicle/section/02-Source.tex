@@ -17,7 +17,7 @@ Here is the unstreamable example from the previous section again:
 The problem is that the value of \Ic@last key@ is only available once we have reached the end of the stream, but \Ic@filter@ needs this value to process the very first element in the same stream.
 We distinguish between these two access patterns by giving them different names: we say that (@last key@) is an \emph{aggregate}, because to compute it we must have consumed the \emph{entire stream}, whereas the filter predicate is an \emph{element}-wise computation because it only needs access to the current element in the stream.
 
-The trick to compute our average in a streaming fashion is to recognise that \Ic@filter@ is selecting a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
+The trick to compute our average in a streaming fashion is to recognise that \Ic@filter@ selects a particular subset of values from the input, but the value computed from this subset depends only on the values in that subset, and no other information. Instead of computing the mean of a single subset whose identity is only known at the end of the stream, we can instead compute the mean of \emph{all possible subsets}, and return the required one once we know what that is:
 \begin{icicle}
   table kvs { key : Date; value : Int } 
   query meanOfLatest
@@ -177,7 +177,8 @@ Rule (CheckFun) builds the type of a user defined function, returning it as an e
 We now give a denotational evaluation semantics for Icicle queries.
 For the evaluation semantics, we introduce an auxiliary grammar for describing \emph{stream values} and heaps.
 In the source language, all streams are the same length and rate as the input stream, to ensure that elements from different streams can always be pairwise joined.
-Introducing literal stream values and representing them as a list of values would invalidate this invariant, because the length of the input stream is unknown.
+To maintain this invariant, size-changing operations such as \Ic@filter@ perform folds rather than returning differently-sized output streams.
+Introducing literal stream values and representing them as a list of values would invalidate this invariant, because the length of the input stream is not statically known.
 Instead, in the evaluation semantics, we represent \Ic@Element@ stream values as meta-level stream transformers, which transform the input element to an output element.
 Likewise, we represent \Ic@Aggregate@ values as meta-level folds.
 The result of evaluating a query will also be a meta-level fold, into which the values from the input stream must be pushed.
@@ -193,7 +194,7 @@ Grammar $V'$ defines the results that can be produced by evaluation, depending o
 \item
 @Element@ computation results are stream transformers, which are represented by meta-functions that take a value of the input stream element and produce an output stream element value; and
 \item
-@Aggregate@ computation results consist of an initial (zero) state, an update (konstrukt) meta-function to be applied to each stream element and current state, and an eject meta-function to be applied to the final state.
+@Aggregate@ computation results consist of an initial (zero) state, an update (konstrukt) meta-function to be applied to each stream element and current state, and an eject meta-function to be applied to the final state to produce the final result value.
 \end{itemize}
 
 \input{copy/03-body/icicle/figures/Source-Eval.tex}

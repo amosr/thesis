@@ -1,7 +1,7 @@
 \chapter{Evaluation of process fusion}
 \label{s:Benchmarks}
 Stream fusion is ultimately performed for practical reasons: we want the fused result program to run faster than the original unfused program.
-We also need to be sure that the fused program is not too large, to ensure that compilation and fusion do not consume too much memory.
+We also need to be sure that the fused program is not too large, to ensure that compilation and the fusion transform do not consume too much memory.
 This chapter shows runtime benchmark results for fused programs, and the result size of fused programs.
 
 \section{Benchmarks}
@@ -63,7 +63,7 @@ instance Monad m => Monad (ConduitT i o m)
 
 \Cref{l:bench:def:conduit} shows a simplified version of the core datatype for Conduit.
 The \Hs/ConduitT/ type defines a stream transformer that consumes elements of type \Hs/i/ and produces elements of type \Hs/o/.
-The transformer may perform effects in the \Hs/m/ monad, and return a final result value of type \Hs/r/.
+The transformer may perform effects in the \Hs/m/ monad, and returns a final result value of type \Hs/r/.
 The \Hs/NeedInput/ constructor pulls from the input and takes two arguments: a function which takes the input element and returns a new stream transformer, and a stream transformer to use when the input stream is finished.
 The \Hs/ConduitM/ constructor performs a monadic effect, which returns a new stream transformer for the rest of the stream.
 Because the data structure describing remainder of the stream is nested inside a closure that performs a monadic computation, the compiler may not be able to statically reason about the remainder of the stream.

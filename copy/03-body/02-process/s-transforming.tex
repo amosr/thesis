@@ -12,10 +12,10 @@ This silence is also due to the local nature of rewrite rules: to know whether a
 
 When fusing a pair of processes, the fused result process tends to have more states than each source process individually, because the fused process has to do the work of both source processes.
 In general, the larger the source processes, the larger the result process will be, and when we have many processes to fuse, the result will get progressively larger as we fuse more processes in.
-If the result process becomes too large such that the process does not fit in memory, then fusing in the next process will take longer, and code generation will take longer.
+If, during compilation, the result process becomes too large such that the process does not fit in memory, then fusing in the next process will take longer, and code generation will take longer.
 When repeatedly fusing the pairs of processes in a network, we perform some simplifications between each fusion step.
-Since output channels can have multiple consumers, the result of fusing two sources processes pushes to all output channels in either source process, even though all the consumers may have been fused in to the producer.
-We simplify the result program by removing any output channels which are not read by the rest of the network, and replacing the corresponding \Hs/push/ and \Hs/close/ instructions with \Hs/jump/ instructions.
+Since output channels can have multiple consumers, the result process pushes to all output channels used by either source process, even though all the consumers may have already been fused into the producer.
+We simplify the result program by removing any remaining output channels which are not read by the rest of the network, and replacing the corresponding \Hs/push/ and \Hs/close/ instructions with \Hs/jump/ instructions.
 We then remove these \Hs/jump/ instructions, as well as those introduced by the fusion algorithm, by inlining the destination of each \Hs/jump/ instruction into its use-sites.
 This iterative simplification removes some unnecessary states and simplifies the process given to the next fusion step.
 
@@ -95,7 +95,7 @@ Rather than trying all possible orders, of which there are many, we use a bottom
 % This heuristic is not guaranteed to choose the, but it .
 \Cref{figs/procs/priceAnalyses-fusing-whole} shows the heuristically chosen fusion order for the @priceAnalyses@ example.
 The processes are nested inside boxes; each box denotes the result of fusing a pair of processes, and inner-most boxes are to be fused first.
-Each box is shaded to denote its nesting, and the more deeply nested a box is, the darker its shade.
+Each box is shaded to denote its nesting level, and the more deeply nested a box is, the darker its shade.
 In @priceOverTime@, we start by fusing the @correlation@ process with its producer, @map@; we then fuse the resulting process with the @regression@ process.
 In @priceOverMarket@, we also start by fusing the @correlation@ process with @map@, then adding @regression@, and fusing in the @join@ process.
 Finally, we fuse the result process for @priceOverTime@ with the result process for @priceOverMarket@.
@@ -347,6 +347,7 @@ The heuristic described will not necessarily choose the right order.
 Looking at the dependency graph alone, it is impossible to tell which is the right order for fusion.
 If we take the @append3@ example and replace the append processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
 \Cref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
+Whether or not a particular fusion order works depends on the access pattern of the processes, which is not shown in the dependency graph.
 
 
 

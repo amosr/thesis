@@ -45,17 +45,17 @@ Once we have the fused query plan we then perform standard optimisations such as
 
 The grammar for the Icicle intermediate language is given in \cref{icicle:fig:core:grammar}.
 Expressions $PlanX$ include variables, values, applications of primitives and anonymous functions.
-Function definitions and uses are not allowed in expressions here, as their definitions are inlined before converting to query plans.
-Anonymous functions are only allowed as arguments to primitives: they cannot be applied or stored in variables.
+Function definitions and uses are not needed in expressions here, as their definitions are inlined before converting to query plans.
+Anonymous functions are only allowed as arguments to primitives: they cannot be applied or bound to variables.
 The primitives of the source language are extended with key-value map primitives, which are used for implementing groups.
-Folds are defined in $\mi{PlanF}$ and can be nested inside a filter, in which case the fold update is only performed when the predicate is true; the nested fold binding is available outside of the filter.
+Folds are defined in $\mi{PlanF}$ and can be nested inside a filter, in which case the accumulator of the fold is only updated when the predicate is true; the nested fold binding is available outside of the filter.
 Folds nested inside a group are performed separately for each key; the nested fold binds a key-value map instead of a single value.
 The $\mi{Plan}$ itself is split into a five stage \emph{loop anatomy}~\cite{shivers2005anatomy}.
 First we have the name of the table and the names and element types of each column.
 The \IcC@before@ stage then defines pure values which do not depend on any table data.
 The \IcC@folds@ stage defines element computations and how they are converted to aggregate results.
 The \IcC@after@ stage defines aggregate computations that combine multiple aggregations after the entire table has been processed.
-Finally, the \IcC@return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusion can have many outputs.
+Finally, the \IcC@return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusing many queries can have many outputs.
 
 
 Before we discuss an example query plan we first define the \IcC@count@ and \IcC@sum@ functions used in earlier sections.
@@ -112,7 +112,7 @@ The single-pass restriction on queries makes the fusion process so simple, becau
 We discuss fusion-preventing dependencies further in \cref{clustering}.
 After concatenating the plans, we merge the filter blocks for \IcC@more@ and \IcC@mean@, as both use the same predicate.
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
-Now the queries are interspersed but the stages are expressed separately, we are free to rearrange the bindings in each stage without affecting the other stages.
+Now the code that implements each query is interspersed, but the stages are expressed separately, so we are free to rearrange the bindings in each stage without affecting the other stages.
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }

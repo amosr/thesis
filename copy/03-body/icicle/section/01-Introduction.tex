@@ -30,8 +30,8 @@ This implementation has been running in production at Ambiata for over two years
 \label{icicle/gold-panning}
 
 In the following example queries, we extend the daily stock price records from \cref{taxonomy/gold-panning} to contain the open price and the close price for the day.
-As Icicle uses push streams, the queries we write have a single input stream of the prices for a particular company.
-Icicle cannot express the @priceOverMarket@ example, which contains multiple input streams, but we will return to this limitation in \cref{chapter:process:processes}.
+The queries we write process a single input stream of prices for a particular company, and Icicle uses push streams to ensure that all queries over the same input stream can be fused together.
+Icicle cannot express the @priceOverMarket@ example, which uses multiple input streams, but we will return to this limitation in \cref{chapter:process:processes}.
 Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
 We also want to compute the mean of the open price for days in which the open price exceeded the close price.
 In Icicle, we write the three queries as follows:
@@ -48,7 +48,7 @@ In the above code, (@open > close@) and (@close < open@) are filter predicates, 
 The input table, @stocks@, defines the open and close prices as @Int@s.
 In Icicle, input tables have an implicit time field and the input stream is sorted chronologically.
 
-We can express the same three queries using the push streams from \cref{taxonomy/push}, as in the following program:
+We can express the same three queries using the push streams from \cref{taxonomy/push}, with the following program:
 
 \begin{haskell}
 data Record = Record
@@ -74,8 +74,8 @@ The three instances of \Hs@count@ are constructed as monadic \Hs@IO@ operations,
 The applicative functor syntax is used to divide the sum by the count in the @mean@ query, because the division is performed on the result of the push stream.
 Icicle does not use the applicative syntax, as it uses a modal type system to infer which computations are performed on the result of the stream, as described in \cref{icicle:s:ElementsAndAggregates:TypeSystem}.
 
-In this example, both @more@ and @mean@ compute the count with the same filter predicate.
-When the same computation is used by multiple queries, we would like to compute the value only once and share the result among all the queries that use it.
+In this example, both @more@ and @mean@ compute the count of elements that match the same filter predicate.
+When the same value would be computed by multiple queries, we would instead like to compute the value only once and share the result among all the queries that use it.
 Common subexpression elimination (CSE) removes some duplicate computations but, as its name suggests, it is limited to structural subexpressions~\cite{chitil1997uncommon}.
 Neither of the filtered counts is a subexpression of the other, so common subexpression elimination will not remove the duplicate computation.
 In Icicle, we remove this duplicate work by first converting queries to an intermediate language, described in \cref{icicle:s:IcicleCore}.
@@ -114,6 +114,7 @@ We need a better solution.
 % that conceptually perform less work.
 %\ben{I think this clause confuses the contribution. If if Icicle is "on par" with standard unix utilities, then why not just use those standard utilities? The point is that with Icicle we can also fuse multiple queries, and the fused code should be at least as good as the unix utils. However, fusing two instances of 'wc' won't be exactly 2x fast then running them sequentially, but still better than actually running them sequentially. There's no space to discuss the details in the intro.
 
+%% TODO: Ben's note: maybe move this elsewhere
 Icicle is related to stream processing languages such as Lucy~\cite{mandel2010lucy} and Streamit~\cite{thies2002streamit}, except we forgo the need for clock and deadlock analysis.
 Icicle is also related to work on continuous queries~\cite{arasu2003cql}, where query results are updated as rows are inserted into the source table, except we can also compute arbitrary reductions and do not need to handle deleted source rows.
 We discuss these points in more detail in \cref{icicle:s:Conclusion}.

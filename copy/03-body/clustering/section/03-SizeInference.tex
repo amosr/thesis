@@ -597,7 +597,7 @@ void filter2(int* xs, size_t xs_length, int* out_y, int* out_z)
 }
 \end{listing-c}
 
-We use the ancestor transducers to determine determine whether two combinators of different iteration sizes may be fused together.
+We use the ancestor transducers to determine whether two combinators of different iteration sizes may be fused together.
 \Cref{clustering:f:concestors} shows the \Hs/sumPartition/ example, which performs two filters over the same array, and computes the sum of each filter's output array.
 The unfused imperative version, shown in \cref{figs/clustering/sumPartition-c}, performs each operation as a separate loop.
 The last two loops compute the sums.

@@ -33,7 +33,7 @@ normalize2 xs
 The \Hs@normalize2@ function computes two sums: one of all the elements of \Hs@xs@, the other of only elements greater than zero.
 The two maps then divide each element in the input \Hs@xs@ by \Hs/sum1/ and \Hs/sum2/, respectively.
 Since we need to fully evalute the sums before we can start to execute either map, we need at least two separate passes over the input.
-These folds are examples of \emph{fusion-preventing dependencies}, as fold must consume the entire input stream before it can produce its result, and this result is needed before the next stream operation can begin.
+These folds are examples of \emph{fusion-preventing dependencies}, as the fold operator must consume its entire input stream before it can produce its result, and this result is needed before the next stream operation can begin.
 A fusion-preventing dependency between two combinators means that the two combinators must be assigned to different clusters.
 
 \Cref{clustering:f:normalize2-clusterings} shows three cluster diagrams for \Hs@normalize2@, with each clustering produced by a different clustering algorithm.

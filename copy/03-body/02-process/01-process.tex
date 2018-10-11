@@ -5,7 +5,7 @@ This chapter presents a language for expressing a collection of queries, each wi
 This work was first published as \citet{robinson2017machine}.
 The processes in these process networks execute concurrently and communicate via fixed-size bounded buffers between channels.
 Each buffer is restricted to contain at most a single element.
-The processes in a process network are then fused together to form a single process which produces the same output streams as the entire network, without the need for communication.
+The processes in a process network are then fused together to form a single process which produces the same output streams as the entire network, without the need for inter-process communication.
 
 The contributions of this chapter are:
 \begin{itemize}
@@ -14,10 +14,10 @@ We informally introduce processes and fusion with example queries (\cref{kpn/gol
 \item
 We present a streaming process calculus with concurrent execution semantics (\cref{kpn/process-definition});
 \item
+We present an algorithm for fusing pairs of processes (\cref{s:Fusion});
+\item
 We motivate an extra synchronisation primitive, @drop@, which coordinates between multiple consumers of the same stream, to improve locality by ensuring both consumers operate on the same value concurrently
 (\cref{s:Drop:in:synchrony});
-\item
-We present an algorithm for fusing pairs of processes (\cref{s:Fusion});
 \item
 We present a heuristic algorithm for fusing an entire process network (\cref{s:Optimisation});
 \item
@@ -75,12 +75,12 @@ digraph G {
 \label{figs/procs/priceAnalyses-again}
 \end{figure}
 
-As discussed earlier, we cannot execute this example using the pull streams from \cref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
-Similarly, we cannot execute this example using the push streams from \cref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
-Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing at the same time, in a way that supports multiple consumers and multiple producers.
+As discussed earlier, we cannot execute this example in a single pass using the pull streams from \cref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
+Similarly, we cannot execute this example in a single pass using the push streams from \cref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
+Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing in the same computation, in a way that supports multiple consumers and multiple producers.
 Kahn process networks \citep{kahn1976coroutines} are a flexible, expressive way of writing streaming computations, where a network is composed of communicating processes.
 Executing communicating processes introduces runtime overhead, as stream elements must be passed between processes.
-Instead, we wish to take this concurrent process network and convert it back to sequential code, without any runtime scheduling or message passing overhead.
+Instead, we wish to take this concurrent process network and convert it to sequential code that does not need any runtime scheduling or message passing overhead.
 
 % This additional communication means that a stream element which may have been in cache, has likely been swapped out by the time the consumer receives it.
 % Or if the consumer is running on a different processor, it is unlikely to be in the lower level of cache in the first place.
@@ -102,7 +102,7 @@ Each process implements a logical \emph{operator} --- so we use ``operator'' whe
 \begin{process}[float,caption=Process implementation of \Hs/foldl/,label=figs/procs/impl/foldl]
 foldl 
   = \ (k  : b -> a -> b) (z   : b) (j : b -> c)
-      (sIn: Stream a)    (sOut: Stream b). 
+      (sIn: Stream a)    (sOut: Stream c). 
     / (s  : b) (v : a)   (F0..F4: Label).
     process
      { ins:    { sIn  }
@@ -709,13 +709,14 @@ Function \ti{swaplabels} flips the order of the compound labels in an instructio
 \subsection{Static deadlock detection}
 
 In the definition of \ti{tryStep}, clause (Blocked) applies when the source process is waiting for the other process to advance.
-If both processes are blocked waiting for each other, the two processes are stuck.
+If both processes are blocked waiting for each other, then the two processes are stuck.
 Clause (Deadlock) from \ti{tryStepPair} applies, and fusion fails.
 
 This fusion failure corresponds to a static approximation of deadlock detection.
 As observed by \citet{buck1993scheduling}, static deadlock detection for Kahn process networks is in general undecidable.
-Our deadlock detection is sound, but not complete: if we detect a deadlock statically, the original Kahn process network is executed concurrently, where it may or may not deadlock at runtime.
-If we do not detect a deadlock, the original Kahn process network is guaranteed to be free from deadlocks.
+Our deadlock detection is sound, but not complete.
+If we detect a deadlock statically, then concurrent execution of the original Kahn process network may or may not deadlock at runtime.
+If we do not detect a deadlock, then the original Kahn process network is guaranteed to be free from deadlocks.
 
 Deadlock detection algorithms for Kahn process networks do exist, but perform deadlock detection dynamically rather than statically \citep{allen2007distributed,jiang2008hierarchical}.
 % \citep{allen2007distributed,bharath2004runtime,jiang2008hierarchical,olson2005deadlock}.

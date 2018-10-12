@@ -379,43 +379,7 @@ This chunking must be implemented manually and complicates the program further, 
 Even with chunking, we may reduce the streaming overhead from once per element to once per thousand elements, but we can never remove it entirely.
 With Folderol there is no streaming overhead to reduce because it is statically fused away.
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  input [texlbl="\Hs/input/"];
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_level  {
-    lblstyle="left,xshift=1.0cm";
-    label="(level detector)";
-    squares [texlbl="\Hs/square/"];
-    avg [texlbl="\Hs/average/"];
-    sqrt [texlbl="\Hs/root/"];
-
-    squares -> avg -> sqrt;
-  };
-
-  subgraph cluster_gain  {
-    lblstyle="left";
-    label="(gain)";
-    transfer [texlbl="\Hs/transfer/"];
-    multiply [texlbl="\Hs/multiply/"];
-    transfer -> multiply;
-  };
-
-  input -> squares;
-  input -> multiply;
-  sqrt -> transfer;
-  output [texlbl="\Hs/output/"];
-  multiply -> output;
-}
-\end{dot2tex}
-\caption{Dependency graph for audio compressor}
-\label{figs/dep/compressor}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/compressor}{figs/dep/compressor}{Dependency graph for audio compressor}
 
 \subsection{Dynamic range compression}
 Dynamic range compression is an audio signal processing algorithm to reduce the volume of loud sounds, leaving quiet sounds unchanged.

@@ -31,49 +31,7 @@ We present an overview of the mechanised soundness proofs of fusion (\cref{s:Pro
 Recall the @priceAnalyses@ example from \cref{taxonomy/gold-panning}, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
 \Cref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
 
-% !!! TODO fix fonts
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock [texlbl="\Hs/stock/"];
-  index [texlbl="\Hs/index/"];
-
-  stock -> pom_join;
-  index -> pom_join;
-  stock -> pot_tps;
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_priceOverTime  {
-    lblstyle="right";
-    texlbl="\Hs/priceOverTime/";
-    label="  priceOverTime";
-    pot_tps [texlbl="\Hs/timeprices/"];
-    pot_cor [texlbl="\Hs/correlation/"];
-    pot_reg [texlbl="\Hs/regression/"];
-    pot_tps -> pot_cor;
-    pot_tps -> pot_reg;
-  };
-
-  subgraph cluster_priceAgainstMarket {
-    lblstyle="left,xshift=0.2cm";
-    texlbl="\Hs/priceOverMarket/";
-    label="priceOverMarket";
-    pom_join [texlbl="\Hs/joined/"];
-    pom_price [texlbl="\Hs/prices/"];
-    pom_cor [texlbl="\Hs/correlation/"];
-    pom_reg [texlbl="\Hs/regression/"];
-    pom_join -> pom_price;
-    pom_price -> pom_cor;
-    pom_price -> pom_reg;
-  };
-}
-\end{dot2tex}
-\caption{Dependency graph for \Hs/priceAnalyses/ example}
-\label{figs/procs/priceAnalyses-again}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-priceOverMarket}{figs/procs/priceAnalyses-again}{Dependency graph for \Hs/priceAnalyses/ example}
 
 As discussed earlier, we cannot execute this example in a single pass using the pull streams from \cref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
 Similarly, we cannot execute this example in a single pass using the push streams from \cref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
@@ -431,7 +389,7 @@ node[shape=none,texmode="raw"];
 \subsubsection{Fusion result}
 
 
-\begin{lstlisting}[language=process,float,caption={Fusion of \colorbox{procFst}{timeprices} and \colorbox{procSnd}{regression}, along with \colorbox{procCommon}{shared} instructions and variables},label=figs/procs/instance/fused-timeprices-regression,linebackgroundcolor={
+\begin{lstlisting}[language=process,float,caption={[Fusion of timeprices and regression, along with shared instructions and variables]Fusion of \colorbox{procFst}{timeprices} and \colorbox{procSnd}{regression}, along with \colorbox{procCommon}{shared} instructions and variables},label=figs/procs/instance/fused-timeprices-regression,linebackgroundcolor={
   \hilineFst{2}
   \hilineFst{3}
   \hilineSnd{4}

@@ -801,7 +801,8 @@ The polarity of each stream is depicted as a filled or unfilled circle.
 Filled circles $\bullet$ represent pull streams because they always contain the next value or the result.
 Unfilled circles $\circ$ represent push streams because they are a hole which values can be pushed into.
 
-\input{figs/polarity-pot-pom.tex}
+% \input{figs/polarity-pot-pom.tex}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-priceOverMarket-polar}{figs/polar/priceOverTime-priceOverMarket}{Polarised dependency graph for \Hs/priceOverTime/ and \Hs/priceOverMarket/}
 
 We begin by classifying both input streams as pull streams: we can copy elements from pull streams into push streams, but not vice versa.
 The \Hs@stock@ input stream is used twice, so at least one of the use-sites must be push.
@@ -860,44 +861,7 @@ We could have also written \Hs/correlation/ to take two lists of doubles and pai
 When correlating values from the same input list, the list-of-pairs version requires one fewer intermediate list; when correlating values from different lists, the pair-of-lists version is slightly more convenient.
 Which version is preferable depends on the situation, but the difference is usually minor.
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock;
-  stock [texlbl="\Hs/stock/"];
-  stock -> pot_dup[style="*-*"];
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_priceOverTime  {
-    lblstyle="left,xshift=0.12cm";
-    label="priceOverTime_c";
-    texlbl="\Hs/priceOverTime_c/";
-    pot_dup [texlbl="\Hs/dup_ioi/"];
-    pot_time [texlbl="\Hs/map_i time/"];
-    pot_price [texlbl="\Hs/map_o price/"];
-    pot_dup -> pot_time[style="*-*"];
-    pot_dup -> pot_price[style="o-o"];
-
-    subgraph cluster_correlation {
-      lblstyle="below=4.25cm";
-      // lblstyle="above";
-      label="correlation_io";
-      texlbl="\Hs/correlation_io/";
-      potc_zip [texlbl="\Hs/zip_ioo/"];
-      pot_cor [texlbl="\Hs/foldl_o/"];
-      potc_zip -> pot_cor[style="o-o"];
-    };
-    pot_time -> potc_zip[style="*-*"];
-    pot_price -> potc_zip[style="o-o"];
-  };
-}
-\end{dot2tex}
-\caption{Polarised dependency graph with diamond}
-\label{figs/polar/correlation-zip}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-diamond}{figs/polar/correlation-zip}{Polarised dependency graph with diamond}
 
 \begin{haskell}[float,caption=Polarised implementation of \Hs/zip\_ioo/,label=figs/polar/impl/zip_ioo]
 zip_ioo :: PullResult a r -> Push (a,b) r' -> Push b (r,r')
@@ -923,48 +887,11 @@ With polarised streams, we cannot execute \Hs@priceOverTime@ with the pair-of-li
 The \Hs@zip_ioo@ combinator, implemented in \cref{figs/polar/impl/zip_ioo}, is similar to the \Hs@join_ioo@ combinator; it has an input pull, an input push, and an output push.
 When the input push stream receives a value, \Hs@zip_ioo@ reads from the pull stream and sends the pair to the output push stream.
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock;
-  stock [texlbl="\Hs/stock/"];
-  stock -> pot_dup;
-
-  graph [style="rounded corners"];
-
-  subgraph cluster_priceOverTime  {
-    lblstyle="left,xshift=0.12cm";
-    label="priceOverTime_c";
-    texlbl="\Hs/priceOverTime_c/";
-    pot_dup [texlbl="\Hs/dup_ioi/"];
-    pot_time [texlbl="\Hs/map_i time/"];
-    pot_price [texlbl="\Hs/map_o price/"];
-    pot_dup -> pot_time;
-    pot_dup -> pot_price[style="<-"];
-
-    subgraph cluster_correlation {
-      lblstyle="below=4.25cm";
-      // lblstyle="above";
-      label="correlation_io";
-      texlbl="\Hs/correlation_io/";
-      potc_zip [texlbl="\Hs/zip_ioo/"];
-      pot_cor [texlbl="\Hs/foldl_o/"];
-      potc_zip -> pot_cor[style="<-"];
-    };
-    pot_time -> potc_zip;
-    pot_price -> potc_zip[style="<-"];
-  };
-}
-\end{dot2tex}
-\caption{Control flow graph for polarised diamond}
-\label{figs/control/correlation-zip}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-diamond-cycle}{figs/control/correlation-zip}{Control flow graph for polarised diamond}
 
 Although it is not obvious from the polarised dependency graph, the combinators have a recursive dependency on each other.
 The polarised diagram shows \emph{elements} flowing down, but the \emph{control flow} for push streams is upwards.
-\Cref{figs/control/correlation-zip} shows the control flow for the polarised diagram, after replacing the edges corresponding to pull streams with downward arrows and upward arrows for edges corresponding to push streams.
+\Cref{figs/control/correlation-zip} shows the control flow for the polarised diagram, after replacing the edges corresponding to pull streams with filled downward arrows and replacing the edges corresponding to push streams with unfilled upward arrows.
 In this graph, the recursive dependency is illustrated by the cycle between \Hs@dup_ioi@, \Hs@zip_ioo@ and the two maps.
 This cycle complicates translating the graph to an implementation.
 

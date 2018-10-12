@@ -10,25 +10,7 @@ Drop instructions are not necessary for correctness, or for ensuring boundedness
 % This example is very similar to the @map2@ from earlier.
 % The processes are the same, except for the input to the second @map@, and there is an extra sink.
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock [texlbl="\Hs/stock/"];
-
-  stock -> pot_tps;
-    lblstyle="right";
-    pot_tps [texlbl="\Hs/map/"];
-    pot_cor [texlbl="\Hs/correlation/"];
-    pot_reg [texlbl="\Hs/regression/"];
-    pot_tps -> pot_cor;
-    pot_tps -> pot_reg;
-}
-\end{dot2tex}
-\caption{Dependency graph for \Hs/priceOverTime/ example}
-\label{figs/procs/drop/priceOverTime}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/priceOverTime}{figs/procs/drop/priceOverTime}{Dependency graph for \Hs/priceOverTime/ example}
 
 Recall the @priceOverTime@ example, which computes the correlation and regression of an input stream.
 The dependency graph for @priceOverTime@ is shown in \cref{figs/procs/drop/priceOverTime}.

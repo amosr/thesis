@@ -30,65 +30,7 @@ This iterative simplification removes some unnecessary states and simplifies the
 \subsection{Fusing a network}
 \label{ss:Fusing:a:network}
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  stock [texlbl="\Hs/stock/"];
-  index [texlbl="\Hs/index/"];
-
-  stock -> pom_join;
-  index -> pom_join;
-  stock -> pot_tps;
-
-  graph [style="rounded corners,filled"];
-
-  subgraph cluster_z {
-    graph [bgcolor="0.0 0.0 0.9"];
-    subgraph cluster_priceAgainstMarket {
-      lblstyle="right";
-      label="priceOverMarket";
-      texlbl="\Hs/priceOverMarket/";
-      graph [bgcolor="0.0 0.0 0.8"];
-      pom_join [texlbl="\Hs/join/"];
-      subgraph cluster_x {
-        label="";
-        graph [bgcolor="0.0 0.0 0.7"];
-        subgraph cluster_x {
-          graph [bgcolor="0.0 0.0 0.6"];
-          pom_price [texlbl="\Hs/map/"];
-          pom_cor [texlbl="\Hs/correlation/"];
-        };
-      pom_reg [texlbl="\Hs/regression/"];
-      }
-      pom_join -> pom_price;
-      pom_price -> pom_cor;
-      pom_price -> pom_reg;
-    };
-
-    subgraph cluster_priceOverTime  {
-      lblstyle="left";
-      label="priceOverTime";
-      texlbl="\Hs/priceOverTime/";
-      graph [bgcolor="0.0 0.0 0.8"];
-      subgraph cluster_x1 {
-        label="";
-        graph [bgcolor="0.0 0.0 0.7"];
-        pot_tps [texlbl="\Hs/map/"];
-        pot_cor [texlbl="\Hs/correlation/"];
-      }
-      pot_reg [texlbl="\Hs/regression/"];
-      pot_tps -> pot_cor;
-      pot_tps -> pot_reg;
-    };
-
-  }
-}
-\end{dot2tex}
-\caption{Pairwise fusion ordering of the \Hs/priceAnalyses/ network.}
-\label{figs/procs/priceAnalyses-fusing-whole}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/priceOverTime-priceOverMarket-nested}{figs/procs/priceAnalyses-fusing-whole}{Pairwise fusion ordering of the \Hs/priceAnalyses/ network}
 
 As we shall see, when we fuse pairs of processes in a network, the order in which we fuse pairs can determine whether fusion succeeds.
 Rather than trying all possible orders, of which there are many, we use a bottom-up heuristic to choose a fusion order.
@@ -125,27 +67,7 @@ append2zip a b c =
   in  z
 \end{lstlisting}
 
-\begin{figure}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  b [texlbl="\Hs/b/"];
-  a [texlbl="\Hs/a/"];
-  c [texlbl="\Hs/c/"];
-  app1 [texlbl="\Hs/append/"];
-  app2 [texlbl="\Hs/append/"];
-  b -> app1; b -> app2 [constraint=false];
-  a -> app1 ;
-  c -> app2;
-  zip [texlbl="\Hs/zip/"];
-  app1 -> zip;
-  app2 -> zip;
-}
-\end{dot2tex}
-\caption{Process network for \Hs/append2zip/}
-\label{figs/procs/append2zip}
-\end{figure}
+\FigurePdfLabel{figs/depgraphs/append2zip}{figs/procs/append2zip}{Dependency graph for \Hs/append2zip/ example}
 
 We use the more convenient syntax for list programs rather than the process network syntax introduced earlier, but in the discussion we interpret this program as a process network.
 In the process network interpretation, each list combinator corresponds to a process, and each list corresponds to a stream.
@@ -293,47 +215,7 @@ append3 a b c =
   in  (ab, ac, bc)
 \end{haskell}
 
-\begin{figure}
-\begin{minipage}[t]{0.5\textwidth}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  b; a; c;
-  app1 [label="append"];
-  app2 [label="append"];
-  app3 [label="append"];
-  a -> app1; a -> app2;
-  b -> app1; b -> app3;
-  c -> app2; c -> app3;
-  app1 -> ab;
-  app2 -> ac;
-  app3 -> bc;
-}
-\end{dot2tex}
-\end{minipage}
-\begin{minipage}[t]{0.5\textwidth}
-\center
-\begin{dot2tex}[dot]
-digraph G {
-  node [shape="none"];
-  b; a; c;
-  app1 [label="zip"];
-  app2 [label="zip"];
-  app3 [label="zip"];
-  a -> app1; a -> app2;
-  b -> app1; b -> app3;
-  c -> app2; c -> app3;
-  app1 -> ab;
-  app2 -> ac;
-  app3 -> bc;
-}
-\end{dot2tex}
-\end{minipage}
-\caption{Process networks for \Hs/append3/ and \Hs/zip3/}
-\label{figs/procs/append3-zip3}
-\end{figure}
-
+\FigurePdfLabel{figs/depgraphs/append3zip3}{figs/procs/append3-zip3}{Dependency graphs for \Hs/append3/ and \Hs/zip3/ examples}
 
 
 

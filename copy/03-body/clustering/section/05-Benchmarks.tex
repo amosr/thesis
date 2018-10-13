@@ -44,7 +44,7 @@ We will investigate the reason for this wide range in performance in future work
 % One randomly generated example with twenty-five combinators took over twenty minutes in GLPK, while the commercial solver CPLEX was able to solve the same example in a second, and another open source solver CBC took one hundred seconds.
 % For the same example, the unoptimised program with all constraints took over twenty minutes in CBC, while CPLEX still only took one and a half seconds.
 
-The hand-fused implementations of the benchmark programs are available at \url{https://github.com/amosr/papers/tree/master/2014betterfusionforfilters/benches}.
+The implementations of the different clusterings for the benchmark programs are available at \url{https://github.com/amosr/folderol/tree/bench/bench/Bench/Clustering}.
 
 % The three benchmarks are the \Hs@normalize2@ example, finding the closest pair of points, and quadtree. The benchmark programs are all hand-written, hand-fused C code based on the clustering. Each program was run with the same input five times, and the minimum runtime was used. Runtimes and the number of loops for each clustering are shown in \cref{clustering:f:BenchResults}. In all cases, our clustering performs better than or as good as Megiddo's, and better than stream fusion and unfused. Interestingly, stream fusion's clustering for \Hs@normalize2@ performs better than Megiddo's, despite having more loops, as stream fusion is able to remove the intermediate array.
 

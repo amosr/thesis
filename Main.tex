@@ -6,7 +6,9 @@
                 ,12pt
                 ]{report}
 \newif\iffull
+\newif\ifprint
 \fulltrue
+\printtrue
 
 \input{structure/00-00-style.tex}
 \input{structure/00-01-imports.tex}
@@ -21,8 +23,12 @@
 \setlength{\pdfpagewidth}{\paperwidth}
 
 % TODO: fix abstract in ext/
-% \includepdf{ext/thesisdissertation.pdf}
-% \includepdf{ext/originalitystatement-render.pdf}
+\ifprint
+\includepdf{ext/thesisdissertation.pdf}
+\includepdf{ext/originalitystatement.pdf}
+\includepdf{ext/pubstmt.pdf}
+\fi
+
 \input{structure/02-front.tex}
 \fi
 

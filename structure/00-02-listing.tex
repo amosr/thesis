@@ -4,6 +4,20 @@
 \usepackage{letltxmacro}
 
 \colorlet{TemplateStage}{Blue}
+\ifprint
+  \colorlet{CommentStyle}{black!80}
+  \colorlet{StringStyle}{black!80}
+  \colorlet{KeywordStyle}{black!80}
+  \newcommand\KeywordStyle \textbf
+
+\else
+  \colorlet{CommentStyle}{MidnightBlue}
+  \colorlet{StringStyle}{Maroon}
+  \colorlet{KeywordStyle}{OliveGreen}
+  \newcommand\KeywordStyle \tt
+\fi
+
+\colorlet{Highlighted}{green!10}
 
 \lstdefinelanguage{Haskell}%
   {morekeywords={if,then,else,case,class,data,default,deriving,%
@@ -55,9 +69,9 @@
     rulecolor={\color[gray]{0.7}},
     numbers=none,
     numberstyle=\color{Gray}\tiny\it,
-    commentstyle=\color{MidnightBlue}\it,
-    stringstyle=\color{Maroon},
-    keywordstyle=[1]\color{OliveGreen},
+    commentstyle=\color{CommentStyle}\it,
+    stringstyle=\color{StringStyle},
+    keywordstyle=[1]\color{KeywordStyle}\KeywordStyle,
     % keywordstyle=[2]\color{ForestGreen},
     % keywordstyle=[3]\color{Bittersweet},
     % keywordstyle=[4]\color{RoyalPurple},

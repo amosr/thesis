@@ -200,10 +200,10 @@ $$
 \vdash & \true 
         ~\wedge~  k_{gts} = k_1 ~\wedge~ \true
 \\     &~~~~~~~\; 
-          \wedge~  \colorbox{green!10}{$k_{xs}  ~= k_2$}
+          \wedge~  \colorbox{Highlighted}{$k_{xs}  ~= k_2$}
           \wedge~  k_{ys1}  = k_2 
 \\     &~~~~~~~\; 
-        ~ \wedge~  \colorbox{green!10}{$k_{xs}   = k_3$}
+        ~ \wedge~  \colorbox{Highlighted}{$k_{xs}   = k_3$}
         ~ \wedge~  k_{ys2}  = k_3
 \end{array}
 $$
@@ -547,14 +547,14 @@ void sumPartition(int* xs, size_t xs_length, int* out_y, int* out_z)
     // ys = filter ($>0$) xs
     int* ys = malloc(sizeof(int) * xs_length);
     size_t ys_length = 0;
-    for (size_t i = 0; i != xs_length; ++i) {
+    for (size_t i = 0; %\colorbox{green!10}{\tt{i != xs\_length}}%; ++i) {
         if (xs[i] > 0) ys[ys_length++] = xs[i];
     }
 
     // zs = filter ($<0$) xs
     int* zs = malloc(sizeof(int) * xs_length);
     size_t zs_length = 0;
-    for (size_t i = 0; i != xs_length; ++i) {
+    for (size_t i = 0; %\colorbox{green!10}{\tt{i != xs\_length}}%; ++i) {
         if (xs[i] < 0) zs[zs_length++] = xs[i];
     }
 

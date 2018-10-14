@@ -22,19 +22,20 @@ In \cref{s:Proofs} we gave an overview of the \emph{mechanised proof of soundnes
 
 In \cref{s:Benchmarks} we evaluated the runtime performance of process fusion and saw that the fused program was always at least two times faster than the compared streaming implementations, and usually between one and a half to two times faster than the compared array fusion implementation.
 
-In \cref{related} we compared process fusion against related work on fusion, streams and dataflow languages.
+In \cref{related} we compared process fusion with related work on fusion, streams and dataflow languages.
 
 Finally, in \cref{clustering} we saw \emph{clustering for array programs}, a scheduling algorithm for executing array programs in as few passes as possible.
 When the input data to the queries fits in memory as an array, we can perform multiple passes over the input data.
 Our clustering algorithm finds a schedule that minimises the number of array reads and writes, the number of intermediate arrays, and the number of loops.
 It improves on prior work by supporting size-changing operations, such as \Hs/filter/, allowing them to be fused with their consumers as well as their producers.
 
-If, in the future of computing, interest in \emph{big data} does not wane, and datasets continue to grow faster than hard drives or memory, then the concurrent execution of streaming queries will only become more important.
+These methods are applicable in different situations, depending on the storage requirements of the dataset, and the kinds of queries to be executed.
+However, all methods are designed to reduce program runtime by minimising streaming and iteration overhead.
 
 \section{Future work}
 \label{related/future}
 
-In this last section, we take a brief look at the limitations and possible extensions of our work.
+We now take a brief look at the limitations and possible extensions of our work.
 We focus on more conceptual extensions to process fusion here; extensions to clustering to support more combinators are mentioned in \cref{clustering:s:FutureWork}.
 
 \subsection{Network fusion order and non-determinism}
@@ -89,4 +90,12 @@ Rather than extend the fusion algorithm to track which case conditions are true 
 In the \Hs/filter2/ example, the fusion algorithm returns a fusion failure instead of a fused process.
 Implementing this extension as a separate pass would require modifying the fusion algorithm to still return the complete fused process when it detects a potential deadlock; potential deadlocks could be recorded in the result process with a new instruction.
 After fusing all the processes together, simplifying the result process, and removing unreachable instructions, we would check whether any deadlock instructions are reachable; if so, we trigger a fusion failure as before.
+
+\section{Conclusion}
+
+If, in the future of computing, interest in \emph{big data} does not wane, and datasets continue to grow faster than hard drives or memory, then the concurrent execution of streaming queries will only become more important.
+Efficient execution of concurrent queries has the obvious benefit of providing more immediate answers, while also improving energy efficiency.
+In Australia, where a large majority of our power is supplied by burning coal, we have a moral obligation to use power responsibly, as well as to use power from renewable sources where possible.
+Hopefully, the techniques presented in this thesis can help in a small way to reduce the overall energy consumption for querying large datasets.
+
 

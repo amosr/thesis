@@ -26,7 +26,7 @@ When creating a new statistical model, Icicle is used to provide training data b
 % Icicle is also used to provide training data for machine learning models, in which case the history of all input data must be kept.
 % The history of all input data is kept for training machine learning models, and takes five terabytes
 
-However, push streams, and by extension Icicle, generally do not support computations with multiple inputs except for non-deterministically merging two streams.
+However, push streams, and by extension Icicle, do not support streaming computations with multiple inputs except for non-deterministically merging two streams.
 In some circumstances, this non-deterministic merge can be used to append streams --- as we shall see in \cref{taxonomy/push}.
 As an alternative to push streams, Kahn process networks~\citep{kahn1976coroutines} support both multiple inputs and multiple queries, but require dynamic scheduling and inter-process communication, both of which can introduce significant runtime overhead.
 In \cref{s:Fusion} we describe \emph{process fusion}, a method for taking multiple processes in a Kahn process network and fusing them together into a single process.
@@ -48,10 +48,10 @@ This fusion method generalises previous work on stream fusion (\cref{related/str
 
 When the input dataset is small enough to fit in memory, we can write each query as an \emph{array program} rather than as a streaming program.
 We can write array programs by composing array operations together.
-The array programs for each individual query can then be combined into a larger array program.
+The array programs, one for each individual query, can then be combined into a larger array program.
 Array programs can read from input arrays multiple times, and can produce intermediate and output arrays.
 The produced arrays can also be read from multiple times.
-We can execute array programs by dividing the operations into \emph{passes}, and fusing all the operations in the same pass into the same loop. % which generally correspond to a loop that reads or produces an array.
+We can execute array programs by dividing the operations into \emph{passes}, and fusing all the operations in the same pass into a single loop. % which generally correspond to a loop that reads or produces an array.
 Each individual pass may contain operations from multiple queries, so we use the above process fusion method to fuse the array operations together.
 For array programs that require multiple passes, there are often many different ways to schedule the work among the passes.
 We perform \emph{clustering} on the program to determine how many passes to perform, and how to schedule each array operation among the different passes.
@@ -87,9 +87,10 @@ Icicle is described in \cref{part:icicle}.
 
 \item[Process fusion:]
 a method for fusing stream combinators; the first that supports all three of multiple inputs, multiple concurrent queries, and user-defined combinators.
-In this streaming model, each combinator in each query is implemented as a sequential process, and together, the combinators of all queries form a concurrent process network.
+In this streaming model, each combinator in each query is implemented as a sequential process.
+Together, the combinators of all queries form a concurrent process network.
 Processes are then fused together using an extension of synchronised product.
-The fusion algorithm is described in \cref{chapter:process:processes}.
+Process fusion is described in \cref{chapter:process:processes}.
 
 \item[Formal proof of correctness of fusion:]
 a proof of correctness for process fusion, mechanised in the proof assistant Coq.

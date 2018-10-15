@@ -24,13 +24,17 @@ In \cref{s:Benchmarks} we evaluated the runtime performance of process fusion an
 
 In \cref{related} we compared process fusion with related work on fusion, streams and dataflow languages.
 
-Finally, in \cref{clustering} we saw \emph{clustering for array programs}, a scheduling algorithm for executing array programs in as few passes as possible.
+Finally, in \cref{clustering} we introduced \emph{clustering for array programs}, a scheduling algorithm for executing array programs in as few passes as possible.
 When the input data to the queries fits in memory as an array, we can perform multiple passes over the input data.
 Our clustering algorithm finds a schedule that minimises the number of array reads and writes, the number of intermediate arrays, and the number of loops.
 It improves on prior work by supporting size-changing operations, such as \Hs/filter/, allowing them to be fused with their consumers as well as their producers.
 
 These methods are applicable in different situations, depending on the storage requirements of the dataset, and the kinds of queries to be executed.
 However, all methods are designed to reduce program runtime by minimising streaming and iteration overhead.
+If we wish to reduce runtime as much as possible, we cannot consider each query in isolation.
+We must instead consider the queries as a whole, and perform global optimisations: Icicle's intermediate representation enables common subexpression elimination across queries, process fusion coordinates a producer with all consumers, and clustering converts the entire dependency graph to an integer linear program.
+In contrast, shortcut fusion techniques such as stream fusion \citep{coutts2007stream} rely on local rewrites, and cannot take into account the surrounding context of the program.
+If we want to fuse a whole set of queries, we usually need to look at the whole set of queries, and transform them as a graph, rather than performing local transformations on the abstract syntax tree.
 
 \section{Future work}
 \label{related/future}

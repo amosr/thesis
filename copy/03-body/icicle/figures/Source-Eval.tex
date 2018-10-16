@@ -2,12 +2,6 @@
 
 \begin{figure*}
 $$
-V'~     ::=~\VValue{V}
-        ~|~\VStream {(V \stackrel{\bullet}{\to} V)}
-        ~|~\VFold{V}{(V \stackrel{\bullet}{\to} V \stackrel{\bullet}{\to} V)}
-                    {(V \stackrel{\bullet}{\to} V)}
-$$
-$$
 \begin{array}{ll}
 
 \RawMode~::=~@Pure@~|~@Element@~|~@Aggregate@
@@ -17,6 +11,12 @@ $$
 \Sigma~::=~\cdot~|~\Sigma,~x~=~V'
 
 \end{array}
+$$
+$$
+V'~     ::=~\VValue{V}
+        ~|~\VStream {(V \stackrel{\bullet}{\to} V)}
+        ~|~\VFold{V}{(V \stackrel{\bullet}{\to} V \stackrel{\bullet}{\to} V)}
+                    {(V \stackrel{\bullet}{\to} V)}
 $$
 
   \footnotesize
@@ -28,7 +28,7 @@ $$
 $$
 \ruleAx
 {
-    \SourceStepX{n}{\Sigma}{V'}{V'}
+    \SourceStepX{n}{\Sigma}{V}{\VValue{V}}
 }{EVal}
 \ruleIN
 {

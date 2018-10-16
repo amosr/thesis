@@ -6,7 +6,7 @@ This work was first published as \citet{robinson2016icicle}, and was performed i
 At Ambiata, we perform feature generation for machine-learning applications by executing many thousands of simple queries over terabytes worth of compressed data.\footnote{In 2018, this was a lot of data.}
 For such applications, we must automatically fuse these separate queries and be sure that the result can be executed in a single pass over the input.
 We also ingest tens of gigabytes of new data per day, and must incrementally update existing features without recomputing them all from scratch.
-Our feature generation process is executed in parallel on hundreds of nodes on a cloud based system, and if we performed neither fusion nor incremental update then the cost of the computation would begin to exceed the salaries of the developers.
+Our feature generation process is executed in parallel on hundreds of nodes on a cloud-based system, and if we performed neither fusion nor incremental update then the cost of the computation would begin to exceed the salaries of the developers.
 
 The contributions of this chapter are:
 \begin{itemize}
@@ -14,7 +14,7 @@ The contributions of this chapter are:
   We motivate the use of Icicle by extending the previous ``gold panning'' queries (\cref{icicle/gold-panning});
 
 \item
-  We present Icicle, a domain-specific language that guarantees any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
+  We present Icicle, a domain-specific language that guarantees that any set of queries on a shared input table can be fused, and allows the query results to be updated as new data is received (\cref{icicle:s:IcicleSource});
 
 \item
   We present a fold-based intermediate language, which allows the query fusion transformation to be a simple matter of appending two intermediate programs, and exposes opportunities for common subexpression elimination (\cref{icicle:s:IcicleCore});
@@ -29,9 +29,10 @@ This implementation has been running in production at Ambiata for over two years
 \section{Gold panning with Icicle}
 \label{icicle/gold-panning}
 
-In the following example queries, we extend the daily stock price records from \cref{taxonomy/gold-panning} to contain the open price and the close price for the day.
+For the following example queries, we extend the daily stock price records from \cref{taxonomy/gold-panning} to contain the open price and the close price for the day.
 The queries we write process a single input stream of prices for a particular company, and Icicle uses push streams to ensure that all queries over the same input stream can be fused together.
 Icicle cannot express the @priceOverMarket@ example, which uses multiple input streams, but we will return to this limitation in \cref{chapter:process:processes}.
+
 Suppose we want to compute the number of days where the open price exceeded the close price, and vice versa.
 We also want to compute the mean of the open price for days in which the open price exceeded the close price.
 In Icicle, we write the three queries as follows:
@@ -48,9 +49,7 @@ In the above code, (@open > close@) and (@close < open@) are filter predicates, 
 The input table, @stocks@, defines the open and close prices as @Int@s.
 In Icicle, input tables have an implicit time field and the input stream is sorted chronologically.
 
-We can express the same three queries using the push streams from \cref{taxonomy/push}, with the following program:
-
-\begin{haskell}
+\begin{haskell}[float,caption=Push implementation of queries,label=icicle:fig:intro:push_query]
 data Record = Record
  { time :: Time, open :: Int, close :: Int }
 
@@ -66,9 +65,11 @@ queries = do
   mean_count <- count
   let mean = filter (\r -> open r > close r)
                     (div <$> contramap open mean_sum <*> mean_count)
+
   return ((,,) <$> more <*> less <*> mean)
 \end{haskell}
 
+\Cref{icicle:fig:intro:push_query} shows the same three queries implemented using the push streams from \cref{taxonomy/push}.
 Despite the syntactic differences, the two programs have roughly the same structure in terms of the three queries.
 The three instances of \Hs@count@ are constructed as monadic \Hs@IO@ operations, because each count uses a separate mutable reference.
 The applicative functor syntax is used to divide the sum by the count in the @mean@ query, because the division is performed on the result of the push stream.
@@ -82,7 +83,7 @@ In Icicle, we remove this duplicate work by first converting queries to an inter
 This intermediate language decomposes the query into individual folds, exposing the opportunities for common subexpression elimination.
 
 If we were using an existing database implementation, we could convert all three queries to a single query in a back-end language like SQL, but doing so by hand is tedious and error prone.
-As the three queries use different filter predicates, we cannot use a single @SELECT@ statement and a @WHERE@ expression to implement the filter.
+As the three queries use different filter predicates, we cannot use a single @SELECT@ statement with a @WHERE@ expression to implement the filter.
 We must instead lift each predicate to an expression-level conditional and compute the count by summing the conditional:
 
 \begin{sql}
@@ -97,13 +98,13 @@ We must instead lift each predicate to an expression-level conditional and compu
 
 Joint queries such as the stocks example can be evaluated in a streaming, incremental fashion, which allows the result to be updated as we receive new data \citep{arasu2003cql}.
 As a counter-example, suppose we have a table with two fields @key@ and @value@, and we wish to find the mean of values whose key matches the last one in the table.
-We might try something like:
+We might try something like the following:
 
 \begin{icicle}
-  table kvs { key : Date; value : Int }
-  query meanOfLatest
-   = let k = last key in
-     filter (key == k) of mean value;
+table kvs { key : Date; value : Int }
+query meanOfLatest
+ = let k = last key in
+   filter (key == k) of mean value;
 \end{icicle}
 
 Unfortunately, although the \emph{result} we desire is computable, the \emph{algorithm} implied by the above query cannot be evaluated incrementally.
@@ -115,6 +116,6 @@ We need a better solution.
 %\ben{I think this clause confuses the contribution. If if Icicle is "on par" with standard unix utilities, then why not just use those standard utilities? The point is that with Icicle we can also fuse multiple queries, and the fused code should be at least as good as the unix utils. However, fusing two instances of 'wc' won't be exactly 2x fast then running them sequentially, but still better than actually running them sequentially. There's no space to discuss the details in the intro.
 
 %% TODO: Ben's note: maybe move this elsewhere
-Icicle is related to stream processing languages such as Lucy~\cite{mandel2010lucy} and Streamit~\cite{thies2002streamit}, except we forgo the need for clock and deadlock analysis.
+Icicle is related to stream processing languages such as Lucy~\cite{mandel2010lucy} and StreamIt~\cite{thies2002streamit}, except we forgo the need for clock and deadlock analysis.
 Icicle is also related to work on continuous queries~\cite{arasu2003cql}, where query results are updated as rows are inserted into the source table, except we can also compute arbitrary reductions and do not need to handle deleted source rows.
 We discuss these points in more detail in \cref{icicle:s:Conclusion}.

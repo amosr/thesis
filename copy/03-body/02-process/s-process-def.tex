@@ -11,7 +11,7 @@ For values and expressions we use an untyped lambda calculus with a few primitiv
 The `$||$' operator is boolean-or, `+' addition, `/=' not-equal, and `$<$' less-than.
 The special @uninitialised@ value is used as a default value for uninitialised heap variables, and inhabits every type.
 
-A $\Proc$ is a record with five fields: the @ins@ field specifies the input channels; the @outs@ field the output channels; the @heap@ field the process-local heap; the @label@ field the label of the instruction currently being executed; and the @instrs@ a map of labels to instructions.
+A $\Proc$ is a record with five fields: the @ins@ field specifies the input channels; the @outs@ field specifies the output channels; the @heap@ field specifies the process-local heap; the @label@ field specifies the label of the instruction currently being executed; and the @instrs@ field specifies a map of labels to instructions.
 We use the same record when specifying both the definition of a particular process, as well as when giving the evaluation semantics.
 In the process definition, the @heap@ field gives the initial heap of the process, and any variables with unspecified values are assumed to be the @uninitialised@ value.
 The @label@ field gives the entry-point in the process definition, though during evaluation it is the label of the instruction currently being executed.
@@ -24,7 +24,7 @@ When performing the fusion transform, the $\Value$ itself will not be known, but
 When defining the fusion transform in \cref{s:Fusion}, we will use a version of $\InputState$ with only this statically known information.
 
 The @instrs@ field of the $\Proc$ maps labels to instructions.
-The possible instructions are: @pull@, which tries to pull the next value from a channel into a given heap variable, blocking until the producer pushes a value or closes the channel; @push@, which pushes the value of an expression to an output channel; @close@, which signals the end of an output channel; @drop@, which indicates that the current value pulled from a channel is no longer needed; @case@, which branches based on the result of a boolean expression; @jump@, which causes control to move to a new instruction; and @exit@, which signals that the process is finished.
+The possible instructions are: @pull@, which tries to pull the next value from a channel into a given heap variable and blocks until the producer pushes a value or closes the channel; @push@, which pushes the value of an expression to an output channel; @close@, which signals the end of an output channel; @drop@, which indicates that the current value pulled from a channel is no longer needed; @case@, which branches based on the result of a boolean expression; @jump@, which causes control to move to a new instruction; and @exit@, which signals that the process is finished.
 
 Instructions include a $\Next$ field containing the label of the next instruction to execute, as well as a list of $\Var \times \Exp$ bindings used to update the heap.
 The list of update bindings is attached directly to instructions to make the fusion algorithm easier to specify, in contrast to a presentation with a separate @update@ instruction.
@@ -44,7 +44,7 @@ The list of update bindings is attached directly to instructions to make the fus
 \subsection{Execution}
 \label{s:Process:Eval}
 
-The dynamic execution of a process network consists of:
+The dynamic execution semantics for a process network consists of:
 
 \begin{enumerate}
 \item \emph{Injection} of an action, which can denote an empty message, a pushed channel value, or a channel being closed, into a process or a network.

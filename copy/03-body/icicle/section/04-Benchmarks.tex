@@ -1,7 +1,6 @@
 %!TEX root = ../Main.tex
 \section{Benchmarks}
 \label{icicle:s:Benchmarks}
-\input{copy/03-body/icicle/figures/Bench-All.tex}
 
 This section shows the results of benchmarks carried out in 2016.
 At Ambiata we are using Icicle in production to query medium-sized datasets that fit on a single disk.
@@ -17,6 +16,8 @@ The R script computed features from a 317GB dataset supplied by a customer, cont
 For each end-user, the R script computed 12 queries over each of 31 input tables, for 372 query evaluations in total.
 The R script took 15 hours to run and consisted of 3,566 lines of code.
 The replacement Icicle version is only 191 lines of code and takes seven minutes to run.
+
+\input{copy/03-body/icicle/figures/Bench-All.tex}
 
 The graph in \cref{icicle:fig:bench:other} shows the throughput in megabytes per second.
 We compared the throughput of several programs over the same dataset:

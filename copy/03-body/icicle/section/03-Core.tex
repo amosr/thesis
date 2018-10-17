@@ -39,9 +39,9 @@ $\mi{Plan}$
 \label{icicle:fig:core:grammar}
 \end{figure}
 
-The Icicle intermediate language is similar to a physical query plan for a database system.
-We convert each source level query to a query plan, then fuse together the plans for queries on the same table.
-Once we have the fused query plan we then perform standard optimisations such as common subexpression elimination and partial evaluation.
+To execute Icicle queries over large datasets, we first convert the queries to an intermediate language that is similar to a physical query plan for a database system.
+We convert each source query to a query plan, then fuse together the plans for queries on the same table.
+Once we have the fused query plan, we then perform standard optimisations such as common subexpression elimination and partial evaluation.
 
 The grammar for the Icicle intermediate language is given in \cref{icicle:fig:core:grammar}.
 Expressions $PlanX$ include variables, values, applications of primitives and anonymous functions.
@@ -56,10 +56,11 @@ The \IcC@before@ stage then defines pure values which do not depend on any table
 The \IcC@folds@ stage defines element computations and how they are converted to aggregate results.
 The \IcC@after@ stage defines aggregate computations that combine multiple aggregations after the entire table has been processed.
 Finally, the \IcC@return@ stage specifies the output values of the query; a single query will have only one output value, but the result of fusing many queries can have many outputs.
+When there are no bindings in a particular stage, we omit that stage completely.
 
 
 Before we discuss an example query plan we first define the \IcC@count@ and \IcC@sum@ functions used in earlier sections.
-Both functions are simple folds:
+Both functions are defined as simple folds:
 \begin{icicle}
 function count
  = fold c = 0 then c + 1;
@@ -76,43 +77,51 @@ query
   more = filter open > close of (fold more_c = 0 then more_c + 1);
   less = filter open < close of (fold less_c = 0 then less_c + 1);
   mean = filter open > close of
-      (fold mean_s = 0 then mean_s + open) / (fold mean_c = 0 then mean_c + 1);
+      (fold mean_s = 0 then mean_s + open)
+    / (fold mean_c = 0 then mean_c + 1);
 \end{icicle}
 
-Each query is converted to a query plan separately.
-When we convert the \IcC@more@ query, we define the count inside a filter, and use it in the return section.
+We convert each query to a query plan separately.
+When we convert the \IcC@more@ query, we define the count as a fold inside a filter, and use the count binding in the \IcC@return@ section to define the output of the query:
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
-folds { filter open > close {
+folds {
+  filter open > close {
     fold c    : Int = 0 then c + 1; } }
 return { more : Int = c; }
 \end{icicle-core}
 
-We convert the \IcC@less@ and \IcC@mean@ queries similarly.
-For the \IcC@mean@ query, the sum and the count are both defined inside a filter.
-The division is performed in the \IcC@after@ section because it is an aggregate operation.
+The \IcC@less@ query follows the same structure as the \IcC@more@ query, with a different predicate:
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
-folds { filter open < close {
+folds {
+  filter open < close {
     fold c    : Int = 0 then c + 1; } }
 return { less : Int = c; }
+\end{icicle-core}
 
+To convert the \IcC@mean@ query, the folds for the sum and the count are both defined inside the same filter.
+The division is performed in the \IcC@after@ section because it is an aggregate operation on the final value of the two folds:
+
+\begin{icicle-core}
 plan stocks { open : Int; close : Int; }
-folds { filter open > close {
+folds {
+  filter open > close {
     fold c    : Int = 0 then c + 1;
     fold s    : Int = 0 then s + open; } }
-after  { sc   : Int = s / c }
+after  { sc   : Int = s / c; }
 return { mean : Int = sc; }
 \end{icicle-core}
 
-To fuse the three query plans together we freshen the names of each binding, then simply concatenate the corresponding parts of the anatomy.
+To fuse the three query plans together, we freshen the names of each binding, then simply concatenate the corresponding parts of the anatomy.
 The single-pass restriction on queries makes the fusion process so simple, because it ensures that there are no fusion-preventing dependencies between any two query plans. 
 We discuss fusion-preventing dependencies further in \cref{clustering}.
 After concatenating the plans, we merge the filter blocks for \IcC@more@ and \IcC@mean@, as both use the same predicate.
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
 Now the code that implements each query is interspersed, but the stages are expressed separately, so we are free to rearrange the bindings in each stage without affecting the other stages.
+The result of fusing the three query plans is as follows:
 
 \begin{icicle-core}
 plan stocks { open : Int; close : Int; }
@@ -128,6 +137,7 @@ return { more    : Int = more_c;
          less    : Int = less_c;
          mean    : Int = mean_sc; }
 \end{icicle-core}
+
 
 We can now use common subexpression elimination to remove the duplicate count, \IcC@mean_c@, as its binding is alpha-equivalent to the binding for \IcC@more_c@.
 In the after section, the reference to \IcC@mean_c@ is replaced by \IcC@more_c@.
@@ -160,7 +170,7 @@ queries = do
 \end{haskell}
 %  \TODO{this is in @IO@, and has a different type from the earlier version. need to modify push representation to \Hs/Push a r = (IO (a -> IO (), IO r))/ so reference construction can be done as part of stream}
 
-To demonstrate the relative difficulty of removing the duplicate work in the general case, \cref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
+To demonstrate the relative difficulty of removing the duplicate work for the general case, \cref{icicle:fig:core:push_query} contains the push implementation of the same queries after inlining the definition of the combinators.
 In this version, the \IcC@more_c@ and \IcC@mean_c@ references both hold the same value, but this fact is only evident with non-local reasoning about the program.
 The reference initialisations and updates are located in different parts of the program, with potentially interfering writes in-between.
 We could use a global value numbering~\citep{gulwani2004polynomial} algorithm to remove the duplicate work from the push implementation; such algorithms generally require polynomial time in the size of the program.
@@ -170,7 +180,7 @@ With the intermediate representation of Icicle we can use a common subexpression
 
 \subsection{A more complicated example}
 
-The previous queries were simple to translate to the intermediate language; the ``mean of latest'' query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
+The previous queries were relatively simple to translate to the intermediate language, but the \Hs/meanOfLatest/ query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
 That query, again, is:
 
 \begin{icicle}
@@ -181,14 +191,14 @@ That query, again, is:
      lookup k avgs
 \end{icicle}
 
-We first define the \IcC@mean@ and \IcC@last@ functions used in the query.
-The \IcC@mean@ function divides the \IcC@sum@ by the \IcC@count@:
+To convert \Hs/meanOfLatest/ to a query plan, we must first define the \IcC@mean@ and \IcC@last@ functions used in the query.
+The \IcC@mean@ function takes a stream of integers and returns the \IcC@sum@ of the elements divided by the \IcC@count@:
 \begin{icicle}
 function mean (e : Element Int)
  = sum e / count;
 \end{icicle}
 
-The \IcC@last@ function uses a \IcC@fold@ that initialises the accumulator to the empty date value \IcC@NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then updates it with the date gained from the current element in the stream:
+The \IcC@last@ function uses a fold that initialises the accumulator to the empty date value \IcC@NO_DATE@\footnote{In our production compiler, @last@ returns a @Maybe@.}, then, for each element, updates it with the date gained from the current element in the stream:
 \begin{icicle}
 function last (d : Element Date)
  = fold l = NO_DATE then d;
@@ -201,7 +211,7 @@ function last (d : Element Date)
 % \end{icicle}
 
 
-Inlining the above functions into the ``mean of latest'' query yields the following:
+Inlining these two functions into the \Hs/meanOfLatest/ query yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
 \begin{icicle}
 query meanOfLatest
@@ -213,7 +223,7 @@ query meanOfLatest
    ret
 \end{icicle}
 
-To convert this source query to a plan in the intermediate language we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
+To convert this source query to a plan in the intermediate language, we convert each of the let-bindings separately then concatenate the corresponding parts of the loop anatomy.
 The \IcC@lst@ binding becomes a single fold, initialised to \IcC@NO_DATE@ and updated with the current \IcC@key@:
 \begin{icicle-core}
 plan kvs {      key : Date; value : Int;       }

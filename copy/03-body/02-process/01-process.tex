@@ -149,7 +149,13 @@ priceOverTime stock =
 We can express @priceOverTime@ as a process network by instantiating the above process templates and connecting them together.
 A process network is a set of processes that are able to communicate with each other.
 
-\begin{process}
+\Cref{figs/procs/net/priceOverTime} shows the process network for \Hs/priceOverTime/.
+As with the process templates, the network is parameterised by the output streams, which are in this case the output of @regression@ and @correlation@.
+We use the nu-binder syntax to instantiate a fresh name for the @timeprices@ internal stream, which is the output of the @map@ combinator.
+We implement @regression@ and @correlation@ as folds with eject functions.
+The details of the worker functions given to @map@ and @foldl@ are defined externally.
+
+\begin{process}[float,caption=Process network for \Hs/priceOverTime/,label=figs/procs/net/priceOverTime]
 priceOverTime =
   \ (stock : Stream Record)
     (reg_out : Stream Line) (cor_out : Stream Double).
@@ -159,10 +165,6 @@ priceOverTime =
      , foldl cor_k cor_z cor_j timeprices cor_out }
 \end{process}
 
-As with the process templates, the network is parameterised by the output streams, which are in this case the output of @regression@ and @correlation@.
-We use the nu-binder syntax to instantiate a fresh name for the @timeprices@ internal stream, which is the output of the @map@ combinator.
-We implement @regression@ and @correlation@ as folds with eject functions.
-The details of the worker functions given to @map@ and @foldl@ are defined externally.
 
 In \cref{part:icicle}, Icicle used the details of worker functions to perform common subexpression elimination after fusing queries together.
 We could remove duplicate work from a process after performing fusion if we inlined the definitions of the worker functions into the process.
@@ -524,7 +526,7 @@ These two groups of instructions drop the input stream with the lesser key and p
 The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
 As with the polarised stream implementation of @join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
 This draining is required because, when fusing processes together, we treat each consumer as having a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
-Without draining, the producer would be blocked indefinitely on a terminated process, and any other consumers of the stream would be unable to receive input values.
+Without draining, the producer would be blocked indefinitely on the terminated \Hs/join/ process, and any other consumers of the stream would be unable to receive input values.
 
 As an alternative to draining, we could extend the process network semantics to include a ``disconnect'' instruction, which indicates that a process is no longer interested in consuming a particular input stream.
 Here, we use the simpler process semantics without disconnection, at the expense of having to explicitly drain streams.

@@ -8,7 +8,7 @@ $$
 
 &
 
-\Sigma~::=~\cdot~|~\Sigma,~x~=~V'
+\Sigma~::=~\cdot~|~\Sigma,~x~=_N~V'
 
 \end{array}
 $$
@@ -28,11 +28,11 @@ $$
 $$
 \ruleAx
 {
-    \SourceStepX{n}{\Sigma}{V}{\VValue{V}}
+    \SourceStepXP{\Sigma}{V}{\VValue{V}}
 }{EVal}
 \ruleIN
 {
-    x~=~V'~\in~\Sigma
+    x~=_n~V'~\in~\Sigma
 }
 {
     \SourceStepX{n}{\Sigma}{x}{V'}
@@ -41,7 +41,7 @@ $$
 {
   \SourceStepX{n'}{\Sigma}{e}{v}
   \quad
-  \SourceStepX{n}{\Sigma,~x=v}{e'}{v'}
+  \SourceStepX{n}{\Sigma,~x =_{n'}~ v}{e'}{v'}
 }
 {
   \SourceStepX

@@ -185,13 +185,13 @@ To maintain this invariant, size-changing operations such as \Ic@filter@ perform
 Introducing literal stream values and representing them as a list of values would invalidate this invariant, because the length of the input stream is not statically known.
 Instead, in the evaluation semantics, we represent \Ic@Element@ stream values as meta-level stream transformers, which transform the input element to an output element.
 Likewise, we represent \Ic@Aggregate@ values as meta-level folds.
-The result of evaluating a query will also be a meta-level fold, into which the values from the input stream must be pushed.
+The result of evaluating a query will also be a meta-level fold, into which the values from the input stream are pushed.
 We introduce the definition of stream values in the evaluation semantics only, which forces us to use a heap-based semantics instead of a substitution-based semantics.
 
 The auxiliary grammar and evaluation rules for Icicle are given in \cref{icicle:fig:source:eval}.
 Grammar $N$ defines the modes of evaluation, including pure computation.
-Grammar $\Sigma$ defines a heap containing stream values.
-Grammar $V'$ defines the results that can be produced by evaluation, depending on the mode:
+Grammar $\Sigma$ defines a heap containing stream values, where each assignment has an associated evaluation mode.
+Grammar $V'$ defines the stream values that can be produced by evaluation, depending on the mode:
 \begin{itemize}
 \item
 @Pure@ computation results are a single value;
@@ -211,22 +211,22 @@ The evaluation mode $N$ controls whether pure values should be promoted to eleme
 We assume that all functions have been inlined into the expression before evaluation.
 
 Rule (EVal) applies when the expression is a constant value.
-Rule (EVar) performs variable lookup in the heap.
+Rule (EVar) performs variable lookup in the heap, and requires the evaluation mode to be the same as the mode of the variable.
 Rule (ELet) evaluates the bound expression under the given mode, and inserts the binding into the heap.
 
 % uses the bound expression's type to find the evaluation mode, then evaluates the bound expression under that mode.
 
 % The bound expression's value is added to the heap, and the rest of the expression is evaluated in the original evaluation mode.
 
-Rules (EBoxStream) and (EBoxFold) lift constant values to stream results and aggregate results respectively.
-To lift a constant to a stream result, we produce a meta-function that always returns the value.
-To lift a constant to an aggregate result, we set the update meta-function to return a dummy value, and have the eject meta-function return the value of interest.
+Rules (EBoxStream) and (EBoxFold) lift pure values to stream results and aggregate results respectively.
+To lift a pure value to a stream result, we produce a meta-function that always returns the value.
+To lift a pure value to an aggregate result, we set the update meta-function to return a dummy value, and have the eject meta-function return the value of interest.
 
 %   a pure value to a stream and fold respectively, when the evaluation mode is not pure.
 % Conversion to a stream transformer ignores the input stream and returns the pure value.
 % Conversion to a fold has no state, and the eject function returns the pure value.
 
-Rules (EPrimValue), (EPrimStream) and (EPrimFold) apply primitive operators to constant values, streams and aggregations respectively.
+Rules (EPrimValue), (EPrimStream) and (EPrimFold) apply primitive operators to pure values, streams and aggregations respectively.
 In (EPrimValue), all the argument expressions are bound in the sequence $e$ using the sequence comprehension syntax $\{e_i\}$.
 Each argument expression $e_i$ is evaluated to a corresponding pure value $v_i$, to which the primitive operator is then applied.
 
@@ -236,7 +236,7 @@ In (EPrimFold), each argument expression is evaluated to a fold.
 Each argument's fold has its own initial fold state ($z$), update function ($k$) and eject function ($j$).
 The result fold's initial state is the tuple of all arguments' initial states ($\prod_i z_i$).
 The result fold's update function applies each argument's update functions to the input stream element ($s$) and the corresponding accumulator state ($v_i$).
-The result fold's eject function performs all arguments' ejects and applies the primitive operator.
+The result fold's eject function performs all arguments' ejects and applies the primitive operator to the final result of all argument folds.
 
 % For pure values, the values are unboxed and the primitive is applied.
 % For streams, a new stream is created and the input heap applied to all streams before applying the primitive.

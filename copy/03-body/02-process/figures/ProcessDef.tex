@@ -12,15 +12,15 @@ MMMMMx \TABDEF @MMMMM@  \TABSKIP $\Exp$ \TABSKIP $\Exp$ \TABSKIP $\Exp$ \kill
 \Updates,~$us$  \> ::= \> ~~~ $\cdot~|~us,~x~=~e$
 \\[0.5em]
 
-\Proc,~$p$      \> ::=\> @process@ \\
+\Proc,~$p$      \> ::=\> \lstiproc@process@ \\
 MMMMMM \= M \= \kill
-\> \> @ins:   @  $(\Chan ~\mapsto~ \InputState)$ \\
-\> \> @outs:  @  $\sgl{\Chan}$ \\
-\> \> @heap:  @  \Heap \\
-\> \> @label: @  \Label \\
-\> \> @instrs:@  $(\Label ~\mapsto~ \Instr)$ 
+\> \> \lstiproc@ins:   @  $(\Chan ~\mapsto~ \InputState)$ \\
+\> \> \lstiproc@outs:  @  $\sgl{\Chan}$ \\
+\> \> \lstiproc@heap:  @  \Heap \\
+\> \> \lstiproc@label: @  \Label \\
+\> \> \lstiproc@instrs:@  $(\Label ~\mapsto~ \Instr)$ 
 \\[0.5em]
-\InputState \> ::= \> ~~ @none@~$|$~@pending@~\Value~$|$~@have@~$|$~@closed@
+\InputState \> ::= \> ~~ \lstiproc@none@~$|$~\lstiproc@pending@~\Value~$|$~\lstiproc@have@~$|$~\lstiproc@closed@
 \end{tabbing}
 
 \begin{tabbing}
@@ -32,13 +32,13 @@ MMMMMM \TABDEF MMMM \TABSKIP $\Chan$ \TABSKIP $\Chan$ \TABSKIP $\Next$ \TABSKIP 
 \ChannelStates  \> ~ =   \> ~~~ $(\Chan \mapsto \InputState)$ \\[0.5em]
 
 \Instr
-    \> ::=\> @pull@  \> \Chan  \> \Var  \> \Next \> \Next \\
-    \TABALT  @push@  \> \Chan  \> \Exp  \> \Next \\
-    \TABALT  @close@ \> \Chan  \>       \> \Next \\
-    \TABALT  @drop@  \> \Chan  \>       \> \Next \\
-    \TABALT  @case@  \> \Exp   \> \Next \> \Next \\
-    \TABALT  @jump@  \>        \>       \> \Next \\
-    \TABALT  @exit@  \\
+    \> ::=\> \lstiproc@pull@  \> \Chan  \> \Var  \> \Next \> \Next \\
+    \TABALT  \lstiproc@push@  \> \Chan  \> \Exp  \> \Next \\
+    \TABALT  \lstiproc@close@ \> \Chan  \>       \> \Next \\
+    \TABALT  \lstiproc@drop@  \> \Chan  \>       \> \Next \\
+    \TABALT  \lstiproc@case@  \> \Exp   \> \Next \> \Next \\
+    \TABALT  \lstiproc@jump@  \>        \>       \> \Next \\
+    \TABALT  \lstiproc@exit@  \\
 \\[0.5em]
 
 \Next \> = \> $\Label~\times~\Updates$ 

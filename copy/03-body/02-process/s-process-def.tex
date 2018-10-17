@@ -9,25 +9,25 @@ We refer to the \emph{endpoint} of a stream as a channel.
 A particular stream may flow into the input channels of several different processes, but can only be produced by a single output channel.
 For values and expressions we use an untyped lambda calculus with a few primitives.
 The `$||$' operator is boolean-or, `+' addition, `/=' not-equal, and `$<$' less-than.
-The special @uninitialised@ value is used as a default value for uninitialised heap variables, and inhabits every type.
+The special \lstiproc@uninitialised@ value is used as a default value for uninitialised heap variables, and inhabits every type.
 
-A $\Proc$ is a record with five fields: the @ins@ field specifies the input channels; the @outs@ field specifies the output channels; the @heap@ field specifies the process-local heap; the @label@ field specifies the label of the instruction currently being executed; and the @instrs@ field specifies a map of labels to instructions.
+A $\Proc$ is a record with five fields: the \lstiproc@ins@ field specifies the input channels; the \lstiproc@outs@ field specifies the output channels; the \lstiproc@heap@ field specifies the process-local heap; the \lstiproc@label@ field specifies the label of the instruction currently being executed; and the \lstiproc@instrs@ field specifies a map of labels to instructions.
 We use the same record when specifying both the definition of a particular process, as well as when giving the evaluation semantics.
-In the process definition, the @heap@ field gives the initial heap of the process, and any variables with unspecified values are assumed to be the @uninitialised@ value.
-The @label@ field gives the entry-point in the process definition, though during evaluation it is the label of the instruction currently being executed.
-Likewise, we usually only list channel names in the @ins@ field in the process definition, though during evaluation they are also paired with their current $\InputState$.
+In the process definition, the \lstiproc@heap@ field gives the initial heap of the process, and any variables with unspecified values are assumed to be the \lstiproc@uninitialised@ value.
+The \lstiproc@label@ field gives the entry-point in the process definition, though during evaluation it is the label of the instruction currently being executed.
+Likewise, we usually only list channel names in the \lstiproc@ins@ field in the process definition, though during evaluation they are also paired with their current $\InputState$.
 If an $\InputState$ is not specified we assume it is `none'.
 
-In the grammar of \cref{fig:Process:Def}, the $\InputState$ has four options: @none@, which means no value is currently stored in the associated stream buffer variable; $(@pending@~\Value)$, which gives the current value in the stream buffer variable and indicates that it has not yet been copied into a process-local variable; @have@, which means the pending value has been copied into a process-local variable; and @closed@, which means the producer has signalled that the channel is finished and will not receive any more values.
-The $\Value$ attached to the @pending@ state is used when specifying the evaluation semantics of processes.
-When performing the fusion transform, the $\Value$ itself will not be known, but we can still reason statically that a process must be in the @pending@ state.
+In the grammar of \cref{fig:Process:Def}, the $\InputState$ has four options: \lstiproc@none@, which means no value is currently stored in the associated stream buffer variable; $(@pending@~\Value)$, which gives the current value in the stream buffer variable and indicates that it has not yet been copied into a process-local variable; \lstiproc@have@, which means the pending value has been copied into a process-local variable; and \lstiproc@closed@, which means the producer has signalled that the channel is finished and will not receive any more values.
+The $\Value$ attached to the \lstiproc@pending@ state is used when specifying the evaluation semantics of processes.
+When performing the fusion transform, the $\Value$ itself will not be known, but we can still reason statically that a process must be in the \lstiproc@pending@ state.
 When defining the fusion transform in \cref{s:Fusion}, we will use a version of $\InputState$ with only this statically known information.
 
-The @instrs@ field of the $\Proc$ maps labels to instructions.
-The possible instructions are: @pull@, which tries to pull the next value from a channel into a given heap variable and blocks until the producer pushes a value or closes the channel; @push@, which pushes the value of an expression to an output channel; @close@, which signals the end of an output channel; @drop@, which indicates that the current value pulled from a channel is no longer needed; @case@, which branches based on the result of a boolean expression; @jump@, which causes control to move to a new instruction; and @exit@, which signals that the process is finished.
+The \lstiproc@instrs@ field of the $\Proc$ maps labels to instructions.
+The possible instructions are: \lstiproc@pull@, which tries to pull the next value from a channel into a given heap variable and blocks until the producer pushes a value or closes the channel; \lstiproc@push@, which pushes the value of an expression to an output channel; \lstiproc@close@, which signals the end of an output channel; \lstiproc@drop@, which indicates that the current value pulled from a channel is no longer needed; \lstiproc@case@, which branches based on the result of a boolean expression; \lstiproc@jump@, which causes control to move to a new instruction; and \lstiproc@exit@, which signals that the process is finished.
 
 Instructions include a $\Next$ field containing the label of the next instruction to execute, as well as a list of $\Var \times \Exp$ bindings used to update the heap.
-The list of update bindings is attached directly to instructions to make the fusion algorithm easier to specify, in contrast to a presentation with a separate @update@ instruction.
+The list of update bindings is attached directly to instructions to make the fusion algorithm easier to specify, in contrast to a presentation with a separate \lstiproc@update@ instruction.
 
 % When lowering process code to a target language, as in \cref{chapter:process:implementation}, we can safely convert @drop@ to plain @jump@ instructions.
 % The @drop@ instructions are used to control how processes should be synchronised, but do not affect the execution of a single process.
@@ -74,7 +74,7 @@ When we fuse two processes, we choose one particular instruction ordering that e
 The single ordering is chosen by heuristically deciding which pair of states to merge during fusion, and is discussed in \cref{s:EvaluationOrder}.
 
 Each channel may be pushed to by a single process only, so in a sense each output channel is owned by a single process.
-The only intra-process communication is via channels and streams.
+The only inter-process communication is via channels and streams.
 Our model is ``pure data flow'' as there are no side-channels between processes --- in contrast to ``impure data flow'' systems such as StreamIt~\cite{thies2002streamit}.
 
 
@@ -82,12 +82,12 @@ Our model is ``pure data flow'' as there are no side-channels between processes 
 % -----------------------------------------------------------------------------
 \subsubsection{Injection}
 \Cref{fig:Process:Eval:Inject} defines the grammar of actions produced by advancing a process in a process network, and gives the rules for injecting these actions into processes.
-Injection is a meta-level operation, in contrast to @pull@ and @push@, which are instructions in the object language.
+Injection is a meta-level operation, in contrast to \lstiproc@pull@ and \lstiproc@push@, which are instructions in the object language.
 The statement $(\ProcInject{p}{a}{p'})$ reads ``given process $p$, injecting action $a$ yields an updated process $p'$''.
 An action $a$ is a message describing the state change that can occur to a channel, with three options: $(\cdot)$, the empty action, used when a process simply updates internal state; $(\Push~\Chan~\Value)$, which encodes the value a process pushes to one of its output channels; and $(\Close~\Chan)$, which denotes the end of the stream.
-The @injects@ form is similar to the @inject@ form, operating on a process network.
+The \lstiproc@injects@ form is similar to the \lstiproc@inject@ form, and operates on an entire process network instead of a single process.
 
-Rule (InjectPush) injects a single value into a single process. The value is stored as a (@pending@~ v) binding in the $\InputState$ of the associated channel of the process. The $\InputState$ acts as a single element buffer, and must be empty (@none@) for injection to succeed.
+Rule (InjectPush) injects a single value into a single process. The value is stored as a (\lstiproc@pending@~ v) binding in the $\InputState$ of the associated channel of the process. The $\InputState$ acts as a single element buffer, and must be empty (\lstiproc@none@) for injection to succeed.
 Rule (InjectClose) injects a close message and updates the input state in a similar way.
 
 Rules (InjectNopPush) and (InjectNopClose) allow processes that do not use a particular named channel to ignore messages injected into that channel.
@@ -95,7 +95,7 @@ Rule (InjectNopInternal) allows processes to ignore empty messages.
 
 Rule (InjectMany) injects a single value into a network.
 We use the single process judgment form to inject the value into all processes, which must succeed for all of them.
-To inject a message into a process network, all the processes which do not ignore the message must be ready to accept the message by having the corresponding $\InputState$ set to @none@; otherwise, the process would require more than a single-element buffer to store multiple messages.
+To inject a push or close message into a process network, all the processes which do not ignore the message must be ready to accept the message by having the corresponding $\InputState$ set to \lstiproc@none@; otherwise, the process would require more than a single-element buffer to store multiple messages.
 % Once a value has been injected into all consuming processes that require it, the producing process no longer needs to retain it.
 
 
@@ -107,28 +107,29 @@ To inject a message into a process network, all the processes which do not ignor
 \Cref{fig:Process:Eval:Shake} gives the rules for advancing a single process and process networks.
 The statement $(\ProcBlockShake{i}{is}{bs}{a}{l}{is'}{us'})$ reads ``instruction $i$, given channel states $is$ and the heap bindings $bs$, passes control to instruction at label $l$ and yields new channel states $is'$, heap update expressions $us'$, and performs an output action $a$.''
 
-Rule (PullPending) takes the @pending@ value $v$ from the channel state and produces a heap update to copy this value into the variable $x$ in the @pull@ instruction.
+Rule (PullPending) applies when the instruction is a \lstiproc@pull@ instruction.
+The rule takes the \lstiproc@pending@ value $v$ from the channel state and produces a heap update to copy this value into the variable $x$ in the \lstiproc@pull@ instruction.
 Control is passed to the first output label, $l$.
 We use the syntax ($us,x=v$) to mean that the list of updates $us$ is extended with the new binding ($x=v$).
-In the result channel states, the state of the input channel $c$ is updated to @have@, to indicate that the value has been copied into the local variable.
+In the result channel states, the state of the input channel $c$ is updated to \lstiproc@have@, to indicate that the value has been copied into the local variable.
 
-Rule (PullClosed) applies when the channel state is @closed@, passing control to the second output label, $l'$.
+Rule (PullClosed) applies when the channel state is \lstiproc@closed@, passing control to the second output label, $l'$.
 As the channel remains closed, there is no need to update the channel state as in the (PullPending) rule.
 
 Rule (Push) evaluates the expression $e$ under heap bindings $bs$ to a value $v$, and produces a corresponding action which carries this value.
 The judgment $(bs \vdash e \Downarrow v)$ expresses standard untyped lambda calculus reduction, using the heap $bs$ for the values of free variables.
 This evaluation is completely standard, and we do not discuss it further.
 
-Rule (Close) emits a @close@ action; once injected, this action will transition the recipients' channel states to @closed@.
-Once a channel is closed it can no longer be pushed to, as the recipients' channel states cannot transition back to the @none@ state required by the (InjectPush) rule.
+Rule (Close) emits a \lstiproc@close@ action; once injected, this action will transition the recipients' channel states to \lstiproc@closed@.
+Once a channel is closed it can no longer be pushed to, as the recipients' channel states cannot transition back to the \lstiproc@none@ state required by the (InjectPush) rule.
 
-Rule (Drop) changes the input channel state from @have@ to @none@. A @drop@ instruction can only be executed after @pull@ has set the input channel state to @have@.
+Rule (Drop) changes the input channel state from \lstiproc@have@ to \lstiproc@none@. A \lstiproc@drop@ instruction can only be executed after \lstiproc@pull@ has set the input channel state to \lstiproc@have@.
 
 Rule (Jump) produces a new label and associated update expressions. Rules (CaseT) and (CaseF) evaluate the scrutinee $e$ and emit the appropriate label.
 
-There is no corresponding rule for the @exit@ instruction, which denotes a finished process.
+There is no corresponding rule for the \lstiproc@exit@ instruction, which denotes a finished process.
 
-The statement ($\ProcShake{p}{a}{p'}$) reads ``process $p$ advances to new process $p'$, yielding action $a$''. Rule (Advance) advances a single process. We look up the current instruction for the process' @label@ and pass it, along with the channel states and heap, to the above single instruction judgment. The update expressions $us$ from the single instruction judgment are reduced to values before updating the heap. We use $(us \lhd bs)$ to replace bindings in $us$ with new ones from $bs$. As the update expressions are pure, the evaluation can be done in any order.
+The statement ($\ProcShake{p}{a}{p'}$) reads ``process $p$ advances to new process $p'$, yielding action $a$''. Rule (Advance) advances a single process. We look up the current instruction for the process' \lstiproc@label@ and pass it, along with the channel states and heap, to the above single instruction judgment. The update expressions $us$ from the single instruction judgment are reduced to values before updating the heap. We use $(us \lhd bs)$ to replace bindings in $us$ with new ones from $bs$. As the update expressions are pure, the evaluation can be done in any order.
 
 The statement ($\ProcShake{ps}{a}{ps'}$) reads ``the network $ps$ advances to the network $ps'$, yielding action $a$''.
 Rule (AdvanceMany) allows an arbitrary, non-deterministically chosen process in the network to advance to a new state while yielding an output action $a$.

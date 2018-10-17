@@ -12,23 +12,23 @@ $$
 
 $$
 \ruleIN{
-  p[@ins@][c] = @none@
+  p[\lstiproc@ins@][c] = \lstiproc@none@
 }{
-  \ProcInject{p}{(\Push~c~v)}{p~[@ins@ \mapsto (p[@ins@][c \mapsto @pending@~v]) ] }
+  \ProcInject{p}{(\Push~c~v)}{p~[\lstiproc@ins@ \mapsto (p[\lstiproc@ins@][c \mapsto \lstiproc@pending@~v]) ] }
 }{InjectPush}
 $$
 
 $$
 \ruleIN{
-  p[@ins@][c] = @none@
+  p[\lstiproc@ins@][c] = \lstiproc@none@
 }{
-  \ProcInject{p}{(\Close~c)}{p~[@ins@ \mapsto (p[@ins@][c \mapsto @closed@]) ] }
+  \ProcInject{p}{(\Close~c)}{p~[\lstiproc@ins@ \mapsto (p[\lstiproc@ins@][c \mapsto \lstiproc@closed@]) ] }
 }{InjectClose}
 $$
 
 $$
 \ruleIN{
-  c \not\in p[@ins@]
+  c \not\in p[\lstiproc@ins@]
 }{
   \ProcInject{p}{(\Push~c~v)}{p}
 }{InjectNopPush}
@@ -36,7 +36,7 @@ $$
 \enskip
 %
 \ruleIN{
-  c \not\in p[@ins@]
+  c \not\in p[\lstiproc@ins@]
 }{
   \ProcInject{p}{(\Close~c)}{p}
 }{InjectNopClose}

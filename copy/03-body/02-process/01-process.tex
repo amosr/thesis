@@ -16,7 +16,7 @@ We present a streaming process calculus with concurrent execution semantics (\cr
 \item
 We present an algorithm for fusing pairs of processes (\cref{s:Fusion});
 \item
-We motivate an extra synchronisation primitive, @drop@, which coordinates between multiple consumers of the same stream, to improve locality by ensuring both consumers operate on the same value concurrently
+We motivate an extra synchronisation primitive, \lstiproc@drop@, which coordinates between multiple consumers of the same stream, to improve locality by ensuring both consumers operate on the same value concurrently
 (\cref{s:Drop:in:synchrony});
 \item
 We present a heuristic algorithm for fusing an entire process network (\cref{s:Optimisation});
@@ -28,13 +28,13 @@ We present an overview of the mechanised soundness proofs of fusion (\cref{s:Pro
 
 \section{Gold panning with processes}
 \label{kpn/gold-panning}
-Recall the @priceAnalyses@ example from \cref{taxonomy/gold-panning}, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
-\Cref{figs/procs/priceAnalyses-again} shows the dependency graph for @priceAnalyses@ with the two input streams, @index@ and @stock@, at the top of the graph.
+Recall the \lstiproc@priceAnalyses@ example from \cref{taxonomy/gold-panning}, which performs statistical analyses over the daily prices of a particular corporate stock and market index.
+\Cref{figs/procs/priceAnalyses-again} shows the dependency graph for \lstiproc@priceAnalyses@ with the two input streams, \lstiproc@index@ and \lstiproc@stock@, at the top of the graph.
 
 \FigurePdfLabel{figs/depgraphs/priceOverTime-priceOverMarket}{figs/procs/priceAnalyses-again}{Dependency graph for \Hs/priceAnalyses/ example}
 
-As discussed earlier, we cannot execute this example in a single pass using the pull streams from \cref{taxonomy/pull}, because the @stock@ input stream is used twice, and pull streams only support a single consumer.
-Similarly, we cannot execute this example in a single pass using the push streams from \cref{taxonomy/push}, because the @join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
+As discussed earlier, we cannot execute this example in a single pass using the pull streams from \cref{taxonomy/pull}, because the \lstiproc@stock@ input stream is used twice, and pull streams only support a single consumer.
+Similarly, we cannot execute this example in a single pass using the push streams from \cref{taxonomy/push}, because the \lstiproc@join@ combinator has two inputs, and push streams only support a single producer except for non-deterministic merge.
 Rather than just using pull streams, or just using push streams, we wish to be able to perform both pulling and pushing in the same computation, in a way that supports multiple consumers and multiple producers.
 Kahn process networks \citep{kahn1976coroutines} are a flexible, expressive way of writing streaming computations, where a network is composed of communicating processes.
 Executing communicating processes introduces runtime overhead, as stream elements must be passed between processes.
@@ -52,7 +52,7 @@ A process pulls source values from an arbitrary number of input streams and push
 The process language is an intermediate representation we use when fusing the overall dataflow network.
 When describing the fusion transform we describe the control flow of the process as a state machine.
 
-A \emph{combinator} is a template for a process which parameterises it over the particular input and output streams, as well as values of configuration parameters such as the worker function used in a @map@ process.
+A \emph{combinator} is a template for a process which parameterises it over the particular input and output streams, as well as values of configuration parameters such as the worker function used in a \lstiproc@map@ process.
 Each process implements a logical \emph{operator} --- so we use ``operator'' when describing the values being computed, but ``process'' when referring to the implementation.
 
 
@@ -76,33 +76,33 @@ foldl
                , F4 = exit } }
 \end{process}
 
-The definition of the @foldl@ combinator, used to implement @correlation@ and @regression@ in our @priceAnalyses@ process network, is given in \cref{figs/procs/impl/foldl}.
-The combinator is parameterised by the fold state update function (@k@) and the fold state initialisation (@z@).
-In @correlation@ and @regression@, the result must be extracted from the fold state; we extend the standard presentation of @foldl@ with an eject function (@j@) to perform this extraction.
+The definition of the \lstiproc@foldl@ combinator, used to implement \lstiproc@correlation@ and \lstiproc@regression@ in our \lstiproc@priceAnalyses@ process network, is given in \cref{figs/procs/impl/foldl}.
+The combinator is parameterised by the fold state update function (\lstiproc@k@) and the fold state initialisation (\lstiproc@z@).
+In \lstiproc@correlation@ and \lstiproc@regression@, the result must be extracted from the fold state; we extend the standard presentation of \lstiproc@foldl@ with an eject function (\lstiproc@j@) to perform this extraction.
 The process reads from an input stream and, at the end of the input stream, produces a single-element output stream containing the fold result.
-The \emph{nu-binders} ($\nu@ (s : a) (v : b)@\ldots$) indicate that each time the @foldl@ combinator is instantiated, fresh names must be given to @s@, @v@ and so on, that do not conflict with other insantiations.
-The @s@ and @v@ bindings refer to variables in the mutable heap of the process.
-The @s@ variable stores the current fold state and is initialised to the initial fold value (@z@); the @v@ variable stores the most recent value from the input stream, and is left uninitialised.
+The \emph{nu-binders} ($\nu@ (s : a) (v : b)@\ldots$) indicate that each time the \lstiproc@foldl@ combinator is instantiated, fresh names must be given to \lstiproc@s@, \lstiproc@v@ and so on, that do not conflict with other insantiations.
+The \lstiproc@s@ and \lstiproc@v@ bindings refer to variables in the mutable heap of the process.
+The \lstiproc@s@ variable stores the current fold state and is initialised to the initial fold value (\lstiproc@z@); the \lstiproc@v@ variable stores the most recent value from the input stream, and is left uninitialised.
 
 The body of the combinator is a record that defines the process.
-The @ins@ field defines the set of input streams, and the @outs@ field defines the set of output streams.
-The @heap@ field gives the initial values of each of the local variables; variables without an explicit initial value are given some arbitrary value.
-The @instrs@ field contains a set of labelled instructions that define the program, while the @label@ field gives the label of the initial instruction.
-In this form, the output stream (@sOut@) is defined via a parameter, rather than being the result of the combinator.
+The \lstiproc@ins@ field defines the set of input streams, and the \lstiproc@outs@ field defines the set of output streams.
+The \lstiproc@heap@ field gives the initial values of each of the local variables; variables without an explicit initial value are given some arbitrary value.
+The \lstiproc@instrs@ field contains a set of labelled instructions that define the program, while the \lstiproc@label@ field gives the label of the initial instruction.
+In this form, the output stream (\lstiproc@sOut@) is defined via a parameter, rather than being the result of the combinator.
 
-The initial instruction (\lstiproc!pull sIn v F1[] else F2[]!) pulls the next element from the stream @sIn@, writes it into the heap variable @v@, then proceeds to the instruction at label @F1@.
-The empty list @[]@ after the target label @F1@ can be used to update heap variables, but as we do not need to update anything yet we leave it empty. 
-If the input stream is finished, there are no more elements to pull; execution proceeds to the instruction at label @F2@ instead.
+The initial instruction (\lstiproc!pull sIn v F1[] else F2[]!) pulls the next element from the stream \lstiproc@sIn@, writes it into the heap variable \lstiproc@v@, then proceeds to the instruction at label \lstiproc@F1@.
+The empty list \lstiproc@[]@ after the target label \lstiproc@F1@ can be used to update heap variables, but as we do not need to update anything yet we leave it empty. 
+If the input stream is finished, there are no more elements to pull; execution proceeds to the instruction at label \lstiproc@F2@ instead.
 
-After successfully pulling a new element from the input stream, the instruction at label @F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream @sIn@ is no longer required, before updating the fold state (@s@) by applying the fold update function (@k@).
-Execution then proceeds back to the pull instruction at label @F0@.
-In \cref{s:Drop:in:synchrony} we shall see how this @drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
+After successfully pulling a new element from the input stream, the instruction at label \lstiproc@F1@ (\lstiproc!drop sIn F0[s = k s v]!) signals that the current element that was pulled from stream \lstiproc@sIn@ is no longer required, before updating the fold state (\lstiproc@s@) by applying the fold update function (\lstiproc@k@).
+Execution then proceeds back to the pull instruction at label \lstiproc@F0@.
+In \cref{s:Drop:in:synchrony} we shall see how this \lstiproc@drop@ instruction is used to synchronise processes reading from the same shared stream, ensuring that all processes operate on the same element together without overtaking one another.
 
-When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the result of the eject function applied to the final fold state to the output stream @sOut@.
-Execution then proceeds to the instruction at label @F3@.
+When the input stream is finished, the instruction (\lstiproc!push sOut (j s) F3[]!) pushes the result of the eject function applied to the final fold state to the output stream \lstiproc@sOut@.
+Execution then proceeds to the instruction at label \lstiproc@F3@.
 The comment above the instruction highlights the change in state of the input stream.
 
-Next, the instruction (\lstiproc!close sOut F4[]!) signals that the output stream @sOut@ is finished, and then proceeds to the instruction at label @F4@.
+Next, the instruction (\lstiproc!close sOut F4[]!) signals that the output stream \lstiproc@sOut@ is finished, and then proceeds to the instruction at label \lstiproc@F4@.
 
 Finally, the instruction (\lstiproc!exit!) signals that the process is finished, and has no further work to do.
 The process terminates.
@@ -128,16 +128,16 @@ map
                , M4 = exit } }
 \end{process}
 
-The definition of the @map@ combinator, which applies a worker function to every element in the input stream, is given in \cref{figs/procs/impl/map}.
-The combinator is parameterised by the worker function (@f@), and takes one input stream (@sIn@) and produces one output stream (@sOut@).
-The heap variable (@v@) is used to store the last value read from the input stream.
-The process starts by pulling from the input stream, storing the element in the heap variable (@v@).
-It then pushes the transformed element (@f v@) into the output stream, drops the element from the input stream, and pulls again.
+The definition of the \lstiproc@map@ combinator, which applies a worker function to every element in the input stream, is given in \cref{figs/procs/impl/map}.
+The combinator is parameterised by the worker function (\lstiproc@f@), and takes one input stream (\lstiproc@sIn@) and produces one output stream (\lstiproc@sOut@).
+The heap variable (\lstiproc@v@) is used to store the last value read from the input stream.
+The process starts by pulling from the input stream, storing the element in the heap variable (\lstiproc@v@).
+It then pushes the transformed element (\lstiproc@f v@) into the output stream, drops the element from the input stream, and pulls again.
 When the input stream finishes, the process closes the output stream and terminates.
 
 \subsection{A network of processes}
-The @map@ and @foldl@ combinators are sufficient to express the @priceOverTime@ example, which takes a single input stream and computes the correlation and regression.
-Here is the list implementation of @priceOverTime@ again:
+The \lstiproc@map@ and \lstiproc@foldl@ combinators are sufficient to express the \lstiproc@priceOverTime@ example, which takes a single input stream and computes the correlation and regression.
+Here is the list implementation of \lstiproc@priceOverTime@ again:
 
 \begin{haskell}
 priceOverTime :: [Record] -> (Line, Double)
@@ -146,14 +146,14 @@ priceOverTime stock =
   in (regression timeprices, correlation timeprices)
 \end{haskell}
 
-We can express @priceOverTime@ as a process network by instantiating the above process templates and connecting them together.
+We can express \lstiproc@priceOverTime@ as a process network by instantiating the above process templates and connecting them together.
 A process network is a set of processes that are able to communicate with each other.
 
 \Cref{figs/procs/net/priceOverTime} shows the process network for \Hs/priceOverTime/.
-As with the process templates, the network is parameterised by the output streams, which are in this case the output of @regression@ and @correlation@.
-We use the nu-binder syntax to instantiate a fresh name for the @timeprices@ internal stream, which is the output of the @map@ combinator.
-We implement @regression@ and @correlation@ as folds with eject functions.
-The details of the worker functions given to @map@ and @foldl@ are defined externally.
+As with the process templates, the network is parameterised by the output streams, which are in this case the output of \lstiproc@regression@ and \lstiproc@correlation@.
+We use the nu-binder syntax to instantiate a fresh name for the \lstiproc@timeprices@ internal stream, which is the output of the \lstiproc@map@ combinator.
+We implement \lstiproc@regression@ and \lstiproc@correlation@ as folds with eject functions.
+The details of the worker functions given to \lstiproc@map@ and \lstiproc@foldl@ are defined externally.
 
 \begin{process}[float,caption=Process network for \Hs/priceOverTime/,label=figs/procs/net/priceOverTime]
 priceOverTime =
@@ -175,9 +175,9 @@ The fusion algorithm itself does not require the details of the worker functions
 \label{s:FusingProcesses}
 
 Our fusion algorithm takes two processes and produces a new one that computes the output of both.
-We fuse a pair of processes in the @priceOverTime@ network; to distinguish between the two @foldl@ processes in this network, we refer to them as the @regression@ and @correlation@ processes.
-As an example, we fuse the @map@ process with the @regression@ process.
-The result process computes the result of both processes as if they were executed concurrently, where the output stream of the @map@ process is used as the input stream of the @regression@ process.
+We fuse a pair of processes in the \lstiproc@priceOverTime@ network; to distinguish between the two \lstiproc@foldl@ processes in this network, we refer to them as the \lstiproc@regression@ and \lstiproc@correlation@ processes.
+As an example, we fuse the \lstiproc@map@ process with the \lstiproc@regression@ process.
+The result process computes the result of both processes as if they were executed concurrently, where the output stream of the \lstiproc@map@ process is used as the input stream of the \lstiproc@regression@ process.
 
 \begin{figure}
 \begin{process}
@@ -262,11 +262,11 @@ edge[style="procSndD,thick"];
 \label{figs/procs/instance/pot-regression}
 \end{figure}
 
-\Cref{figs/procs/instance/pot-timeprices} shows the result of instantiating the @map@ process in the @priceOverTime@ process network.
+\Cref{figs/procs/instance/pot-timeprices} shows the result of instantiating the \lstiproc@map@ process in the \lstiproc@priceOverTime@ process network.
 The combinator parameters have the corresponding argument value substituted in, and the variables and labels are given fresh names as necessary.
-We rename the variable name @v@ to @tp_v@, to avoid conflict with variables named @v@ in other processes.
+We rename the variable name \lstiproc@v@ to \lstiproc@tp_v@, to avoid conflict with variables named \lstiproc@v@ in other processes.
 The figure also shows the control flow graph of the process.
-\Cref{figs/procs/instance/pot-regression} likewise shows the result of instantiating the @regression@ process.
+\Cref{figs/procs/instance/pot-regression} likewise shows the result of instantiating the \lstiproc@regression@ process.
 The instructions and edges in each control flow graph are coloured differently; the same colours will be used to highlight the provenance of each instruction in our informal description of the fusion algorithm.
 
 
@@ -277,10 +277,10 @@ The instructions and edges in each control flow graph are coloured differently; 
 The algorithm proceeds by considering pairs of labels and instructions: one from each of the source processes to be fused.
 First, we consider the initial labels of each process and their corresponding instructions.
 This situation is shown in \cref{figs/fsm/fuse-pulls}; instructions from the two source processes are shown side-by-side and the instruction of the fused process is below.
-The @map@ process pulls from the @stock@ stream, while the @regression@ process pulls from the @timeprices@ stream.
-As the @timeprices@ stream is produced by the @map@ process, the @regression@ process must wait until the @map@ process pushes a value.
-If we were to execute the two processes concurrently at this stage, only the @map@ process could make progress, by pulling from the @stock@ input stream.
-The corresponding instruction for the fused process pulls from the @stock@ input stream, allowing the @map@ process to execute while the @regression@ process waits.
+The \lstiproc@map@ process pulls from the \lstiproc@stock@ stream, while the \lstiproc@regression@ process pulls from the \lstiproc@timeprices@ stream.
+As the \lstiproc@timeprices@ stream is produced by the \lstiproc@map@ process, the \lstiproc@regression@ process must wait until the \lstiproc@map@ process pushes a value.
+If we were to execute the two processes concurrently at this stage, only the \lstiproc@map@ process could make progress, by pulling from the \lstiproc@stock@ input stream.
+The corresponding instruction for the fused process pulls from the \lstiproc@stock@ input stream, allowing the \lstiproc@map@ process to execute while the \lstiproc@regression@ process waits.
 
 
 \begin{figure}
@@ -327,24 +327,24 @@ node[shape=none,texmode="raw"];
 \end{figure}
 
 Each of the joint result labels represents a combination of two source labels, one from each of the source processes.
-For example, the first joint label \FuTiReLa{M0}{F0}{none} represents a combination of the @map@ process being in its initial state @M0@ and the @regression@ process being in its own initial state @F0@. 
-We also associate each of the joint labels with the \emph{input state}: a description of whether the @regression@ process has a value available to read from the shared @timeprices@ stream.
-There is no value available, so the input state for @timeprices@ is set to @none@.
-This extra information only applies to shared input streams; as such, the input state of the @map@ process is the empty map.
+For example, the first joint label \FuTiReLa{M0}{F0}{none} represents a combination of the \lstiproc@map@ process being in its initial state \lstiproc@M0@ and the \lstiproc@regression@ process being in its own initial state \lstiproc@F0@. 
+We also associate each of the joint labels with the \emph{input state}: a description of whether the \lstiproc@regression@ process has a value available to read from the shared \lstiproc@timeprices@ stream.
+There is no value available, so the input state for \lstiproc@timeprices@ is set to \lstiproc@none@.
+This extra information only applies to shared input streams; as such, the input state of the \lstiproc@map@ process is the empty map.
 
 \subsubsection{Fusing Push with Pull}
 \label{s:Fusion:FusingPushPull}
 
-Next, \cref{figs/fsm/fuse-pushpull} shows the @map@ process pushing into the @timeprices@ stream after pulling a value from the @stock@ stream, while the @regression@ process is still trying to pull from the @timeprices@ stream.
-After the @map@ process pushes a value, this value becomes available for the @regression@ process.
+Next, \cref{figs/fsm/fuse-pushpull} shows the \lstiproc@map@ process pushing into the \lstiproc@timeprices@ stream after pulling a value from the \lstiproc@stock@ stream, while the \lstiproc@regression@ process is still trying to pull from the \lstiproc@timeprices@ stream.
+After the \lstiproc@map@ process pushes a value, this value becomes available for the \lstiproc@regression@ process.
 In the fused process, this situation results in two steps.
-First, the @map@ process pushes the value (@tp_f tp_v@), and stores this value in the new local variable (@chan_tp@), so it is available for the @regression@ process.
-The input state for the @regression@ process is updated to (@pending@), to signal that there is a value ready to be pulled in the (@chan_tp@) variable.
-Next, the @regression@ process reads the @pending@ value, copying from the (@chan_tp@) variable into the (@reg_v@) variable.
-The input state for the @regression@ process is updated to (@have@), to signal that the @regression@ process has copied the pulled value and is using it.
+First, the \lstiproc@map@ process pushes the value (\lstiproc@tp_f tp_v@), and stores this value in the new local variable (\lstiproc@chan_tp@), so it is available for the \lstiproc@regression@ process.
+The input state for the \lstiproc@regression@ process is updated to (\lstiproc@pending@), to signal that there is a value ready to be pulled in the (\lstiproc@chan_tp@) variable.
+Next, the \lstiproc@regression@ process reads the \lstiproc@pending@ value, copying from the (\lstiproc@chan_tp@) variable into the (\lstiproc@reg_v@) variable.
+The input state for the \lstiproc@regression@ process is updated to (\lstiproc@have@), to signal that the \lstiproc@regression@ process has copied the pulled value and is using it.
 
-In the original process network, before any fusion, the @timeprices@ stream has two consumers: the @regression@ and @correlation@ processes.
-Since the fused process implements both @map@ and @regression@ processes, the fused process still pushes to the @timeprices@ stream to allow the @correlation@ process to consume it.
+In the original process network, before any fusion, the \lstiproc@timeprices@ stream has two consumers: the \lstiproc@regression@ and \lstiproc@correlation@ processes.
+Since the fused process implements both \lstiproc@map@ and \lstiproc@regression@ processes, the fused process still pushes to the \lstiproc@timeprices@ stream to allow the \lstiproc@correlation@ process to consume it.
 
 \begin{figure}
 \center
@@ -453,20 +453,20 @@ process -- \colorbox{procFst}{map tp\_f stock timeprices} / \colorbox{procSnd}{f
  } }
 \end{lstlisting}
 
-\Cref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the @map@ and @regression@ processes together.
+\Cref{figs/procs/instance/fused-timeprices-regression} shows the final result of fusing the \lstiproc@map@ and \lstiproc@regression@ processes together.
 There are similar rules for handling the other combinations of instructions, but we defer the details to \cref{s:Fusion}.
-The result process has one input stream, @stock@, and two output streams: @timeprices@ from @map@, and @reg_out@ from @regression@.
+The result process has one input stream, \lstiproc@stock@, and two output streams: \lstiproc@timeprices@ from \lstiproc@map@, and \lstiproc@reg_out@ from \lstiproc@regression@.
 
-To complete the implementation of @priceOverTime@, we would now fuse this result process with the @correlation@ process.
+To complete the implementation of \lstiproc@priceOverTime@, we would now fuse this result process with the \lstiproc@correlation@ process.
 Note that although the result process has a single shared heap, the heap bindings from each fused process are guaranteed not to interfere, as when we instantiate combinators to create source processes we introduce fresh names. 
 
 
 \subsection{Join combinator}
 
-To implement the whole @priceAnalyses@ process network, we also need the @join@ combinator, which pairs together the elements of two sorted input streams.
-The combinator is parameterised by the key comparison function, which returns an @Ordering@ describing whether the key of the first argument is equal to the key of the second argument (@EQ@), lesser (@LT@), or greater (@GT@).
-The process, shown in \cref{figs/procs/impl/join}, reads from two input streams (@sA@ and @sB@), and produces one output stream (@sOut@).
-Two heap variables are used to store the most recent input elements (@va@ and @vb@), and another is used to store the key comparison (@c@).
+To implement the whole \lstiproc@priceAnalyses@ process network, we also need the \lstiproc@join@ combinator, which pairs together the elements of two sorted input streams.
+The combinator is parameterised by the key comparison function, which returns an \lstiproc@Ordering@ describing whether the key of the first argument is equal to the key of the second argument (\lstiproc@EQ@), lesser (\lstiproc@LT@), or greater (\lstiproc@GT@).
+The process, shown in \cref{figs/procs/impl/join}, reads from two input streams (\lstiproc@sA@ and \lstiproc@sB@), and produces one output stream (\lstiproc@sOut@).
+Two heap variables are used to store the most recent input elements (\lstiproc@va@ and \lstiproc@vb@), and another is used to store the key comparison (\lstiproc@c@).
 
 \begin{process}[float,caption=Process implementation of \Hs/join/,label=figs/procs/impl/join]
 join 
@@ -513,18 +513,18 @@ join
                , EX1 = exit } }
 \end{process}
 
-In the first group of instructions, the instructions at labels @IN0@ and @IN1@ pull an element from each input stream.
-If both pulls are successful, the instruction at label @IN2@ compares the input values using the key comparison function (@cmp va vb@).
-Next, the instruction at label @IN3@ checks whether the keys are equal: if so, execution proceeds to the instruction at label @EQ0@; otherwise, instruction proceeds to the instruction at label @NE0@.
+In the first group of instructions, the instructions at labels \lstiproc@IN0@ and \lstiproc@IN1@ pull an element from each input stream.
+If both pulls are successful, the instruction at label \lstiproc@IN2@ compares the input values using the key comparison function (\lstiproc@cmp va vb@).
+Next, the instruction at label \lstiproc@IN3@ checks whether the keys are equal: if so, execution proceeds to the instruction at label \lstiproc@EQ0@; otherwise, instruction proceeds to the instruction at label \lstiproc@NE0@.
 
-The group of instructions at label @EQ0@ execute when the element keys are equal, and pushes the pair of elements to the output stream, before dropping both input streams.
-Execution then proceeds back to the instruction at label @IN0@ to pull from the inputs.
+The group of instructions at label \lstiproc@EQ0@ execute when the element keys are equal, and pushes the pair of elements to the output stream, before dropping both input streams.
+Execution then proceeds back to the instruction at label \lstiproc@IN0@ to pull from the inputs.
 
-The instruction at label @NE0@ executes when the element keys are not equal, and proceeds to the instruction at label @LT0@ if the first element is lesser, or to the instruction at label @GT0@ if the first element is greater.
-These two groups of instructions drop the input stream with the lesser key and pull a new value from the same input stream, before returning back to the instruction at label @IN2@ to compare the elements.
+The instruction at label \lstiproc@NE0@ executes when the element keys are not equal, and proceeds to the instruction at label \lstiproc@LT0@ if the first element is lesser, or to the instruction at label \lstiproc@GT0@ if the first element is greater.
+These two groups of instructions drop the input stream with the lesser key and pull a new value from the same input stream, before returning back to the instruction at label \lstiproc@IN2@ to compare the elements.
 
-The group of instructions at label @DA0@ executes when the @sB@ input stream is finished, while the @sA@ input stream may still have elements.
-As with the polarised stream implementation of @join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
+The group of instructions at label \lstiproc@DA0@ executes when the \lstiproc@sB@ input stream is finished, while the \lstiproc@sA@ input stream may still have elements.
+As with the polarised stream implementation of \lstiproc@join_iii@ in \cref{taxonomy/polarised}, we must drain the leftover elements from the unfinished stream by repeatedly pulling and dropping until there are no more elements.
 This draining is required because, when fusing processes together, we treat each consumer as having a one-element buffer for each input stream; the producer can only push when all consumers' buffers are empty.
 Without draining, the producer would be blocked indefinitely on the terminated \Hs/join/ process, and any other consumers of the stream would be unable to receive input values.
 
@@ -539,9 +539,9 @@ However, a fused result process, which performs the job of two source processes,
 % This draining ensures that a producer will not 
 % Without draining, the producer of the unfinished input stream would continue pushing to , potentially requiring an unbounded buffer; we look at draining in more detail in \REF{kpn/draining}.
 
-The group of instructions at label @DB0@ executes when the @sA@ input stream is finished, and drains the unfinished @sB@ input stream.
+The group of instructions at label \lstiproc@DB0@ executes when the \lstiproc@sA@ input stream is finished, and drains the unfinished \lstiproc@sB@ input stream.
 
-Finally, the group of instructions at @EX0@ close the output stream and terminate the process.
+Finally, the group of instructions at \lstiproc@EX0@ close the output stream and terminate the process.
 
 \input{copy/03-body/02-process/s-process-def.tex}
 
@@ -559,13 +559,13 @@ In \cref{ss:Fusing:a:network}, we fuse a whole process network by fusing success
 % If the static $\InputStateF$ is $@pending@_F$, there is a value waiting to be pulled, do not know the actual value.
 
 We also extend the existing $\Var$ grammar with a (@chan@ $c$) form which represents the buffer variable associated with \mbox{channel @c@}. We only need one buffer variable for each channel, and naming them like this saves us from inventing fresh names in the definition of the fusion rules.
-We used the name (@chan_tp@) back in \cref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion, when in fact the fused process would use a buffer variable called (@chan timeprices@).
+We used the name (\lstiproc@chan_tp@) back in \cref{s:FusingProcesses} to avoid introducing a new mechanism at that point in the discussion, when in fact the fused process would use a buffer variable called (\lstiproc@chan timeprices@).
 
 Still in \cref{fig:Fusion:Types}, $\ChanTypeTwo$ classifies how channels are used, and possibly shared, between two processes.
-Type @in2@ indicates that both processes @pull@ from the same channel, so these actions must be coordinated.
-Type @in1@ indicates that only a single process pulls from the channel.
-Type @in1out1@ indicates that one process pushes to the channel and the other pulls.
-Type @out1@ indicates that the channel is pushed to by a single process.
+Type \lstiproc@in2@ indicates that both processes pull from the same channel, so these actions must be coordinated.
+Type \lstiproc@in1@ indicates that only a single process pulls from the channel.
+Type \lstiproc@in1out1@ indicates that one process pushes to the channel and the other pulls.
+Type \lstiproc@out1@ indicates that the channel is pushed to by a single process.
 Each output channel is uniquely owned and cannot be pushed to by more than one process.
 
 \input{copy/03-body/02-process/figures/Fusion-types.tex}
@@ -582,14 +582,14 @@ Each output channel is uniquely owned and cannot be pushed to by more than one p
 \Cref{fig:Fusion:Def:StepPair} defines function \ti{tryStepPair}, which decides which of the two input processes to advance. It starts by calling \ti{tryStep} for both processes. If both can advance, we use heuristics to decide which one to run first.
 
 Clauses (DeferExit1) and (DeferExit2) ensure that the fused process only terminates once both processes are ready to terminate; if either has remaining work, the process with remaining work will execute.
-The clauses achieve this by checking if either process is at an @exit@ instruction, and if so, choosing the other process.
+The clauses achieve this by checking if either process is at an \lstiproc@exit@ instruction, and if so, choosing the other process.
 The instruction for the second process was computed by calling \ti{tryStep} with the label arguments swapped, so in (DeferExit2) we need to swap the labels back with $\ti{swaplabels}$ (from \cref{fig:Fusion:Utils}).
-The result process terminates once both processes have terminated at an @exit@ instruction; in this case, clause (DeferExit1) will return the @exit@ instruction from the first process.
+The result process terminates once both processes have terminated at an \lstiproc@exit@ instruction; in this case, clause (DeferExit1) will return the \lstiproc@exit@ instruction from the first process.
 
-Clauses (PreferJump1) and (PreferJump2) prioritise processes that can perform a @jump@.
-This helps collect @jump@ instructions together so they are easier for post-fusion optimisation to handle (\cref{s:Optimisation}).
+Clauses (PreferJump1) and (PreferJump2) prioritise processes that can perform a \lstiproc@jump@.
+This helps collect \lstiproc@jump@ instructions together so they are easier for post-fusion optimisation to handle (\cref{s:Optimisation}).
 
-Similarly, clauses (DeferPull1) and (DeferPull2) defer @pull@ instructions: if one of the instructions is a @pull@, we advance the other one. We do this because @pull@ instructions may block, while other instructions are more likely to produce immediate results.
+Similarly, clauses (DeferPull1) and (DeferPull2) defer \lstiproc@pull@ instructions: if one of the instructions is a \lstiproc@pull@, we advance the other one. We do this because \lstiproc@pull@ instructions may block, while other instructions are more likely to produce immediate results.
 
 Clauses (Run1) and (Run2) apply when the above heuristics do not apply, or only one of the processes can advance.
 % We try the first process first, and if that can advance then so be it. This priority means that fusion is left-biased, preferring advancement of the left process over the second.
@@ -602,7 +602,7 @@ Clause (Deadlock) applies when neither process can advance, in which case the pr
 % -------------------------------------
 \smallskip
 \Cref{fig:Fusion:Def:Step} defines function \ti{tryStep}, which schedules a single instruction.
-This function takes the map of channel types, along with the current label and associated instruction of the first (left) process, and the current label of the other (right) process.
+This function takes the map of channel types, along with the current label and associated instruction of one process (which we call the left process), and the current label of the other (right) process.
 The \ti{tryStep} function is called twice in \ti{tryStepPair}, once for each process, so the left process may correspond to either input process at any given time.
 
 
@@ -632,23 +632,23 @@ Clause (SharedPullClosed) applies when the left process wants to pull from a sha
 The result instruction jumps to the close output label.
 
 Clause (SharedPullInject) applies when the left process wants to pull from a shared channel that both processes pull from, and neither already has a value.
-The result instruction is a @pull@ that loads the stream buffer variable, leaving the labels the same and updating the channel state for both processes.
+The result instruction is a \lstiproc@pull@ that loads the stream buffer variable, leaving the labels the same and updating the channel state for both processes.
 In the next instruction, the left process will try to pull again with the updated channel state, and one of the clauses (SharedPullPending) or (SharedPullClosed) will apply.
 
 Clause (LocalDrop) applies when the left process wants to drop the current value that it read from an unshared input channel, which requires no coordination.
 
-Clause (ConnectedDrop) applies when the left process wants to drop the current value that it received from an upstream process. As the value will have been sent via a heap variable instead of a still extant channel, the result instruction just performs a @jump@ while updating the static channel state.
+Clause (ConnectedDrop) applies when the left process wants to drop the current value that it received from an upstream process. As the value will have been sent via a heap variable instead of being pulled from a channel, the result instruction just performs a \lstiproc@jump@ while updating the static channel state.
 
-Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants to drop from a channel shared by both processes. In (SharedDropOne), the channel states reveal that the other process is still using the value. In this case, the result is a @jump@ updating the channel state to note that the left process has dropped. In (SharedDropBoth), the channel states reveal that the other process has already dropped its copy of the channel value using clause (SharedDropOne). In this case, the result is a real @drop@, because we are sure that neither process requires the value any longer.
+Clauses (SharedDropOne) and (SharedDropBoth) apply when the left process wants to drop from a shared channel that is read by both processes. In (SharedDropOne), the channel states reveal that the other process is still using the value. In this case, the result instruction is a \lstiproc@jump@ updating the channel state to note that the left process has dropped. In (SharedDropBoth), the channel states reveal that the other process has already dropped its copy of the channel value using clause (SharedDropOne). In this case, the result instruction is a real \lstiproc@drop@, because we are sure that neither process requires the value any longer.
 
 Clause (LocalClose) applies when the left process wants to close an unshared output channel, which requires no coordination.
 
 Clause (SharedClose) applies when the left process wants to close a shared output channel that the other process pulls from.
-Closing the channel updates the channel state and requires the downstream process to have dropped any previously read values, just as the (InjectClose) evaluation rule requires the downstream process to have @none@ as its input state.
+Closing the channel updates the channel state and requires the downstream process to have dropped any previously read values, just as the (InjectClose) evaluation rule requires the downstream process to have \lstiproc@none@ as its input state.
 
 Clause (LocalExit) applies when the left process wants to finish execution, which requires no coordination here, but causes the other process to be prioritised in the (DeferExit) clauses in the earlier definition of \ti{tryStepPair}.
 
-Clause (Blocked) returns @Nothing@ when no other clauses apply, meaning that this process is waiting for the other process to advance.
+Clause (Blocked) returns \lstiproc@Nothing@ when no other clauses apply, meaning that this process is waiting for the other process to advance.
 
 All the clauses in the \ti{tryStep} function work together to perform a static version of the dynamic process execution.
 Each clause checks whether the left process can advance given the statically known channel state.
@@ -723,10 +723,10 @@ The @Streams@ type corresponds to the channel value map used to accumulate strea
 %%% AR: Really would like to say something about this but no room to explain properly
 % For shared inputs when one program has pulled, the other program must be evaluated with the other value removed from the end of the stream.
 
-To aid mechanisation, the Coq formalisation has some small differences from the system presented earlier in this thesis.
-Firstly, the Coq formalisation uses a separate @update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
+To aid mechanisation, the Coq formalisation has some small differences from the system presented earlier in this chapter.
+Firstly, the Coq formalisation uses a separate \lstiproc@update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
 Performing this desugaring makes the low-level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
-Having a separate @update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
+Having a separate \lstiproc@update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
 This difference is fairly minor.
 
 Secondly, the formalisation only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process networks.

@@ -1,7 +1,7 @@
 \section{Synchronising pulling by dropping}
 \label{s:Drop:in:synchrony}
 
-The @drop@ instruction exists to synchronise two consumers of the same input, so that both consumers pull the same value at roughly the same time.
+The drop instruction exists to synchronise two consumers of the same input, so that both consumers pull the same value at roughly the same time.
 When fusing two consumers, the fusion algorithm uses drops when coordinating the consumers to ensure that one consumer cannot start processing the next element until the other has finished processing the current element.
 Drop instructions are not necessary for correctness, or for ensuring boundedness of buffers, but they improve locality in the fused process.
 
@@ -70,7 +70,7 @@ Each process and output stream is represented as a vertical line which communica
 The names of each stream and process are written above the line, and time flows downwards.
 To highlight the synchronisation between @regression@ and @correlation@ processes, we use placeholder values such as $A$ and $B$ instead of actual stream values, and show only a subset of the whole execution, omitting the @stock@ input stream and the internal messages of the @map@ process.
 
-In the definition of the @fold@ process template, the update binding attached to the @drop@ instruction updates the fold state with the most recently pulled value.
+In the definition of the @fold@ process template, the update binding attached to the drop instruction updates the fold state with the most recently pulled value.
 We use the shorthand (drop [update $A$]) to signify that the process updates its fold state with the pulled value $A$ after dropping the element.
 
 Execution starts with the @map@ process pushing the value $A$ to both of its consumers, the @regression@ and @correlation@ processes.

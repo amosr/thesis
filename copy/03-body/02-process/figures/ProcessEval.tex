@@ -23,25 +23,25 @@ $$
 
 $$
 \ruleIN{
-  is[c] = @pending@~v
+  is[c] = \lstiproc@pending@~v
 }{
   \ProcBlockShake
-        {@pull@~c~x~(l,us)~(l',us')}
+        {\lstiproc@pull@~c~x~(l,us)~(l',us')}
         {is}
         {\Sigma}
         {\cdot}
         {l}
-        {is[c \mapsto @have@]}
+        {is[c \mapsto \lstiproc@have@]}
         {(us, x = v)}
 }{PullPending}
 $$
 
 $$
 \ruleIN{
-  is[c] = @closed@
+  is[c] = \lstiproc@closed@
 }{
   \ProcBlockShake
-        {@pull@~c~x~(l,us)~(l',us')}
+        {\lstiproc@pull@~c~x~(l,us)~(l',us')}
         {is}
         {\Sigma}
         {\cdot}
@@ -56,7 +56,7 @@ $$
   \ExpEval{\Sigma}{e}{v}
 }{
   \ProcBlockShake
-        {@push@~c~e~(l,us)}
+        {\lstiproc@push@~c~e~(l,us)}
         {is}
         {\Sigma}
         {\Push~c~v}
@@ -69,7 +69,7 @@ $$
 $$
 \ruleAx{
   \ProcBlockShake
-        {@close@~c~(l,us)}
+        {\lstiproc@close@~c~(l,us)}
         {is}
         {\Sigma}
         {\Close~c}
@@ -82,21 +82,21 @@ $$
 
 $$
 \ruleIN{
-  is[c] = @have@
+  is[c] = \lstiproc@have@
 }{
   \ProcBlockShake
-        {@drop@~c~(l,us)}
+        {\lstiproc@drop@~c~(l,us)}
         {is}
         {\Sigma}
         {\cdot}
         {l}
-        {is[c \mapsto @none@]}
+        {is[c \mapsto \lstiproc@none@]}
         {us}
 }{Drop}
 \ruleIN{
 }{
   \ProcBlockShake
-        {@jump@~(l,us)}
+        {\lstiproc@jump@~(l,us)}
         {is}
         {\Sigma}
         {\cdot}
@@ -108,10 +108,10 @@ $$
 
 $$
 \ruleIN{
-  \ExpEval{\Sigma}{e}{@True@}
+  \ExpEval{\Sigma}{e}{\lstiproc@True@}
 }{
   \ProcBlockShake
-        {@case@~e~(l_t,us_t)~(l_f,us_f)}
+        {\lstiproc@case@~e~(l_t,us_t)~(l_f,us_f)}
         {is}
         {\Sigma}
         {\cdot}
@@ -122,10 +122,10 @@ $$
 $$
 $$
 \ruleIN{
-  \ExpEval{\Sigma}{e}{@False@}
+  \ExpEval{\Sigma}{e}{\lstiproc@False@}
 }{
   \ProcBlockShake
-        {@case@~e~(l_t,us_t)~(l_f,us_f)}
+        {\lstiproc@case@~e~(l_t,us_t)~(l_f,us_f)}
         {is}
         {\Sigma}
         {\cdot}
@@ -144,22 +144,22 @@ $$
 $$
 \ruleIN{
   \ProcBlockShake
-    {p[@instrs@][p[@label@]]} 
-    {p[@ins@]}
-    {p[@heap@]}
+    {p[\lstiproc@instrs@][p[\lstiproc@label@]]} 
+    {p[\lstiproc@ins@]}
+    {p[\lstiproc@heap@]}
     {a}
     {l}
     {is}
     {us}
   \qquad
-    \ExpEval{p[@heap@]}{us}{bs}
+    \ExpEval{p[\lstiproc@heap@]}{us}{bs}
 }{
   \ProcShake
         {p}
         {a}
-        {p~[    @label@~ \mapsto ~l
-           , ~~ @heap@~  \mapsto (p[@heap@] \lhd bs)
-           , ~~ @ins@~   \mapsto ~is]}
+        {p~[    \lstiproc@label@~ \mapsto ~l
+           , ~~ \lstiproc@heap@~  \mapsto (p[\lstiproc@heap@] \lhd bs)
+           , ~~ \lstiproc@ins@~   \mapsto ~is]}
 }{Advance}
 $$
 

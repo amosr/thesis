@@ -11,16 +11,16 @@ $\ti{tryStep} ~\cs~(l_p,s_p)~i_p~(l_q,s_q)~=~@match@~i_p~@with@$
 \vspace*{1ex}
 
 \begin{tabular}{lr}
-  $@jump@~(l',u')$  & \note{LocalJump} \\
-  $\quad\to~\Just (@jump@~
+  $\lstiproc@jump@~(l',u')$  & \note{LocalJump} \\
+  $\quad\to~\Just (\lstiproc@jump@~
       \nextStep
         {l'}{s_p}
         {l_q}{s_q}
         {u'})
       $ 
       \\[1ex]
-  $@case@~e~(l'_t,u'_t)~(l'_f,u'_f)$ & \note{LocalCase} \\
-$\quad\to~\Just (@case@~e~
+  $\lstiproc@case@~e~(l'_t,u'_t)~(l'_f,u'_f)$ & \note{LocalCase} \\
+$\quad\to~\Just (\lstiproc@case@~e~
       \nextStep
         {l'_t}{s_p}
         {l_q}{s_q}
@@ -33,9 +33,9 @@ $\quad\to~\Just (@case@~e~
       $ 
 \\[1ex]
 
-$@push@~c~e~(l',u')$ \\
+$\lstiproc@push@~c~e~(l',u')$ \\
   $\quad~|~\cs[c]=@out1@$ & \note{LocalPush} \\
-$\quad\to~\Just (@push@~c~e~
+$\quad\to~\Just (\lstiproc@push@~c~e~
       \nextStep
         {l'}
           {s_p}
@@ -45,7 +45,7 @@ $\quad\to~\Just (@push@~c~e~
       $ 
 \\
   $\quad~|~\cs[c]=@in1out1@ ~\wedge~ s_q[c]=@none@_F$ & \note{SharedPush} \\
-$\quad\to~\Just (@push@~c~e~
+$\quad\to~\Just (\lstiproc@push@~c~e~
       \nextStep
         {l'}
           {s_p}
@@ -55,10 +55,10 @@ $\quad\to~\Just (@push@~c~e~
       $
 \\[1ex]
 
-$@pull@~c~x~(l'_o,u'_o)~(l'_c,u'_c)$ \\
+$\lstiproc@pull@~c~x~(l'_o,u'_o)~(l'_c,u'_c)$ \\
 
 $\quad~|~\cs[c]=@in1@$ & \note{LocalPull} \\
-$\quad\to~\Just (@pull@~c~x~
+$\quad\to~\Just (\lstiproc@pull@~c~x~
       \nextStep
         {l'_o}{s_p}
         {l_q}{s_q}
@@ -72,7 +72,7 @@ $\quad\to~\Just (@pull@~c~x~
 \\[1ex]
 
 $\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@pending@_F$ & \note{SharedPullPending} \\
-$\quad\to~\Just (@jump@~
+$\quad\to~\Just (\lstiproc@jump@~
       \nextStep
         {l'_o}
           {\HeapUpdateOne{c}{@have@_F}{s_p}}
@@ -83,7 +83,7 @@ $\quad\to~\Just (@jump@~
 \\[1ex]
 
 $\quad~|~(\cs[c]=@in2@ \vee \cs[c]=@in1out1@) ~\wedge~ s_p[c]=@closed@_F$ & \note{SharedPullClosed} \\
-$\quad\to~\Just (@jump@~
+$\quad\to~\Just (\lstiproc@jump@~
       \nextStep
         {l'_c}{s_p}
         {l_q}{s_q}
@@ -93,7 +93,7 @@ $\quad\to~\Just (@jump@~
 
 
 $\quad~|~\cs[c]=@in2@ ~\wedge~ s_p[c]=@none@_F ~\wedge~ s_q[c]=@none@_F$ & \note{SharedPullInject} \\
-$\quad\to~\Just (@pull@~c~(@chan@~c)$ \\
+$\quad\to~\Just (\lstiproc@pull@~c~(@chan@~c)$ \\
 @              @
       $\nextStep
         {l_p}
@@ -113,9 +113,9 @@ $\quad\to~\Just (@pull@~c~(@chan@~c)$ \\
 \\[1ex]
 
 
-$@drop@~c~(l',u')$ \\
+$\lstiproc@drop@~c~(l',u')$ \\
   $\quad~|~\cs[c]=@in1@$ & \note{LocalDrop} \\
-  $\quad\to~\Just (@drop@~c~
+  $\quad\to~\Just (\lstiproc@drop@~c~
       \nextStep
         {l'}
           {s_p}
@@ -126,7 +126,7 @@ $@drop@~c~(l',u')$ \\
       \\
 
   $\quad~|~\cs[c]=@in1out1@$ & \note{ConnectedDrop} \\
-$\quad\to~\Just (@jump@~
+$\quad\to~\Just (\lstiproc@jump@~
       \nextStep
         {l'}
           {\HeapUpdateOne{c}{@none@_F}{s_p}}
@@ -137,7 +137,7 @@ $\quad\to~\Just (@jump@~
       \\
 
 $\quad~|~\cs[c]=@in2@ ~\wedge~ (s_q[c]=@have@_F \vee s_q[c]=@pending@_F)$  & \note{SharedDropOne} \\
-$\quad\to~\Just (@jump@~
+$\quad\to~\Just (\lstiproc@jump@~
       \nextStep
         {l'}
           {\HeapUpdateOne{c}{@none@_F}{s_p}}
@@ -149,7 +149,7 @@ $\quad\to~\Just (@jump@~
 
 
 $\quad~|~\cs[c]=@in2@ ~\wedge~ s_q[c]=@none@_F$ & \note{SharedDropBoth} \\
-$\quad\to~\Just (@drop@~c~
+$\quad\to~\Just (\lstiproc@drop@~c~
       \nextStep
         {l'}
           {\HeapUpdateOne{c}{@none@_F}{s_p}}
@@ -159,9 +159,9 @@ $\quad\to~\Just (@drop@~c~
       $
 \\[1ex]
 
-$@close@~c~(l',u')$ \\
+$\lstiproc@close@~c~(l',u')$ \\
 $\quad~|~\cs[c]=@out1@$ & \note{LocalClose} \\
-$\quad\to~\Just (@close@~c~
+$\quad\to~\Just (\lstiproc@close@~c~
       \nextStep
         {l'}{s_p}
         {l_q}{s_q}
@@ -170,7 +170,7 @@ $\quad\to~\Just (@close@~c~
     \\
 
 $\quad~|~\cs[c]=@in1out1@ ~\wedge~ s_q[c]=@none@_F$ & \note{SharedClose} \\
-$\quad\to~\Just (@close@~c~
+$\quad\to~\Just (\lstiproc@close@~c~
       \nextStep
         {l'}{s_p}
         {l_q}{\HeapUpdateOne{c}{@closed@_F}{s_q}}
@@ -178,8 +178,8 @@ $\quad\to~\Just (@close@~c~
     $ 
 \\[1ex]
 
-$@exit@$ & \note{LocalExit} \\
-$\quad\to~\Just @exit@$
+$\lstiproc@exit@$ & \note{LocalExit} \\
+$\quad\to~\Just \lstiproc@exit@$
 \\[1ex]
 
 $\_~|~ @otherwise@ $ & \note{Blocked} \\

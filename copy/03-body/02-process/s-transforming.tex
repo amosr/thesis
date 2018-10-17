@@ -76,12 +76,12 @@ The dependency graph for the corresponding process network is shown in \cref{fig
 
 
 The \Hs/append2zip/ program appends the input streams, then pairs together the elements in both appended streams.
-The result of the two append processes, @ba@ and @bc@, both contain the elements from @b@ stream, followed by the elements of the second append argument; stream @a@ or stream @c@ respectively.
+The result of the two @append@ processes, @ba@ and @bc@, both contain the elements from @b@ stream, followed by the elements of the second append argument; stream @a@ or stream @c@ respectively.
 These two streams, @ba@ and @bc@, when paired together, will result in each element of the @b@ stream paired with itself, followed by elements of the two other streams paired together.
 
 
 \Cref{figs/swim/append2zip} shows an example execution of @append2zip@, displayed as a sequence diagram.
-In this diagram, we omit the @drop@ and @pull@ internal messages for all processes, and focus instead on the communication between processes.
+In this diagram, we omit the drop and pull internal messages for all processes, and focus instead on the communication between processes.
 In the definition of feeding for process networks, the (FeedEnvPush) rule takes values from external input streams and injects them into the process network as push messages.
 We visualise feeding as the input stream itself pushing elements to its consumers, just as if it were a separate process repeatedly pushing the elements.
 Input stream @a@ has elements $[1, 2]$, input stream @b@ has elements $[3, 4]$, and input stream @c@ has elements $[5, 6]$.
@@ -148,52 +148,49 @@ Input stream @b@ has multiple consumers, so its elements are pushed to both cons
 
 
 The execution has three sections.
-In the first section, all the values from the @b@ stream are pushed to both append processes, then paired together.
+In the first section, all the values from the @b@ stream are pushed to both @append@ processes, then paired together.
 In the second section, execution alternates between the other streams, @a@ and @c@, with one value from each.
 In the third section, the remaining input streams are closed, causing the consumers to also close their output streams.
 
-The bottom-most consumer process, @zip@, executes by alternately pulling from each of the append processes.
+The bottom-most consumer process, @zip@, executes by alternately pulling from each of the @append@ processes.
 The order in which a process pulls from its inputs is called its \emph{access pattern}.
-Each append process can only push when the @zip@ process' buffer for that channel is empty: append must wait for @zip@ to read the most recent element before pushing a new element.
-When each append process is waiting, its producer---the input stream---must also wait before pushing the next element.
-This waiting propagates the @zip@ process' access pattern upwards through the append processes and to the input streams.
+Each @append@ process can only push when the @zip@ process' buffer for that channel is empty: @append@ must wait for @zip@ to read the most recent element before pushing a new element.
+When each @append@ process is waiting, its producer --- the input stream --- must also wait before pushing the next element.
+This waiting propagates the @zip@ process' access pattern upwards through the @append@ processes and to the input streams.
 
 This example contains three processes.
 The fusion algorithm is not commutative or associative, so we could perform fusion in twelve different orders.
-Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the append processes with each other, or start by fusing the @zip@ process with one of the append processes.
+Of these twelve orders, there are two main categories, distinguished by whether we start by fusing the @append@ processes with each other, or start by fusing the @zip@ process with one of the @append@ processes.
 % The first category, we fuse the two append processes together, then fuse with the @zip@ process.
 % In the second category, we fuse the @zip@ process with one of the append processes, then fuse with the other append process.
 
-If we fuse the two append processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
+If we fuse the two @append@ processes together first, we interleave their instructions without considering the access pattern of the @zip@ process.
 There are many ways to interleave the two processes; one possibility is that the fused process reads all of the shared prefix from stream @b@, then all of stream @a@, then all of stream @c@.
 For the shared prefix, this interleaving alternates between pushing to streams @ba@ and @bc@.
 After the shared prefix, this interleaving pushes the rest of the stream @ba@, then pushes the rest of the stream @bc@.
-When we try to fuse the @zip@ process with the fused append processes with this interleaving, we get stuck.
+When we try to fuse the @zip@ process with the fused @append@ processes with this interleaving, we get stuck.
 The @zip@ process needs to alternate between its inputs, which works for the shared prefix, but not for the remainder.
-By fusing the two append processes together first, we risk choosing an interleaving that works for the two append processes on their own, but does not take into account the access pattern of the @zip@ process.
+By fusing the two @append@ processes together first, we risk choosing an interleaving that works for the two @append@ processes on their own, but does not take into account the access pattern of the @zip@ process.
 
-Fusion does succeed if we fuse the @zip@ process with one of the append processes first, then fuse with the other append process.
-The consumer, @zip@, must dictate the order in which the append processes push; fusing the @zip@ process first gives it this control.
+Fusion does succeed if we fuse the @zip@ process with one of the @append@ processes first, then fuse with the other @append@ process.
+The consumer, @zip@, must dictate the order in which the @append@ processes push; fusing the @zip@ process first gives it this control.
 We start from the consumer and fuse them upwards with their producers, because this allows the consumer to impose its access pattern on the producers.
 
-To fuse an arbitrary process network, we consider a restricted view of the dependency graph, ignoring the overall inputs and outputs of the network.
+To fuse an arbitrary process network, we consider a restricted view of the dependency graph, ignoring the overall output channels produced by the network.
 We start at the bottom of the dependency graph, finding the \emph{sink} processes, or those with no output edges.
 These sink processes are the bottom-most consumers which, like @zip@ in our @append2zip@ example, dictate the access pattern on their inputs.
 For each sink process, we find its parents and fuse the sink process with its parents.
 When the sink process has multiple parents, we need to choose which parent to fuse with first.
-In the @append2zip@ example, we can fuse the @zip@ process with its append parents in any order.
-In general, one parent may consume the other parent's output; in which case we first fuse with the consumer parent.
+In the @append2zip@ example, we can fuse the @zip@ process with its @append@ parents in any order.
+In general, one parent may consume the other parent's output, and we choose the parent that consumes the other parent's output.
 This order allows the consuming parent to impose its access pattern upon the producing parent.
 We repeatedly fuse each sink process with its closest parent until there are no more parents.
 
 After fusing each sink process with all its ancestors, there may remain multiple processes.
 This only occurs if the remaining processes do not share ancestors.
 The remaining processes also cannot share descendents, since if they had descendents they would not be sinks.
-This means the processes are completely separate and could be executed separately, in any order or even in parallel.
-Having unconnected processes in the same process network is a degenerate case, as it could be represented as multiple process networks.
-We execute the remaining unconnected processes concurrently, as a dynamically-scheduled concurrent process network.
-% We err on the side of caution, telling the programmer about anything even slightly unexpected.
-% Rather than making the decision of which order to execute them in, we display a compile-time error and make the programmer separate the network.
+This means the processes are completely unconnected, and do not communicate.
+We execute the remaining processes as a dynamically-scheduled concurrent process network.
 
 The fusion algorithm for pairs of processes fails and does not produce a result process when two processes have conflicting access patterns on their shared inputs.
 As the access patterns are determined statically, apparent conflicts may never occur at runtime; we instead make a static approximation.
@@ -227,7 +224,7 @@ If we fused @ab@ and @ac@ together first, the fusion algorithm would make an arb
 The heuristic described will not necessarily choose the right order.
 
 Looking at the dependency graph alone, it is impossible to tell which is the right order for fusion.
-If we take the @append3@ example and replace the append processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
+If we take the @append3@ example and replace the @append@ processes with @zip@ processes, the dependency graph remains the same, but either fusion order would work.
 \Cref{figs/procs/append3-zip3} shows the process networks of @append3@ and @append3@ replaced with @zip@ processes.
 Whether or not a particular fusion order works depends on the access pattern of the processes, which is not shown in the dependency graph.
 

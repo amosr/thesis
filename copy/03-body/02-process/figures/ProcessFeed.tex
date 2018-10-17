@@ -17,7 +17,7 @@ $$
 $$
 \ruleIN{
   \forall p \in ps.~
-  p[@instrs@][p[@label@]] = @exit@
+  p[\lstiproc@instrs@][p[\lstiproc@label@]] = \lstiproc@exit@
 % \quad
 %   \forall (c \mapsto v) \in i.~ v = []
 }{
@@ -82,7 +82,7 @@ $$
 
 $$
 \ruleIN{
-%   (\forall p \in \ps.~c \not\in p[@outs@])
+%   (\forall p \in \ps.~c \not\in p[\lstiproc@outs@])
 % \quad
   \ProcsInject
     {ps}
@@ -103,7 +103,7 @@ $$
 
 $$
 \ruleIN{
-%   (\forall p \in \ps.~c \not\in p[@outs@])
+%   (\forall p \in \ps.~c \not\in p[\lstiproc@outs@])
 % \quad
   \ProcsInject
     {ps}

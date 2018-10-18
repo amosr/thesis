@@ -63,7 +63,7 @@ Conversely, the \Hs@map@ operation produces an output value for each value it co
 The \Hs@gather@ operation is a hybrid: it takes an indices array and an elements array, and for each element in the indices array returns the corresponding data element.
 This means that \Hs/gather/ can be fused with the operation that produces its indices, but not the operation that produces its elements --- because those are accessed in a random-access manner. 
 
-The \Hs/cross/ operation computes the cartesian product by looping over its second array for every element in the first array.
+The \Hs/cross/ operation computes the cartesian product by looping over its second array for every element in the first array, so it can fuse with the operation that produces its first input, but requires the second input to be a manifest array.
 
 % Each node may simply be the name of its output binding (or bindings, in the case of \Hs@external@); as we require names to only be bound once, this is assured to be unique. Creating edges between these nodes is simply when one binding references an earlier one. The only complication is designating edges as \emph{fusible} or \emph{fusion-preventing}.
 
@@ -90,7 +90,7 @@ $c$   \> @:@  \> $V$             \> $\to$ \> $\mathbb{B}$
 
 % \subsubsection{Fused together}
 
-The first group of variables, $x$, is parameterised by a pair of nodes from the dependency graph.
+The first group of variables, $x$, is parameterised by a pair of node indices from the dependency graph.
 For each pair of nodes with indices $i$ and $j$, we use a boolean variable $x_{i,j}$, which indicates whether those two nodes are fused.
 We use $x_{i,j} = 0$ when the nodes are fused and $x_{i,j} = 1$ when they are not.
 Using $0$ for the fused case means that the objective function can be a weighted function of the $x_{i,j}$ variables, and minimizing it tends to increase the number of nodes that are fused.
@@ -119,7 +119,7 @@ mapFoldMap xs
 \includegraphics[scale=0.7]{copy/03-body/clustering/figures/ex3-cyclic.pdf}
 \end{center}
 \end{minipage}
-\caption{Program \Hs/mapFoldMap/, with an example of a cyclic clustering}
+\caption{Program \Hs/mapFoldMap/, with an invalid clustering that contains a cycle}
 \label{clustering:f:cyclic}
 \end{figure}
 
@@ -196,7 +196,7 @@ MMM     \= MMM \= M  \= MMM \= M \= MMM \= \kill
         \> (for fusion-preventing edges from $i$ to $j$) 
 \end{tabbing}
 
-When combined with the precedence-preserving constraints earlier, setting $x_{i,j} = 1$ also forces $\pi_i < \pi_j$. 
+When combined with the precedence-preserving constraints shown earlier, setting $x_{i,j} = 1$ also forces $\pi_i < \pi_j$. 
 
 
 % -------------------------------------
@@ -302,8 +302,10 @@ Minimise   \>     $\Sigma_{(i,j) \in E} W_{i,j} \cdot x_{i,j}$
 \\         \> \> \> ($i$ and $j$ share an input array)
 \\         \> $W_{i,j} = 1$   \> $~|$ \> $\Hs@otherwise@$
 \\         \> \> \> (the only benefit is loop overhead)
-\\         \> $N = |V|$
-\\         \> \> \> (the number of nodes in the graph)
+\\
+\\
+           \> $N = |V|$
+           \> \> (the number of nodes in the graph)
 \end{tabbing}
 \caption{Integer linear program with objective function}
 \label{fig:clustering:ilp-obj}
@@ -377,7 +379,9 @@ Where      \> $W_{ij} = N^2$ \> $~|$ \> $(i,j) \in E $         \\
            \> $W_{ij} = 1$   \> $~|$ \> $\Hs@otherwise@$                                                  \\
            \> \> \> (the only benefit is loop overhead)                                        
 \\
+\\
            \> $N = |V|$
+           \> \> (the number of nodes in the graph)
 \end{tabbing}
 \caption{Integer linear program with fusion-preventing path optimisation}
 \label{fig:clustering:ilp-fpo}

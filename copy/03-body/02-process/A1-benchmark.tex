@@ -56,11 +56,11 @@ priceAnalysesStreaming (fpStock,fpMarket) = do
   return (pot,pom)
 
 priceOverTime stock
- = Fold.purely S.fold covariance
+ = Fold.purely S.fold Stats.regressionCorrelation
  $ S.map (\s -> (daysSinceEpoch (time s), cost s)) stock
 
 priceOverMarket stock market
- = Fold.purely S.fold covariance
+ = Fold.purely S.fold Stats.regressionCorrelation
  $ S.map (\(s,m) -> (cost s, cost m))
  $ joinBy (\s m -> time s `compare` time m)
    stock market
@@ -145,17 +145,7 @@ filterMaxHand l ps
            False -> go mv (ix + 1) writeIx x2 y2 d2
 \end{lstlisting}
 
-\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxVectorShare,caption=Vector / share implementation of \Hs/filterMax/]
-filterMaxVectorShare l ps
- = let annot = Unbox.map (\p -> (p, distance p l)) ps
-       point = fst
-             $ Unbox.maximumBy (compare `on` snd) annot
-       above = Unbox.map fst
-             $ Unbox.filter ((>0) . snd) annot
-   in return (point, above)
-\end{lstlisting}
-
-\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxVectorRecompute,caption=Vector / recompute implementation of \Hs/filterMax/]
+\begin{lstlisting}[float=ht,label=l:a:bench:filterMaxVectorRecompute,caption=Vector recomputed distances implementation of \Hs/filterMax/]
 filterMaxVectorRecompute l ps
  = let annot1 = Unbox.map (\p -> (p, distance p l)) ps
        point  = fst

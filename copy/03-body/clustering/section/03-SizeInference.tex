@@ -83,7 +83,7 @@ filterLeft xs
 \end{haskell}
 
 The size scheme of \Hs@filterLeft@ shows that it works for input arrays of all sizes.
-The first result array has the same size as the input, and the second has some unrelated and unknown size.
+The first result array has the same size as the input, and the second has some statically unknown size.
 
 Finally, note that size schemes form only one aspect of the type information that would be expressible in a full dependently typed language.
 For example, in Coq or Agda we could write something like:
@@ -101,7 +101,9 @@ In our situation, we need automatic type generalization, but for a first-order l
 \subsection{Constraint generation}
 The rules for constraint generation are shown in \cref{clustering:f:ConstraintGeneration}.
 The first judgment form is written as ($\SizeL{\Gamma_1}{\textit{lets}}{\Gamma_2}{C}$) and reads: ``under environment $\Gamma_1$, the bindings in $\textit{lets}$ produce the result environment $\Gamma_2$ and size constraints $C$''.
-The judgment form ($\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$) performs constraint generation for a single binding and reads: ``under environment~$\Gamma_1$, array variable $zs$ binds the result of $b$, producing a result environment $\Gamma_2$ and size constraints $C$''.
+
+\pagebreak
+The second judgment form ($\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$) performs constraint generation for a single binding and reads: ``under environment~$\Gamma_1$, array or scalar variable $zs$ binds the result of combinator application $b$, producing a result environment $\Gamma_2$ and size constraints $C$''.
 The environment ($\Gamma$) has the following grammar:
 $$
 \Gamma~ @::=@ ~~\cdot ~~|~~ \Gamma,~ \Gamma ~~|~~ zs : k ~~|~~ k ~~|~~ \exists k
@@ -392,20 +394,6 @@ As in prior work, operators with the same iteration size can be fused.
 However, in prior work, operators with different iteration size cannot be assigned to the same cluster, as imperative loop fusion systems cannot generally fuse loops of different iteration sizes.
 In our system, we also allow operators of different iteration sizes to be fused, provided those sizes are descendants of the same parent size.
 
-We use $T$ to range over iteration sizes, and write $\bot$ for the case where the iteration size is unknown. The $\bot$ size is needed to handle the \Hs@external@ operator, as we cannot statically infer its true iteration size, and it cannot be fused with any other operator.
-
-\begin{tabbing}
-MMMMMMMM \= MM       \= MM \= MMMM \= \kill
-\textbf{Iteration Size}
- \> $T$         \> @::=@  \> $\tau$        \> (known size) \\
- \>             \> $~|$   \> $\bot$     \> (unknown size) \\
-\end{tabbing}
-
-Once the size constraints have been solved, we can use the $\iiter$ function in \cref{fig:clustering:iter} to compute the iteration size of each binding.
-In the definition, we use the syntax $\Gamma(xs)$ to find the ($xs : k$) element in the environment $\Gamma$ and return the associated size $k$.
-Similarly, we use the syntax $C(k)$ to find the corresponding ($k = \tau$) constraint in $C$ and return the associated size type $\tau$.
-
-
 \begin{figure}
 \begin{tabbing}
 MMMMM \= M \= MMMMMMMMMM \= MM \= \kill
@@ -439,6 +427,20 @@ $\iiter_{\Gamma,C}$
 \end{figure}
 
 
+We use $T$ to range over iteration sizes, and write $\bot$ for the case where the iteration size is unknown. The $\bot$ size is needed to handle the \Hs@external@ operator, as we cannot statically infer its true iteration size, and it cannot be fused with any other operator.
+
+\begin{tabbing}
+MMMMMMMM \= MM       \= MM \= MMMM \= \kill
+\textbf{Iteration Size}
+ \> $T$         \> @::=@  \> $\tau$        \> (known size) \\
+ \>             \> $~|$   \> $\bot$     \> (unknown size) \\
+\end{tabbing}
+
+Once the size constraints have been solved, we can use the $\iiter$ function in \cref{fig:clustering:iter} to compute the iteration size of each binding.
+In the definition, we use the syntax $\Gamma(xs)$ to find the ($xs : k$) element in the environment $\Gamma$ and return the associated size $k$.
+Similarly, we use the syntax $C(k)$ to find the corresponding ($k = \tau$) constraint in $C$ and return the associated size type $\tau$.
+
+
 % Once the constraints are solved, known to be valid, and sorted into equivalence classes, each combinator is assigned a size. Note that for a filter, the size of the output array $k_o$ is some existential that is less than or equal to $k_n$, but the actual loop size of the \emph{combinator} is equal to $k_n$. This is because, in order to produce the filtered output, all elements of the input $n$ must be considered.
 
 % After the generated equality constraints are solved, and sizes are grouped into equivalence classes, combinators with iteration sizes in the same equivalence class may be fused together if there are no fusion-preventing dependencies between them.
@@ -449,21 +451,6 @@ $\iiter_{\Gamma,C}$
 \label{clustering/size/transducers}
 %     we've said that several times before
 % Unlike previous work, we do allow combinators with different iteration sizes to be fused together. For example, an operation on filtered data may be fused with the filter operation that generates the data, even though the iteration sizes are different.
-
-We define the concept of \emph{transducers} as combinators having a different output size to their iteration size.
-As with any other combinator, a transducer may fuse with other combinators of the same iteration size, but transducers may also fuse with combinators having iteration size the same as the transducer's output size.
-For our set of combinators, the only transducer is \Hs@filter@.
-
-Looking back at the \Hs@normalize2@ example, the iteration sizes of the filter over \Hs/xs/, which produces the array \Hs/gts/, and the fold over \Hs/xs/, which produces the scalar \Hs/sum1/, are both $k_{xs}$.
-The iteration size of the fold over \Hs/gts/, which produces the scalar \Hs@sum2@, is $k_{gts}$, and the filter combinator which produces \Hs@gts@ is a transducer from $k_{xs}$ to $k_{gts}$. 
-Even though $k_{gts}$ is distinct from $k_{xs}$, the three combinators which produce \Hs@gts@, \Hs@sum1@ and \Hs@sum2@ can all be fused together.
-% The two nodes \Hs@sum2@ and \Hs@gts@ can be fused together, since the output size of \Hs@gts@ is the iteration size of \Hs@sum2@.
-% Similarly, \Hs@sum1@ and \Hs@gts@ can be fused together, as they have the same iteration size.
-
-\Cref{fig:clustering:trans} defines a function $\trans$, to find the parent transducer of a combinator application.
-Since each name is bound to at most one combinator, we abuse terminology here slightly and write \emph{combinator $n$} when refering to the combinator occuring in the binding of the name $n$.
-The parent transducer $\trans(bs, n)$ of a combinator $n$ has the same output size as $n$'s iteration size, but the two have different iteration sizes.
-Although the input program's dependency graph forms a directed acyclic graph, the relationship between the combinators in the graph and each combinator's respective parent transducer, if it has one, forms a forest.
 
 \begin{figure}
 \begin{tabbing}
@@ -485,6 +472,20 @@ $\trans'(bs,o)$    \\
 \caption{Finding the parent transducers of a combinator}
 \label{fig:clustering:trans}
 \end{figure}
+
+We define the concept of \emph{transducers} as combinators having a different output size to their iteration size.
+As with any other combinator, a transducer may fuse with other combinators of the same iteration size, but transducers may also fuse with combinators having iteration size the same as the transducer's output size.
+For our set of combinators, the only transducer is \Hs@filter@.
+
+Looking back at the \Hs@normalize2@ example, most combinators consume the input array \Hs/xs/, and so have an iteration size of $k_{xs}$.
+The filter that consumes the \Hs/xs/ array and produces the differently-sized \Hs/gts/ array is a transducer from $k_{xs}$ to $k_{gts}$.
+The fold that consumes the output of the filter has an iteration size of $k_{gts}$.
+This fold can be fused with its parent transducer, the filter combinator, despite the two having different iteration sizes.
+
+\Cref{fig:clustering:trans} defines a function $\trans$, to find the parent transducer of a combinator application.
+Since each name is bound to at most one combinator, we abuse terminology here slightly and write \emph{combinator $n$} when refering to the combinator occuring in the binding of the name $n$.
+The parent transducer $\trans(bs, n)$ of a combinator $n$ has the same output size as $n$'s iteration size, but the two have different iteration sizes.
+Although the input program's dependency graph forms a directed acyclic graph, the relationship between the combinators in the graph and each combinator's respective parent transducer, if it has one, forms a forest.
 
 With the $\trans$ function, we can express the restriction on programs we view as valid for clustering as the following:
 
@@ -602,6 +603,7 @@ We use the ancestor transducers to determine whether two combinators of differen
 The unfused imperative version, shown in \cref{figs/clustering/sumPartition-c}, performs each operation as a separate loop.
 The last two loops compute the sums.
 If we look at these two loops in isolation, the relationship between the two loop iteration sizes \Hs/ys_length/ and \Hs/zs_length/ is unknown, and it is not possible to fuse the two loops together without introducing excessively complicated control-flow.
+
 The relationship between the two loop iteration sizes becomes clear when we consider each sum's parent transducer, which for the \Hs/y/ sum is the filter that produces \Hs/ys/, and for the \Hs/z/ sum is the filter that produces \Hs/zs/.
 \Cref{figs/clustering/sumPartition-c-part} shows a partially fused imperative version, where each sum is fused with its parent transducer.
 In this partially fused version, the two sums are still computed in separate loops, but both loops use the same iteration size.
@@ -667,9 +669,9 @@ In the field of biological systematics, the term \emph{concestor} is defined as 
 In the definition of the $\concestors$ function, we use the syntax $(name \times name)_\bot$ to denote an optional pair of names.
 Two combinators $a$ and $b$ of different iteration size may be fused together only if they have compatible concestors $(c, d) \in \concestors(a,b)$, and the combinators and their compatible concestors are also fused together.
 That is, in order for $a$ and $b$ to be fused together, $c$ and $d$ must be fused, $a$ and $c$ must be fused, and $d$ and $b$ must be fused.
-If the two combinators have the same iteration size, the two compatible concestors will be the combinators themselves, and the above requirements for fusing different sized combinators are trivially satisfied, since a combinator is always fused with itself.
+If the two combinators $a$ and $b$ have the same iteration size, then the two compatible concestors will be the combinators themselves, and the above requirements for fusing different sized combinators are trivially satisfied, since a combinator is always fused with itself.
 
-The definition of $\concestors'$ returns the pair of compatible concestors as well as the distance, determined by counting how many other ancestor transducers there are between the combinator and the compatible concestors.
+Still in \cref{fig:clustering:concestors}, the definition of $\concestors'$ returns the pair of compatible concestors as well as the distance, determined by counting how many other ancestor transducers there are between the combinator and the compatible concestors.
 The $\mi{closest}$ function compares the distances of two pairs of compatible concestors and chooses the closest pair.
 The $\mi{increment}$ function increases the distance by one.
 
@@ -691,6 +693,12 @@ Because fusing the combinators with any pair of compatible common ancestors requ
 % To fuse a combinator with a particular ancestor, we must also fuse the combinator with all the nodes in the path between the combinator and its ancestor.
 % In the definition of $\concestors$, we find the closest ancestors because it allows the most fusion; finding the furthest ancestors would be more restrictive, as it would also require fusing the inputs with any other ancestor transducers between the input combinators and the furthest ancestors.
 
+The \Hs/normalize2/ example from earlier is repeated in \cref{figs/clustering/normalize2-sizeinf}.
+In this example, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
+The two folds have different iteration sizes, and their compatible concestors are $\concestors(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
+The compatible concestors \Hs/sum1/ and \Hs/gts/ both consume the input \Hs/xs/ and have the same iteration size.
+In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, we require that: \Hs@sum1@ and \Hs@gts@ are fused together; \Hs@sum1@ and \Hs@sum1@ are fused together, which is trivial as fusion is reflexive;  and \Hs@gts@ and \Hs@sum2@ are fused together.
+
 \begin{haskell}[float,label=figs/clustering/normalize2-sizeinf,caption=Normalize2 function]
 normalize2 :: Array Int -> (Array Int, Array Int)
 normalize2 xs
@@ -702,8 +710,3 @@ normalize2 xs
    in (ys1, ys2)
 \end{haskell}
 
-The \Hs/normalize2/ example from earlier is repeated in \cref{figs/clustering/normalize2-sizeinf}.
-In this example, \Hs@sum1@ consumes the input \Hs/xs/, while \Hs@sum2@ consumes the output of the filter \Hs/gts/, which in turn consumes the input \Hs/xs/.
-The two folds have different iteration sizes, and their compatible concestors are $\concestors(\Hs@sum1@, \Hs@sum2@) = (\Hs@sum1@, \Hs@gts@)$.
-The compatible concestors \Hs/sum1/ and \Hs/gts/ both consume the input \Hs/xs/ and have the same iteration size.
-In order for \Hs@sum1@ and \Hs@sum2@ to be fused together, we require that: \Hs@sum1@ and \Hs@gts@ are fused together; \Hs@sum1@ and \Hs@sum1@ are fused together, which is trivial as fusion is reflexive;  and \Hs@gts@ and \Hs@sum2@ are fused together.

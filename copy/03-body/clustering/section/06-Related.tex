@@ -18,7 +18,7 @@ Greedy and heuristic approaches that operate on lists of bindings rather than th
 In these cases, reordering bindings can produce a different clustering, leading to unpredictable runtime performance.
 
 \citet{darte1999complexity} formalizes the algorithmic complexity of various loop fusion problems and shows that globally minimizing most useful cost metrics is NP-complete.
-Our ILP formulation itself is NP-hard, though in practice we have not yet found this to be a problem.
+Our ILP formulation itself is NP-hard, though in practice we have not yet found this to be a problem when using the CPLEX commercial solver \citep{cplex}.
 
 Recent literature on array fusion for imperative languages largely focuses on the polyhedral model.
 The polyhedral model is an algebraic representation imperative loop nests and transformations on them, including fusion transformations.

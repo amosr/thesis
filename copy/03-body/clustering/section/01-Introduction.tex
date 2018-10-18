@@ -34,7 +34,7 @@ The \Hs@normalize2@ function computes two sums: one of all the elements of \Hs@x
 The two maps then divide each element in the input \Hs@xs@ by \Hs/sum1/ and \Hs/sum2/, respectively.
 Since we need to fully evalute the sums before we can start to execute either map, we need at least two separate passes over the input.
 These folds are examples of \emph{fusion-preventing dependencies}, as the fold operator must consume its entire input stream before it can produce its result, and this result is needed before the next stream operation can begin.
-A fusion-preventing dependency between two combinators means that the two combinators must be assigned to different clusters.
+A fusion-preventing dependency between two array combinators means that the two combinators must be assigned to different clusters.
 
 \Cref{clustering:f:normalize2-clusterings} shows three cluster diagrams for \Hs@normalize2@, with each clustering produced by a different clustering algorithm.
 A cluster diagram is an extended version of the dependency graphs we have already seen; we explain the details in \cref{clustering:s:CombinatorNormalForm}.
@@ -57,7 +57,7 @@ To obtain this clustering, we first implemented each combinator as a separate im
 Imperative clustering algorithms, such as \citet{megiddo1998optimal}, only cluster together loops of the same iteration size.
 % The loop that performs the filter operation consumes the array \Hs/xs/, which has size \Hs/xs_length/, and produces the array \Hs/gts/, which has size \Hs/gts_length/.
 In the imperative code, the loop that performs the fold over \Hs/gts/ has an iteration size of \Hs/gts_length/, while all the other loops have an iteration size of \Hs/xs_length/.
-The final value of \Hs/gts_length/ is not known until the loop that performs the filter completes, so there is a fusion-preventing dependency between the loop that performs the filter and the loop that performs the fold over \Hs/gts/, as well as having different iteration sizes.
+The final value of \Hs/gts_length/ is not known until the loop that performs the filter completes, so the imperative program has an additional fusion-preventing dependency between the loop that performs the filter and the loop that performs the fold over \Hs/gts/, as well as the two loops having different iteration sizes.
 The low-level imperative details obscure the high-level meaning of the program, and complicate fusing the filter operation with the subsequent fold.
 % The imperative clustering combines the \Hs@sum1@ fold and \Hs@gts@ filter into one loop, as well as combining the two map operations.
 % The imperative clustering combines the \Hs@sum1@ fold and \Hs@gts@ filter into one loop, as well as combining the two map operations.

@@ -10,7 +10,7 @@ These queries were written back-to-front and the input stream must be manually d
 In \cref{part:icicle} we introduced \emph{Icicle}, an alternate presentation of push streams, using modal types to ensure that all queries over a single shared input table can be fused together and executed in a single pass.
 Here, values from the input stream can be shared among multiple consumers without explicitly duplicating the stream.
 
-In \cref{taxonomy/polarised} we saw \emph{polarised streams}, which are a careful combination of push streams and pull streams, that can be used execute multiple queries concurrently.
+In \cref{taxonomy/polarised} we saw \emph{polarised streams}, which are a careful combination of push streams and pull streams that can be used execute multiple queries concurrently.
 Writing a group of queries as polarised streams requires putting all the queries together in a single dataflow graph, then performing a manual polarity analysis on the graph, so that push or pull polarities can be assigned to each edge of the dataflow graph.
 
 In \cref{chapter:process:processes} we introduced \emph{process fusion}, where a Kahn process network is used to execute multiple queries; the processes are then fused together so the queries can be executed as a single process, without communication overhead.
@@ -29,18 +29,18 @@ When the input data to the queries fits in memory as an array, we can perform mu
 Our clustering algorithm finds a schedule that minimises the number of array reads and writes, the number of intermediate arrays, and the number of loops.
 It improves on prior work by supporting size-changing operations, such as \Hs/filter/, allowing them to be fused with their consumers as well as their producers.
 
-These methods are applicable in different situations, depending on the storage requirements of the dataset, and the kinds of queries to be executed.
+The methods we have introduced are applicable in different situations, depending on the storage requirements of the dataset, and the kinds of queries to be executed.
 However, all methods are designed to reduce program runtime by minimising streaming and iteration overhead.
 If we wish to reduce runtime as much as possible, we cannot consider each query in isolation.
 We must instead consider the queries as a whole, and perform global optimisations: Icicle's intermediate representation enables common subexpression elimination across queries, process fusion coordinates a producer with all consumers, and clustering converts the entire dependency graph to an integer linear program.
 In contrast, shortcut fusion techniques such as stream fusion \citep{coutts2007stream} rely on local rewrites, and cannot take into account the surrounding context of the program.
-If we want to fuse a whole set of queries, we usually need to look at the whole set of queries, and transform them as a graph, rather than performing local transformations on the abstract syntax tree.
+% If we want to fuse a whole set of queries, we need to look at the whole set of queries and transform them together, rather than performing purely local transformations.
 
 \section{Future work}
 \label{related/future}
 
 We now take a brief look at the limitations and possible extensions of our work.
-We focus on more conceptual extensions to process fusion here; extensions to clustering to support more combinators are mentioned in \cref{clustering:s:FutureWork}.
+We focus on more conceptual extensions to process fusion here; some extensions to clustering to support more combinators were discussed in \cref{clustering:s:FutureWork}.
 
 \subsection{Network fusion order and non-determinism}
 
@@ -51,7 +51,7 @@ These properties would allow us to apply fusion in any order, knowing that all o
 The fusion algorithm is not commutative because when two processes are trying to execute instructions which could occur in either order, the algorithm must choose only one instruction.
 The fusion algorithm applies some heuristics to decide which instruction to execute first, but when evaluating the processes as a process network, the choice is non-deterministic.
 Fusion commits too early to a particular interleaving of the instructions from each process, when there are many possible interleavings that would work.
-By explicitly introducing non-determinism in the fused process, we could represent all possible interleavings, and do not have to commit to one too early.
+By explicitly introducing non-determinism in the fused process, we could represent all possible interleavings, and would not have to commit to one too early.
 We want to stop the fusion algorithm from committing to a scheduling decision too early, and allow the result process to represent all possible schedules.
 
 Reifying the non-determinism in the processes will mean that all fusion orders produce the same process at the end.

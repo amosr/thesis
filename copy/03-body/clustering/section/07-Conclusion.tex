@@ -23,15 +23,15 @@ These could be implemented with an existential output size similar to the size i
 The \Hs@tail@ combinator, which discards the first element, could be implemented with an existential output size as with (\Hs@drop 1@), or perhaps by adding a new size type to denote `decrementing' a size type.
 
 Implementing \Hs@append@ would likely involve adding a new size type for appending two size types together, similar to the result size of the \Hs@cross@ combinator.
-Although the result size of appending two concrete input arrays is commutative, the loops that generate the two halves of the output cannot generally be interchanged.
+Although the result size of appending two concrete input arrays is commutative, the loops that generate the two halves of the output cannot usually be interchanged.
 The size type for appending two inputs therefore should not be commutative.
-As we saw in \cref{ss:Fusing:a:network}, process fusion can fuse appends with one shared input and two different inputs into a single process.
+As we saw in \cref{ss:Fusing:a:network} in the \Hs/append2zip/ example, process fusion can fuse two append processes with one shared input and two different inputs into a single process.
 To support this clustering, the definition of transducers would have to be modified to allow fusion between nodes with the same size type as one of the inputs and nodes with the same size as the output.
 % It may be possible to extend the definition of transducers to allow such clusterings by requiring only one half of the append size type to be equal.
-It may be simpler to implement \Hs@append@ by introducing an existential size type for both the iteration size and the output size; however, introducing an existential for the output size hides the fact that appending two size types is an injection.
+It may be simpler to implement \Hs@append@ by introducing an existential size type for both the iteration size and the output size; however, introducing an existential for the output size hides the fact that appending two size types is an injection, and may rule out some valid clusterings.
 % would allow consumers of the output array to be fused with the \Hs@append@, but \Hs@append@ would not be able to fuse with either of its input producers, as they .
 
-The \Hs@length@ combinator is unique, as it does not require the array to be manifest, but does require some array with the same rate to be manifest.
+The \Hs@length@ combinator is unique, as it does not require the input array to be manifest, but does require some array with the same rate to be manifest.
 For example, finding the length of the output of a filter can only be done after the filter is computed, while finding the length of the output of a map can often be done before the map is computed.
 Once \Hs@length@ is implemented, functions such as \Hs@reverse@ can be implemented as a \Hs@generate@ followed by a \Hs@gather@.
 

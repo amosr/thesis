@@ -2,11 +2,12 @@
 \label{introduction}
 To learn interesting things from a large dataset, we generally want to perform lots of queries.
 When each query is simple and our data is big, we might spend more time reading the data than we spend computing the answer.
-Instead of performing each query separately, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
+Instead of performing each query separately and having to re-read the same data many times, we would like to amortise the cost of reading the data by performing multiple queries at the same time.
 
 When querying datasets that do not fit in memory or disk, it can be hard to ensure that our query program's internal state will fit in memory.
 One way to transform large datasets in constant memory is to write the query as a \emph{streaming program} (\cref{taxonomy}) by composing stream transformers together.
 Composing stream transformers naively can introduce some performance overhead, which is then usually removed by \emph{fusing} multiple transformers into a single transformer.
+After fusion, stream transformers can also be used as an efficient and convenient method for executing list and array programs \citep{coutts2007stream}.
 
 This thesis describes low-overhead streaming models for executing multiple queries at a time.
 We focus on two streaming models: push streams (\cref{taxonomy/push}), and Kahn process networks (\cref{taxonomy/kpn}, \cref{chapter:process:processes}).
@@ -77,7 +78,7 @@ This thesis makes the following contributions:
 \begin{description}
 \item[Modal types to ensure efficiency and correctness:]
 if, due to time or cost constraints, we can only afford one pass over the input data, we need some guarantee that all our queries can be executed together.
-The streaming query language Icicle uses modal types to ensure all queries over the same input can be executed together in a single pass, as well as ensuring that the stream query has the same semantics as if it were operating over arrays.
+The streaming query language Icicle uses modal types to ensure that all queries over the same input can be executed together in a single pass, as well as ensuring that the stream query has the same semantics as if it were operating over arrays.
 Icicle is described in \cref{part:icicle}.
 
 % Pure compute:
@@ -105,7 +106,7 @@ The clustering algorithm is described in \cref{clustering}.
 
 \end{description}
 
-Before delving into these contributions, the next chapter introduces some background on different streaming models, as well as more concretely motivating why we want to execute multiple streaming queries concurrently.
+The next chapter introduces some background on different streaming models, as well as more concretely motivating why we want to execute multiple streaming queries concurrently.
 
 % \subsection{Extension of clustering algorithm to filters}
 %   \REF{clustering}:

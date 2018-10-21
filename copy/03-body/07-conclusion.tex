@@ -1,7 +1,7 @@
 \chapter{Conclusion}
 \label{conclusion}
 
-This final chapter discusses some directions for future work before concluding the thesis.
+This chapter discusses some directions for future work before concluding the thesis.
 This thesis has presented five different ways to execute multiple queries concurrently, each with a different set of trade-offs.
 
 In \cref{taxonomy/push} we saw how \emph{push streams} can be used to execute multiple queries, so long as the queries all operate over the same input.
@@ -22,18 +22,19 @@ In \cref{s:Proofs} we gave an overview of the \emph{mechanised proof of soundnes
 
 In \cref{s:Benchmarks} we evaluated the runtime performance of process fusion and saw that the fused program was always at least two times faster than the compared streaming implementations, and usually between one and a half to two times faster than the compared array fusion implementation.
 
-In \cref{related} we compared process fusion with related work on fusion, streams and dataflow languages.
+In \cref{related} we compared process fusion with related work on fusion for streaming models and dataflow languages.
 
 Finally, in \cref{clustering} we introduced \emph{clustering for array programs}, a scheduling algorithm for executing array programs in as few passes as possible.
 When the input data to the queries fits in memory as an array, we can perform multiple passes over the input data.
 Our clustering algorithm finds a schedule that minimises the number of array reads and writes, the number of intermediate arrays, and the number of loops.
-It improves on prior work by supporting size-changing operations, such as \Hs/filter/, allowing them to be fused with their consumers as well as their producers.
+It improves on prior work by supporting size-changing operations, such as \Hs/filter/, which can be assigned to the same cluster as operations that process the filtered output array, as well as being able to be assigned to the same cluster as operations that process the input array.
 
 The methods we have introduced are applicable in different situations, depending on the storage requirements of the dataset, and the kinds of queries to be executed.
 However, all methods are designed to reduce program runtime by minimising streaming and iteration overhead.
 If we wish to reduce runtime as much as possible, we cannot consider each query in isolation.
-We must instead consider the queries as a whole, and perform global optimisations: Icicle's intermediate representation enables common subexpression elimination across queries, process fusion coordinates a producer with all consumers, and clustering converts the entire dependency graph to an integer linear program.
-In contrast, shortcut fusion techniques such as stream fusion \citep{coutts2007stream} rely on local rewrites, and cannot take into account the surrounding context of the program.
+We must instead consider the queries as a whole, and perform inter-query optimisations: Icicle's intermediate representation enables common subexpression elimination across queries, process fusion can fuse a producer with consumers from all queries, and clustering converts the dependency graph of all queries to an integer linear program.
+If we treat the group of queries as a single streaming or array program, then this inter-query optimisation corresponds to performing \emph{context-aware optimisations}, as opposed to the purely local transformations of shortcut fusion \citep{gill1993short}.
+% In contrast, shortcut fusion techniques such as stream fusion \citep{coutts2007stream} rely on local rewrites, and cannot take into account the surrounding context of the program.
 % If we want to fuse a whole set of queries, we need to look at the whole set of queries and transform them together, rather than performing purely local transformations.
 
 \section{Future work}
@@ -97,9 +98,25 @@ After fusing all the processes together, simplifying the result process, and rem
 
 \section{Conclusion}
 
-If, in the future of computing, interest in \emph{big data} does not wane, and datasets continue to grow faster than hard drives or memory, then the concurrent execution of streaming queries will only become more important.
-Efficient execution of concurrent queries has the obvious benefit of providing more immediate answers, while also improving energy efficiency.
-In Australia, where a large majority of our power is supplied by burning coal, we have a moral obligation to use power responsibly, as well as to use power from renewable sources where possible.
-Hopefully, the techniques presented in this thesis can help in a small way to reduce the overall energy consumption for querying large datasets.
+The techniques presented in this thesis have real, practical applications.
+If datasets continue to grow faster than memory and hard drives, then the concurrent execution of streaming queries will only become more important.
+In the production use of Icicle, some of our datasets are large enough that the data must be distributed across many computers.
+For these distributed datasets, the time required to read the data prohibits us from performing each query as a separate pass.
+Being able to perform multiple concurrent queries in a single pass allows us to perform more sophisticated analyses, and in turn make more valuable inferences.
+
+Efficient execution of concurrent queries --- both streaming and array --- has the obvious benefit of providing more immediate answers, while also requiring less power.
+For distributed workloads, efficient execution means that fewer computers are required to compute the answers in a reasonable amount of time, which directly influences the cost of computing.
+
+
+% 
+% The term \emph{big data} may 
+% As datasets continue to grow,
+% 
+% If, in the future of computing, interest in \emph{big data} does not wane, and datasets continue to grow faster than hard drives or memory, then the concurrent execution of streaming queries will only become more important.
+% Efficient execution of concurrent queries has the obvious benefit of providing more immediate answers, while also requiring less energy.
+% For distributed systems
+
+% In Australia, where a large majority of our power is supplied by burning coal, we have a moral obligation to use power responsibly, as well as to use power from renewable sources where possible.
+% Hopefully, the techniques presented in this thesis can help in a small way to reduce the overall energy consumption required to query large datasets.
 
 

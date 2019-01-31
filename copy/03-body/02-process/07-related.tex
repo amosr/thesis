@@ -169,7 +169,7 @@ We discussed the relationship between synchronous languages and Icicle earlier, 
 \label{related/synchronous-dataflow}
 
 Synchronous dataflow (not to be confused with synchronous languages above) is a dataflow graph model of computation where each dataflow actor has constant, statically known input and output rates.
-The main advantage of synchronous dataflow is that it is simple enough for static scheduling to be decidable, but this comes at a cost of expressivity.
+The main advantage of synchronous dataflow is that it is simple enough for static scheduling to be decidable, but this simplicity comes at a cost of expressivity.
 StreamIt~\cite{thies2002streamit} uses synchronous dataflow for scheduling when possible, otherwise falling back to dynamic scheduling~\cite{soule2013dynamic}.
 Boolean dataflow and integer dataflow~\cite{buck1993scheduling,buck1994static} extend synchronous dataflow with boolean and integer valued control ports, and attempt to recover the structure of ifs and loops from select and switch actors.
 These systems allow some dynamic structures to be scheduled statically, but are very rigid and only support limited control flow structures: it is unclear how streaming @join@ or @append@ could be scheduled by this system.
@@ -180,6 +180,12 @@ For example, a filter is represented with two nodes in the FSM.
 The dataflow graph for the initial state executes the predicate, and the value of the predicate is used to determine which transition the FSM takes: either the predicate is false and the FSM stays where it is, or the predicate is true and moves to the next state.
 The dataflow graph for the next state emits the value, and moves back to the first state.
 FSM-SADF does appear to be able to express value-dependent operations such as @join@, but lacks the composability --- and familiarity --- of combinators.
+
+Marked graphs, which are a restricted form of Petri nets, are related to synchronised dataflow \citep{johnsonbaugh1982petri}.
+Petri nets are directed graphs where the nodes are classified as either a \emph{place}, which acts as a buffer for storing values, or a \emph{transition}, which transfers values from the transition's input places to their output places.
+Each transition can have any number of input places and any number of output places, and a transition can execute when all input places have stored values.
+In general Petri nets, each place can have any number of input transitions and any number of output transitions; in marked graphs, places are restricted to have exactly one input and one output.
+Marked graphs are equivalent to homogenous synchronised dataflow, where each node has an input and output rate of one \citep{bouakaz2013real}; as such, marked graphs cannot express data-dependent operations such as \Hs/filter/, \Hs/append/ and \Hs/join/.
 
 % StreamIt:
 % Only allows limited splits and joins: round robin and duplication for splits, round robin and combination for joins. 

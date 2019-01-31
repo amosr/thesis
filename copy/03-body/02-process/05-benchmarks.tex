@@ -359,6 +359,7 @@ Streaming &         &  4.4s & 2,095\% & 3.0e10& 2,500\% \\
 \end{table}
 
 \Cref{table:bench:quickhull} shows the runtimes for Quickhull over $10^7$ points, which corresponds to around 150MB in memory.
+We present the benchmark results as a table rather than a graph, as a graph would obscure the comparatively small differences between the hand-fused, Vector and Folderol versions.
 The hand-fused version is the fastest, followed by Folderol.
 The Folderol version performs a single loop, but the generated code stores the result vector as a boxed object, and reboxes the vector for every write to the vector.
 Our code generation generates Haskell source code and relies on the Glasgow Haskell Compiler's constructor specialisation optimisation \citep{peyton2007call} to unbox loop variables.
@@ -801,6 +802,7 @@ By giving a compile-time warning when fusion fails, we are able to maintain a hi
 
 % -----------------------------------------------------------------------------
 \section{Result size}
+\label{s:Benchmarks:ResultSize}
 % \TODO{Update with Folderol sizes}
 
 As with any practical fusion system, we must be careful that the size of the result code does not become too large when more and more processes are fused together.
@@ -829,6 +831,25 @@ The fusion algorithm would be modified to inline the definition of a subroutine 
 When coordination is not required, the subroutine can be called as-is.
 Currently, all instructions are continuation-passing-style and the processes do not require a call-stack.
 To ensure subroutines can be executed with a statically bounded call-stack, subroutines must be non-recursive, but it may be possible to allow subroutines to perform loops and call other subroutines so long as there is no mutual recursion.
+
+Other compilation methods based on the product of finite automata, such as those used by the synchronous language Esterel \citep{berry2000foundations}, have faced similar problems related to exponential blowup of program size.
+Exponential blowup is more common in Esterel, where a program reading from two input channels can observe the order that the two inputs may arrive.
+Because an Esterel program can, in general, act differently depending on the order that two inputs arrive, all different possible orders must be preserved in the product of two programs.
+In contrast, a process in a Kahn process network cannot observe the order in which inputs arrive, which allows our fusion algorithm the freedom to choose a particular interleaving without affecting the meaning of the fused process, thus resulting in a smaller process.
+As we saw earlier in \cref{s:Optimisation} however, heuristically choosing a particular interleaving can cause fusion to succeed for a pair of processes, but fail for a larger network when the chosen interleaving requires more than a single element buffer in the larger context.
+There is a trade-off between faithfully representing all possible interleavings and minimising the size of the result process.
+In future work, it may be possible to characterise a subset of non-determinism that can safely be removed by choosing a particular interleaving, without affecting the buffer requirements of a program.
+
+As we have contrasted between synchronous languages and Kahn process networks, it is important to note that although there exists a Kahn network embedding for programs written in synchronous languages \citep{caspi1996synchronous}, this embedding encodes the absence of messages for a given clock cycle by sending a message with an explicit `empty' value.
+These explicit empty messages allow the processes to observe the absence of messages in a particular clock cycle, and therefore the order of messages across different clock cycles.
+
+In Esterel, one way the problem of exponential blowup was addressed was by compiling Esterel programs to synchronous dataflow circuits \citep{berry1992hardware}.
+In the compilation to circuits, the state of the finite state machine is encoded as values in the circuits, rather than control flow.
+This method of representing the state as values may be applicable here, but making the program state dynamic may also reduce static reasoning about the boundedness of buffers.
+
+Another method in which Esterel addressed the exponential blowup problem was by splitting the program into multiple smaller automata \citep{berry1992esterel}.
+We already perform a similar `splitting' when fusion fails, by falling back to dynamic scheduling of the partially fused processes with unbounded buffers, and we could also limit fusion to only processes below a certain size threshold.
+
 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.

@@ -176,8 +176,8 @@ We can compute the comparison of stock price over market index price with the fo
 \begin{haskell}
 priceOverMarket :: [Record] -> [Record] -> (Line, Double)
 priceOverMarket stock index =
-  let joined = join (\s i   -> time s `compare` time i) stock index
-      prices = map  (\(s,i) -> (price s, price i))      joined
+  let joined = join (\s i   -> compare (time s) (time i)) stock index
+      prices = map  (\(s,i) -> (price s, price i))        joined
   in (regression prices, correlation prices)
 \end{haskell}
 
@@ -369,8 +369,8 @@ We can use the same function \Hs/regressionCorrelation_pull/ that we used above,
 \begin{haskell}
 priceOverMarket_pull :: Pull Record -> Pull Record -> (Line, Double)
 priceOverMarket_pull stock index =
-  let joined = Pull.join (\s i   -> time s `compare` time i) stock index
-  let prices = Pull.map  (\(s,i) -> (price s, price i))      joined
+  let joined = Pull.join (\s i   -> compare (time s) (time i)) stock index
+  let prices = Pull.map  (\(s,i) -> (price s, price i))        joined
   regressionCorrelation_pull prices
 \end{haskell}
 
@@ -478,9 +478,9 @@ filter predicate (Pull pull_a) = Pull pull_a'
     a <- pull_a
     case a of
      Nothing -> return Nothing
-     Just a'
-      | predicate a' -> return (Just a')
-      | otherwise    -> pull_a'
+     Just a' -> if   predicate a'
+                then return (Just a')
+                else pull_a'
 \end{haskell}
 
 % more sophisticated representations of pull streams, such as Stream Fusion~\cite{coutts2007stream}, that can remove this overhead.
@@ -757,10 +757,10 @@ join_iii comparekey (PullResult pull_a) (PullResult pull_b) = PullResult (do
       EQ -> return (Left (a,b))
       LT -> do
         a' <- pull_a
-        go a' b
+        go a' (Left b)
       GT -> do
         b' <- pull_b
-        go a b'
+        go (Left a) b'
   go (Right a) (Right b) = return (Right (a,b))
   go (Left _) (Right b) = do
     a' <- pull_a
@@ -779,9 +779,9 @@ join_ioo comparekey (PullResult pull_a) push_ab = Push push_b done_b
     a <- pull_a
     case a of
      Left a' -> case comparekey a b of
-      EQ     -> push push_ab (a,b)
-      LT     -> push_b b
-      GT     -> return ()
+                 EQ -> push push_ab (a,b)
+                 LT -> push_b b
+                 GT -> return ()
      Right _ -> return () 
   done_b = do
     a <- pull_a
@@ -840,8 +840,8 @@ priceOverTime_o = do
 priceOverMarket_ii :: PullResult Record r -> PullResult Record r'
                    -> IO (Line,(Double,(r,r')))
 priceOverMarket_ii stock index = do
-  let joined  = join_iii (\s i   -> time s `compare` time i) stock index
-  let prices  = map_i    (\(s,i) -> (price s, price i))      joined
+  let joined  = join_iii (\s i   -> compare (time s) (time i)) stock index
+  let prices  = map_i    (\(s,i) -> (price s, price i))        joined
   pom_regres <- regression_o
   let prices' = dup_ioi prices pom_regres
   correlation_i prices'
@@ -1046,8 +1046,8 @@ priceOverTime stock = do
 
 priceOverMarket :: Channel Record -> Channel Record -> Network (Result (Line,Double))
 priceOverMarket stock index = do
-  joined <- join (\s i   -> time s `compare` time i) stock index
-  prices <- map  (\(s,i) -> (price s, price i))      joined
+  joined <- join (\s i   -> compare (time s) (time i)) stock index
+  prices <- map  (\(s,i) -> (price s, price i))        joined
   r      <- regression  prices
   c      <- correlation prices
   return ((,) <$> r <*> c)

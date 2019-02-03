@@ -711,34 +711,165 @@ Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
                   (ss : Streams)         (h   : Heap)
                   (l1 : L1)              (is1 : InputStates)
                   (l2 : L2)              (is2 : InputStates)
-  :  EvalBs (fuse P1 P2) ss h (LX l1 l2 is1 is2)
-  -> EvalOriginal Var1 P1 P2 is1 ss h l1
-  /\ EvalOriginal Var2 P2 P1 is2 ss h l2.
+  :  EvalN (fuse P1 P2) ss h (LX l1 l2 is1 is2)
+  -> EvalNOriginal Var1 P1 P2 is1 ss h l1
+  /\ EvalNOriginal Var2 P2 P1 is2 ss h l2.
 \end{coq}
 
-The @Soundness@ theorem uses @EvalBs@ to evaluate the fused program, and @EvalOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
+The @Soundness@ theorem uses @EvalN@ to evaluate the fused program, and @EvalOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
 The @Streams@ type corresponds to the channel value map used to accumulate stream elements while feeding a process network (\cref{fig:Process:Eval:Feed}), and the @Heap@ type corresponds to the value store used while advancing a single process (\cref{fig:Process:Eval:Shake}).
 
 % Care must be taken to remove stream values that the other process has pulled but this one has not yet.
 %%% AR: Really would like to say something about this but no room to explain properly
 % For shared inputs when one program has pulled, the other program must be evaluated with the other value removed from the end of the stream.
 
-To aid mechanisation, the Coq formalisation has some small differences from the system presented earlier in this chapter.
-Firstly, the Coq formalisation uses a separate \lstiproc@update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
+To aid mechanisation, the Coq formalisation has some differences from the system presented earlier in this chapter.
+Most importantly, the processes in the Coq formalisation operate on infinite streams.
+This simplification means that \Hs@pull@ instructions take only one output label rather than two, and we do not need the \Hs@close@ or \Hs@exit@ instructions.
+The processes on infinite streams can still compute the same result by encoding the end of the stream with a sentinel value; however, the infinite-stream fusion algorithm does not reason about values, and therefore cannot statically determine whether an infinite stream has `finished'.
+The Coq formalisation also uses a separate \Hs@update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
 Performing this desugaring makes the low-level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
-Having a separate \lstiproc@update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
-This difference is fairly minor.
+Having a separate \Hs@update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
+The following datatype defines the available instructions in the formalisation:
+\begin{coq}
+Inductive Instruction : Type :=
+  | Pull    : ScalarV -> ChanV           -> Label -> Instruction
+  | Push    : ChanV   -> (Heap -> Value) -> Label -> Instruction
+  | Drop    : ChanV                      -> Label -> Instruction
+  | Update  : ScalarV -> (Heap -> Value) -> Label -> Instruction
+  | IfZero  : (Heap -> Value)   -> Label -> Label -> Instruction
+  | Jump    :                               Label -> Instruction.
+\end{coq}
 
-Secondly, the formalisation only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process networks.
+In the above inductive definition, the type \Hs@ScalarV@ denotes a scalar variable; \Hs@ChanV@ denotes a channel name to pull from or push to; \Hs@Label@ denotes an output label to transfer control to; \Hs@Heap@ denotes a heap that can be addressed by scalar variables and contains scalar values; and \Hs@Value@ denotes a scalar value, which for formalisation purposes are just natural numbers.
+We represent expressions as functions in the meta-language using the type \Hs@(Heap -> Value)@.
+
+\begin{figure}
+\begin{coq}
+Inductive Eval1 : Streams -> Heap -> Label -> Instruction
+               -> Streams -> Heap -> Label -> Prop :=
+  | EvalPull (ss : Streams) (h : Heap) (l l' : Label)
+             (var : ScalarV) (chan : ChanV) (val : Value)
+     : StreamType chan = Input
+    -> Eval1        ss                           h  l (Pull var chan l')
+            (insert ss chan val) (update var val h) l'
+
+  | EvalPush (ss : Streams) (h : Heap) (l l' : Label) (chan : ChanV) (f : Heap -> Value)
+     : StreamType chan = Output
+    -> Eval1         ss             h l (Push chan f l')
+             (insert ss chan (f h)) h l'
+
+  | EvalDrop (ss : Streams) (h : Heap) (l l' : Label) (chan : ChanV)
+     : StreamType chan = Input
+    -> Eval1 ss h l (Drop chan l')
+             ss h l'
+
+  | EvalUpdate (ss : Streams) (h : Heap) (l l' : Label)
+               (var : ScalarV) (f : Heap -> Value)
+     : Eval1 ss                   h  l (Update var f l')
+             ss (update var (f h) h) l'
+
+  | EvalIfZ (ss : Streams) (h : Heap) (l lz lnz : Label) (f : Heap -> Value)
+     : Eval1 ss h l (IfZero f lz lnz)
+             ss h (if Nat.eqb (f h) 0 then lz else lnz)
+
+  | EvalJump (ss : Streams) (h : Heap) (l l' : Label)
+     : Eval1 ss h l (Jump l')
+             ss h l'
+
+  | EvalIgnore (ss : Streams) (h : Heap) (l l' : Label) (instr : Instruction)
+              (chan : ChanV) (val : Value)
+     : StreamType chan = Ignore
+    -> Eval1         ss           h l instr
+             (insert ss chan val) h l.
+\end{coq}
+\caption{Single-step execution of process in Coq formalisation}
+\label{figs/coq/single-step}
+\end{figure}
+
+Furthermore, the formalisation only implements sequential evaluation for a single process, rather than non-deterministic evaluation for whole process networks.
 Instead, we sequentially evaluate each source process independently, and compare the output values to the ones produced by sequential evaluation of the fused result process.
-To allow both input processes to sequentially evaluate to the same collected stream values, the sequential evaluation includes the concept of external events, such as another process pushing to a stream.
-This is sufficient for our purposes because we are mainly interested in the value correctness of the fused program, rather than making a statement about the possible execution orders of the source processes when run concurrently.
+\Cref{figs/coq/single-step} shows the definition of the inductive relation \Hs@Eval1@, which denotes a single step of sequentially evaluating a process.
+Conceptually, the \Hs@Eval1@ relation takes as input a map of collected values for all channels (\Hs@Streams@), a scalar heap (\Hs@Heap@), and the currently executing label (\Hs@Label@) and instruction (\Hs@Instruction@) of the process.
+As output, the relation gives the updated map of channel values, the updated scalar heap, and the new label at which execution should continue.
+To model the sequential evaluation of a single process in isolation, it would be sufficient to design a semantics where values on input streams were given as a separate channel values map.
+In such a semantics, the map of channel values is given to the evaluation relation when evaluation starts, so the entire input stream must be known ahead of time.
+Such a semantics would complicate our proofs, as we wish to reason about the sequential evaluation of a process in the context of other concurrent processes; in addition, input streams may be infinite.
+We instead store input and output streams uniformly in the same channel values map, and conceptually treat the returned channel values map as a record of pull and push interactions with the surrounding network.
 
-Like the earlier presentation, each program has a mapping from labels to instructions.
-We also associate each label with an invariant, which is expressed as a predicate of the evaluation state.
+The \Hs@EvalPull@ constructor of \Hs@Eval1@ corresponds to the execution of a pull instruction. 
+In this case the process wishes to pull a value from the surrounding network, but as our semantics does not explicitly represent the surrounding network or the input values, we do not know the exact value that is available on the channel.
+Instead, we allow the environment to choose the pulled value, and then record that this particular value was read from the surrounding network.
+When reasoning about a pair of processes to be fused, the value pulled by one process may have been pushed by the other process.
+Deferring the choice of the particular value until the value is pulled, rather than specifying all input values ahead of time, simplifies the formalisation of correctness of fusion.
+
+The \Hs/EvalPush/ constructor interacts with the \Hs/Streams/ channel value map in a similar way to the \Hs/EvalPull/ constructor, except in this case the pushed value is dictated by the expresion (\Hs/f/), rather than being an arbitrary value provided by the environment.
+
+The remaining constructors are quite similar to the rules for advancing processes given in \cref{s:Process:Eval}, except for the final constructor \Hs/EvalIgnore/.
+The \Hs/EvalIgnore/ constructor is similar to the \Hs/EvalPull/ constructor, in that it represents communication with the surrounding network.
+In this case, the particular channel is not pulled from or pushed to by the process.
+When fusing a pair of processes, one process may pull from or push to a channel that the other ignores; this constructor allows the process that ignores the channel to record these values in the channel value map, but the process itself cannot observe the values.
+
+\begin{figure}
+\begin{coq}
+Variable Instructions : Label -> Instruction.
+Variable Init         : Label.
+
+Inductive EvalN : Streams -> Heap -> Label -> Prop :=
+  | Eval0
+     : EvalN (fun _ => []) (fun _ => 0) Init
+  | EvalSuc (l l' : Label) (ss ss' : Streams) (h h' : Heap)
+     : EvalN ss h l
+    -> Eval1 ss h l (Instructions l) ss' h' l'
+    -> EvalN                         ss' h' l'.
+\end{coq}
+\caption{Multiple-step execution of process in Coq formalisation}
+\label{figs/coq/multi-step}
+\end{figure}
+
+\Cref{figs/coq/multi-step} shows the definition of the multiple-step evaluation relation of a process.
+Constructor \Hs@Eval0@ starts evaluation with channel values map consisting of empty lists, an empty heap, and starting at the initial label (\Hs/Init/).
+Constructor \Hs/EvalSuc/ appends a single step of evaluation to the end of an existing multiple-step evaluation, using the mapping from label to instructions (\Hs/Instructions/) to find the corresponding instruction to evaluate.
+
+\begin{figure}
+\begin{coq}
+Record Program (Label : Set) (ChanV : Set) (ScalarV : Set) : Type
+ := mkProgram
+  { ChanVEqDec      : EqDec ChanV
+  ; ScalarVEqDec    : EqDec ScalarV
+  ; StreamType      : ChanV -> StreamTypeT
+
+  ; Init            : Label
+  ; Instructions    : Label -> Instruction Label ChanV ScalarV
+
+  ; LabelInvariants : Label -> Streams ChanV -> Heap ScalarV -> Prop
+  ; Invariant0:
+      LabelInvariants Init (fun _ => []) (fun _ => 0)
+  ; InvariantSuc:
+       forall (l l' : Label) (ss ss' : Streams ChanV)
+                             (h h' : Heap ScalarV),
+       LabelInvariants l ss h
+    -> Eval1 ChanVEqDec ScalarVEqDec StreamType
+                       ss h l (Instructions l) ss' h' l'
+    -> LabelInvariants l' ss' h'
+  }.
+\end{coq}
+\caption{Program definition in Coq formalisation}
+\label{figs/coq/program}
+\end{figure}
+
+\Cref{figs/coq/program} shows the definition of \Hs/Program/, which is a convenience record type that ties together all the different parts required to define a program.
+The program is parameterised by the types of labels, channel variables, and scalar variables.
+The \Hs/ChanVEqDec/ field is a predicate to check whether two channel variables are equal; this predicate is used when updating the channel values map during evaluation.
+Similarly, the \Hs/ScalarVEqDec/ field is used to update the scalar heap.
+The \Hs/StreamType/ field describes whether each channel is pulled from (\Hs/Input/), pushed to (\Hs/Output/), or neither (\Hs/Ignore/).
+The \Hs/Init/ and \Hs/Instructions/ fields define the initial label and the mapping from labels to instructions.
+For reasoning about program evaluations, the \Hs/LabelInvariants/ field associates each label with an invariant, which is expressed as a predicate of the evaluation state.
+The \Hs/Invariant0/ and \Hs/InvariantSuc/ fields together ensure that the program invariants holds for all program evaluations.
 The invariant for the initial label must be true for the initial evaluation state.
 Whenever the program takes an evaluation step, assuming the invariant for the original label was satisfied at the start of the step, the invariant for the result label must be satisfied by the updated evaluation state.
 Thus, each label's invariant serves the purpose of both precondition for the corresponding instruction, and postcondition for predecessor instructions.
+
 
 For the fused result process, we generate a new invariant that all evaluations must satisfy.
 The invariant is similar to the definition of \Hs/Soundness/ above, and defines the simulation relation between evaluations of the result process and evaluations of the original source processes.
@@ -759,3 +890,5 @@ We believe that this proof gives sufficient confidence in the correctness of the
 % \TODO{example evaluation, show how evaluation relation works with @pending@ values}
 % 
 % \TODO{also mention that formalisation is infinite streams, rather than finite}
+
+\TODO{Interesting things to detail: the formulation of external events (hinted at above); the problem with encoding fixpoint in Coq, and necessity to define fused process `lazily', which requires the addition of the `INVALID' state. Could include definition of Block (instruction) type, and definition of evaluation relation.}

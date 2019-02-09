@@ -709,14 +709,14 @@ The proof of soundness is stated as follows:
 \begin{coq}
 Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
                   (ss : Streams)         (h   : Heap)
-                  (l1 : L1)              (is1 : InputStates)
-                  (l2 : L2)              (is2 : InputStates)
+                  (l1 : L1)              (is1 : InputStates C)
+                  (l2 : L2)              (is2 : InputStates C)
   :  EvalN (fuse P1 P2) ss h (LX l1 l2 is1 is2)
   -> EvalNOriginal Var1 P1 P2 is1 ss h l1
   /\ EvalNOriginal Var2 P2 P1 is2 ss h l2.
 \end{coq}
 
-The @Soundness@ theorem uses @EvalN@ to evaluate the fused program, and @EvalOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
+The @Soundness@ theorem uses @EvalN@ to evaluate the fused program, and @EvalNOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
 The @Streams@ type corresponds to the channel value map used to accumulate stream elements while feeding a process network (\cref{fig:Process:Eval:Feed}), and the @Heap@ type corresponds to the value store used while advancing a single process (\cref{fig:Process:Eval:Shake}).
 
 % Care must be taken to remove stream values that the other process has pulled but this one has not yet.
@@ -865,25 +865,125 @@ Similarly, the \Hs/ScalarVEqDec/ field is used to update the scalar heap.
 The \Hs/StreamType/ field describes whether each channel is pulled from (\Hs/Input/), pushed to (\Hs/Output/), or neither (\Hs/Ignore/).
 The \Hs/Init/ and \Hs/Instructions/ fields define the initial label and the mapping from labels to instructions.
 For reasoning about program evaluations, the \Hs/LabelInvariants/ field associates each label with an invariant, which is expressed as a predicate of the evaluation state.
-The \Hs/Invariant0/ and \Hs/InvariantSuc/ fields together ensure that the program invariants holds for all program evaluations.
-The invariant for the initial label must be true for the initial evaluation state.
-Whenever the program takes an evaluation step, assuming the invariant for the original label was satisfied at the start of the step, the invariant for the result label must be satisfied by the updated evaluation state.
+The \Hs/Invariant0/ and \Hs/InvariantSuc/ fields ensure that the invariant is established and maintained, respectively.
+The \Hs/Invariant0/ field ensures that the invariant for the initial label holds for the initial evaluation state.
+The \Hs/InvariantSuc/ field ensures that whenever the program takes an evaluation step, assuming the invariant for the original label was satisfied at the start of the step, the invariant for the result label must be satisfied by the updated evaluation state.
 Thus, each label's invariant serves the purpose of both precondition for the corresponding instruction, and postcondition for predecessor instructions.
+These two facts are sufficient to show that all possible evaluations respect the invariants, by performing induction over \Hs/EvalN/.
 
+The fusion algorithm from \cref{s:Fusion} takes two processes as input, and constructs a new process by starting from the initial labels and iteratively inserting new instructions into the mapping from label to instructions.
+After inserting a new instruction into the map, the algorithm proceeds to insert the instructions corresponding to the destination labels as necessary.
+This insertion step is repeated until all destination labels have been searched, or until a fusion failure is encountered.
+This algorithm is terminating, as both input processes have a finite number of labels and the set of fused label is finite, but encoding this repeated insertion step in Coq requires a non-trivial proof of termination.
+We sidestep this issue by representing the mapping from label to instruction as a total function that does not need to be inserted into, and by deferring the check for fusion failure until evaluation.
+\Cref{figs/coq/fused-label} shows the definition of labels and variables in the resulting fused process; fusion is parameterised over the variable (\Hs/V1/ and \Hs/V2/), label (\Hs/L1/ and \Hs/L2/), and channel (\Hs/C/) types of the two input programs (\Hs/P1/ and \Hs/P2/).
+The label \Hs/LX/ denotes a fused label, and contains the labels and input states of each input process.
+The label \Hs/L'INVALID/ denotes an invalid process state, and corresponds to fusion failure in the original algorithm.
+In the formalisation, fusion always produces a result program, but if the state \Hs/L'INVALID/ is statically reachable then the original fusion algorithm would have failed.
+Despite the presence of invalid states, we can still reason about valid evaluations by restricting our attention to evaluations that end in an \Hs/LX/ label.
+The variable constructors \Hs/V'V1/ and \Hs/V'V2/ correspond to a process in each of the original input processes, while the variable \Hs/V'C/ corresponds to a buffer variable, used to temporarily store a single pulled or pushed value on a channel.
 
-For the fused result process, we generate a new invariant that all evaluations must satisfy.
-The invariant is similar to the definition of \Hs/Soundness/ above, and defines the simulation relation between evaluations of the result process and evaluations of the original source processes.
-Each result process label is defined as the pair of source process labels, along with the static input states.
-For a particular result process label, the invariant states that, assuming the result process evaluates to this label with a particular value heap and channel value map, then both the source processes evaluate to the corresponding label with their corresponding subset of the heap, and a similar channel values map.
-The channel values map for the source processes may differ slightly.
-If, for example, the first source process has pushed a new value to a shared stream, and the second source process has not yet pulled the new value, the new value will appear in the channel value map for the first process, but not in the channel value map for the second process.
-In this example, the second source process has an input state of \Hs/pending/, which denotes that the most recent value has not yet been pulled, and should not be included in the evaluated channel value map for that source process.
-% The invariant for the result process also requires that the corresponding invariant for both source processes are satisfied.
+\begin{figure}
+\begin{coq}
+Variable L1 V1 L2 V2 C : Set.
+Variable P1 : P.Program L1 C V1.
+Variable P2 : P.Program L2 C V2.
+
+Inductive L' :=
+  | LX (l1 : L1) (l2 : L2) (is1 : InputStates C) (is2 : InputStates C)
+  | L'INVALID.
+
+Inductive V :=
+  | V'V1 : V1 -> V
+  | V'V2 : V2 -> V
+  | V'C : C -> V.
+\end{coq}
+\caption{Labels and variables in the fused process in Coq formalisation}
+\label{figs/coq/fused-label}
+\end{figure}
+
+For the fused result process, we define the following invariant that all evaluations of the result process must satisfy:
+\begin{coq}
+Definition invariant (l : L') (ss : Streams C) (h : Heap V) : Prop :=
+ match l with
+  | L'INVALID        => True
+  | LX l1 l2 is1 is2 => invariantPX V'V1 P1 P2 is1 l1 ss h
+                     /\ invariantPX V'V2 P2 P1 is2 l2 ss h
+ end.
+\end{coq}
+
+In the case that the result process has evaluated to an \Hs/L'INVALID/ label, fusion would have failed, and we do not know anything about the evaluation state that led to this failure.
+A process that has reached \Hs/L'INVALID/ will always remain at the \Hs/L'INVALID/ label.
+When the result process has evaluated to an \Hs/LX/ label, we use the function \Hs/invariantPX/ to show how the current evaluation state corresponds to the evaluation of each input process separately, as well as how the two input processes correspond to each other.
+The \Hs/V'V1/ and \Hs/V'V2/ arguments to \Hs/invariantPX/ describe how to access each individual input process' portion of the scalar heap.
+
+\begin{figure}
+\begin{coq}
+Let originalStreams (is : InputStates C) (ss : Streams C) : Streams C :=
+  fun c => match is c with
+            | AvailableToPull => tail (ss c)
+            | HaveValue       =>       ss c
+            | NoValue         =>       ss c
+            | ReadyToPush     =>       ss c
+           end.
+
+Let originalHeap (VA : Set) (VX : VA -> V) (h : Heap V) : Heap VA :=
+  fun v => h (VX v).
+
+Let invariantPX (LA VA LB VB : Set) (VX : VA -> V)
+                (PA : Program LA C VA) (PB : Program LB C VB) (is : InputStates C)
+                (l : LA) (ss : Streams C) (h : Heap V) : Prop :=
+
+    let pOriginal  := EvalN PA (originalStreams is ss) (originalHeap VX h) l
+
+ in let pAvailable := forall c, s c = AvailableToPull
+                   -> head (iss c) = Some (h (V'C c))
+
+ in let pReady     := forall c, s c = ReadyToPush
+                   -> exists f l', Instructions PA l = Push c f l'
+                   /\ h (V'C c) = f (originalHeap VX h)
+
+ in let pInput     := forall c, StreamType PA c = Input
+                   -> s c = NoValue \/ s c = AvailableToPull \/ s c = HaveValue
+
+ in let pOutput    := forall c, StreamType PA c = Output
+                   -> s c = NoValue \/ s c = AvailableToPull \/ s c = ReadyToPush
+
+ in let pIgnore    := forall c,
+                      StreamType PA c = Ignore \/ StreamType PB c = Ignore
+                   -> s c = NoValue
+
+ in pOriginal /\ pAvailable /\ pReady /\ pInput /\ pOutput /\ pIgnore.
+\end{coq}
+\caption{Fused process invariant definition in Coq formalisation}
+\label{figs/coq/fused-invariant}
+\end{figure}
+
+\Cref{figs/coq/fused-invariant} shows the definition of \Hs/invariantPX/, along with some helper functions.
+The \Hs/originalStreams/ and function takes the current state of the stream value map according to the fused result process, and returns the portion of the stream value map that is currently visible to the original input process.
+The \Hs/Streams/ type is represented as a function from channel name to list of stream values, in order of most recently pushed first.
+Usually the two stream value maps are the same, except in the following case.
+When one of the input processes has just pushed to a channel that the other pulls from, that channel becomes marked as \Hs/AvailableToPull/ in the input states of the pulling process.
+In this instance, the stream values map for the result fused process will contain the pushed value, but because the pulling process has not yet read the value, it is not visible in the stream values map for the pulling process.
+The definition of \Hs/originalStreams/ removes the most recently pushed element from the stream.
+The \Hs/originalHeap/ function computes the subset of the heap containing only the scalar variables for the given process. As with \Hs/Streams/, the \Hs/Heap/ type is represented as a function.
+
+Still in \cref{figs/coq/fused-invariant}, the definition of \Hs/invariantPX/ contains several properties that hold for each evaluation.
+Property \Hs/pOriginal/ requires that the original input process can be evaluated to the current label with the corresponding original stream value map and heap.
+This property corresponds to the definition of \Hs/EvalNOriginal/ in the statement of overall \Hs/Soundness/ from earlier; the remaining properties are strengthenings of the invariant that are required to show that \Hs/pOriginal/ is maintained.
+Property \Hs/pAvailable/ requires that after one process pushes a value to a shared channel, then the corresponding channel buffer variable contains the same value.
+In the fused process, the pull from the shared channel will use the channel buffer variable instead of reading from the stream, and this ensures that both receive the same value.
+In the formalisation, the fused result process pushes to a shared channel in two steps: first, the channel buffer variable is set to the pushed value, then the value is pushed.
+Property \Hs/pReady/ joins these two steps together, and applies when the process has updated the channel buffer variable but not yet pushed the value.
+In this case, the next instruction must push the same value as is currently in the channel buffer variable.
+Properties \Hs/pInput/ and \Hs/pOutput/ restricts the possible input states, depending on whether the current input process pulls from or pushes to the channel.
+Finally, if either of the input processes ignores a channel, it is not required to track that channel's input state. 
+Property \Hs/pIgnore/ requires that the input state for ignored channels is always \Hs/NoValue/.
 
 Proving that the invariant is established initially is straightforward, as the channel value map is empty and the result process' initial heap contains both source processes' initial heaps.
 To prove that the invariant is maintained for a particular label in the result process, we perform case distinction on the instruction corresponding to the label, then, as necessary, perform case distinction on the original source process instructions.
 With the invariant established and maintained, we prove the \Hs/Soundness/ theorem by performing induction over the evaluation relation, and showing that all evaluations of the result process respect the invariant.
-We believe that this proof gives sufficient confidence in the correctness of the presentation given earlier, despite the minor differences in formulation.
+We believe that this formalisation gives sufficient confidence in the correctness of the presentation given earlier, despite the differences in formulation.
 
 % To prove soundness of fusion, we assert the invariant that defines how evaluation of the fused program relates to evaluation of the two original programs. 
 % For the fused process, the invariant is that, when the fused process evaluates to a particular evaluation state, then each original process must
@@ -891,4 +991,4 @@ We believe that this proof gives sufficient confidence in the correctness of the
 % 
 % \TODO{also mention that formalisation is infinite streams, rather than finite}
 
-\TODO{Interesting things to detail: the formulation of external events (hinted at above); the problem with encoding fixpoint in Coq, and necessity to define fused process `lazily', which requires the addition of the `INVALID' state. Could include definition of Block (instruction) type, and definition of evaluation relation.}
+% \TODO{Interesting things to detail: the formulation of external events (hinted at above); the problem with encoding fixpoint in Coq, and necessity to define fused process `lazily', which requires the addition of the `INVALID' state. Could include definition of Block (instruction) type, and definition of evaluation relation.}

@@ -1,7 +1,7 @@
 % -- A --
 
 @article{amagbegnon1995implementation,
-  title={Implementation of the data-flow synchronous language signal},
+  title={Implementation of the data-flow synchronous language {S}ignal},
   author={Amagb{\'e}gnon, Pascalin and Besnard, Lo{\"\i}c and Le Guernic, Paul},
   journal={ACM SIGPLAN Notices},
   volume={30},
@@ -39,7 +39,11 @@
   title={The synchronous languages 12 years later},
   author={Benveniste, Albert and Caspi, Paul and Edwards, Stephen A and Halbwachs, Nicolas and Le Guernic, Paul and De Simone, Robert},
   journal={Proceedings of the IEEE},
+  volume={91},
+  number={1},
+  pages={64--83},
   year={2003},
+  publisher={IEEE}
 }
 
 % Esterel generates automata. For programs where the automaton is too big, they can generate several smaller automata instead.
@@ -48,11 +52,15 @@
   title={The {E}sterel synchronous programming language: Design, semantics, implementation},
   author={Berry, G{\'e}rard and Gonthier, Georges},
   journal={Science of computer programming},
-  year={1992}
+  volume={19},
+  number={2},
+  pages={87--152},
+  year={1992},
+  publisher={Elsevier}
 }
 
 @article{berry1992hardware,
-  title={A hardware implementation of pure Esterel},
+  title={A hardware implementation of pure {E}sterel},
   author={Berry, G{\'e}rard},
   journal={Sadhana},
   volume={17},
@@ -67,6 +75,7 @@
   title={The foundations of {E}sterel},
   author={Berry, G{\'e}rard},
   booktitle={Proof, language, and interaction},
+  pages={425--454},
   year={2000}
 }
 
@@ -91,8 +100,11 @@
 @inproceedings{buck1993scheduling,
   title={Scheduling dynamic dataflow graphs with bounded memory using the token flow model},
   author={Buck, Joseph Tobin and Lee, Edward A},
-  booktitle={Acoustics, Speech, and Signal Processing, IEEE International Conference on},
+  booktitle={Acoustics, Speech, and Signal Processing, 1993. ICASSP-93., 1993 IEEE International Conference on},
+  volume={1},
+  pages={429--432},
   year={1993},
+  organization={IEEE}
 }
 
 % Integer dataflow
@@ -104,8 +116,11 @@
 @inproceedings{buck1994static,
   title={Static scheduling and code generation from dynamic dataflow graphs with integer-valued control streams},
   author={Buck, Joseph T},
-  booktitle={Signals, Systems and Computers, Twenty-Eighth Asilomar Conference on},
+  booktitle={Signals, Systems and Computers, 1994. 1994 Conference Record of the Twenty-Eighth Asilomar Conference on},
+  volume={1},
+  pages={508--513},
   year={1994},
+  organization={IEEE}
 }
 
 % Good comparison of different kinds of dataflow networks.
@@ -130,7 +145,6 @@
   author={Caspi, Paul and Pouzet, Marc},
   booktitle={ACM SIGPLAN Notices},
   volume={31},
-  number={6},
   pages={226--238},
   year={1996},
   organization={ACM}
@@ -158,7 +172,7 @@
 % Due to the limited concurrency in Esterel, each cluster can be executed 'concurrently' with only a restricted set of other clusters on the same 'level'.
 % Each level has a separate linked list for its scheduled operations.
 @article{edwards2006compiling,
-  title={Compiling Esterel into static discrete-event code},
+  title={Compiling {E}sterel into static discrete-event code},
   author={Edwards, Stephen A and Kapadia, Vimal and Halas, Michael},
   journal={Electronic Notes in Theoretical Computer Science},
   volume={153},
@@ -187,9 +201,12 @@
   title={The synchronous data flow programming language {Lustre}},
   author={Halbwachs, Nicholas and Caspi, Paul and Raymond, Pascal and Pilaud, Daniel},
   journal={Proceedings of the IEEE},
+  volume={79},
+  number={9},
+  pages={1305--1320},
   year={1991},
+  publisher={IEEE}
 }
-
 
 % -- I --
 
@@ -199,6 +216,9 @@
   title={Petri nets and marked graphs--mathematical models of concurrent computation},
   author={Johnsonbaugh, Richard and Murata, Tadao},
   journal={The American mathematical monthly},
+  volume={89},
+  number={8},
+  pages={552--566},
   year={1982},
   publisher={Taylor \& Francis}
 }
@@ -206,7 +226,10 @@
 @article{johnston2004advances,
   title={Advances in dataflow programming languages},
   author={Johnston, Wesley M and Hanna, JR and Millar, Richard J},
-  journal={ACM Computing Surveys (CSUR)},
+  journal={ACM computing surveys (CSUR)},
+  volume={36},
+  number={1},
+  pages={1--34},
   year={2004},
   publisher={ACM}
 }
@@ -233,7 +256,11 @@
   title={Polychrony for system design},
   author={Le Guernic, Paul and Talpin, Jean-Pierre and Le Lann, Jean-Christophe},
   journal={Journal of Circuits, Systems, and Computers},
+  volume={12},
+  number={03},
+  pages={261--303},
   year={2003},
+  publisher={World Scientific}
 }
 
 
@@ -244,8 +271,10 @@
 @inproceedings{mandel2010lucy,
   title={Lucy-n: a n-synchronous extension of {Lustre}},
   author={Mandel, Louis and Plateau, Florence and Pouzet, Marc},
-  booktitle={Mathematics of Program Construction},
+  booktitle={International Conference on Mathematics of Program Construction},
+  pages={288--309},
   year={2010},
+  organization={Springer}
 }
 
 % Flow-based programming is very similar, data-flow network style, but the execution model is multithreaded with runtime scheduling.
@@ -285,11 +314,13 @@
 % -- S --
 
 % Falling back to dynamic scheduling
-@InProceedings{soule2013dynamic,
-  title     = "Dynamic Expressivity with Static Optimization for Streaming Languages",
-  author    = "Robert Soule and Michael I. Gordon and Saman Amarasinghe and Robert Grimm and Martin Hirzel",
-  booktitle = "The 7th ACM International Conference on Distributed Event-Based Systems",
-  year      = "2013",
+@inproceedings{soule2013dynamic,
+  title={Dynamic expressivity with static optimization for streaming languages},
+  author={Soul{\'e}, Robert and Gordon, Michael I and Amarasinghe, Saman and Grimm, Robert and Hirzel, Martin},
+  booktitle={Proceedings of the 7th ACM international conference on Distributed event-based systems},
+  pages={159--170},
+  year={2013},
+  organization={ACM}
 }
 
 % Lightweight actors for the JVM.
@@ -321,8 +352,10 @@
 @inproceedings{stuijk2011scenario,
   title={Scenario-aware dataflow: Modeling, analysis and implementation of dynamic applications},
   author={Stuijk, Sander and Geilen, Marc and Theelen, Bart and Basten, Twan},
-  booktitle={Embedded Computer Systems (SAMOS), International Conference on},
+  booktitle={Embedded Computer Systems (SAMOS), 2011 International Conference on},
+  pages={404--411},
   year={2011},
+  organization={IEEE}
 }
 
 @article{stream2003stream,
@@ -340,8 +373,10 @@
 @inproceedings{thies2002streamit,
   title={{StreamIt}: A language for streaming applications},
   author={Thies, William and Karczmarek, Michal and Amarasinghe, Saman},
-  booktitle={Compiler Construction},
+  booktitle={International Conference on Compiler Construction},
+  pages={179--196},
   year={2002},
+  organization={Springer}
 }
 
 
@@ -355,8 +390,10 @@
 @inproceedings{van2015scenario,
   title={A scenario-aware dataflow programming model},
   author={Van Kampenhout, Reinier and Stuijk, Sander and Goossens, Kees},
-  booktitle={Digital System Design (DSD), Euromicro Conference on},
+  booktitle={Digital System Design (DSD), 2015 Euromicro Conference on},
+  pages={25--32},
   year={2015},
+  organization={IEEE}
 }
 
 

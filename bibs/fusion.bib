@@ -1,10 +1,11 @@
 % -- A --
 @inproceedings{ashby2006iterative,
-  author    = {Thomas J. Ashby and
-               Michael F. P. O'Boyle},
-  title     = {Iterative Collective Loop Fusion},
-  booktitle = {CC: Compiler Construction},
-  year      = {2006}
+  title={Iterative collective loop fusion},
+  author={Ashby, Thomas J and O’Boyle, Michael FP},
+  booktitle={International Conference on Compiler Construction},
+  pages={202--216},
+  year={2006},
+  organization={Springer}
 }
 
 % -- B --
@@ -48,35 +49,41 @@
   title={Stream fusion: From lists to streams to nothing at all},
   author={Coutts, Duncan and Leshchinskiy, Roman and Stewart, Don},
   booktitle={ACM SIGPLAN Notices},
+  volume={42},
+  pages={315--326},
   year={2007},
+  organization={ACM}
 }
 
 % Stream fusion for strings. Mentions 'size hints'
-@article{coutts2007rewriting,
-  title={Rewriting {Haskell} strings},
+@inproceedings{coutts2007rewriting,
+  title={Rewriting haskell strings},
   author={Coutts, Duncan and Stewart, Don and Leshchinskiy, Roman},
-  journal={Practical Aspects of Declarative Languages},
+  booktitle={International Symposium on Practical Aspects of Declarative Languages},
+  pages={50--64},
   year={2007},
-  publisher={Springer}
+  organization={Springer}
 }
 
 % -- D --
 
 @inproceedings{darte2002contraction,
-  author    = {Alain Darte and
-               Guillaume Huard},
-  title     = {New Results on Array Contraction},
-  booktitle = {ASAP},
-  year      = {2002},
+  title={New results on array contraction},
+  author={Darte, Alain and Huard, Guillaume},
+  booktitle={Application-Specific Systems, Architectures and Processors, 2002. Proceedings. The IEEE International Conference on},
+  pages={359--370},
+  year={2002},
+  organization={IEEE}
 }
 
 @inproceedings{darte1999complexity,
-  author    = {Alain Darte},
-  title     = {On the Complexity of Loop Fusion},
-  booktitle = {PACT: Parallel Architectures and Compilation Techniques},
-  year      = {1999}
+  title={On the complexity of loop fusion},
+  author={Darte, Alain},
+  booktitle={Parallel Architectures and Compilation Techniques, 1999. Proceedings. 1999 International Conference on},
+  pages={149--157},
+  year={1999},
+  organization={IEEE}
 }
-
 
 
 % -- E --
@@ -88,12 +95,12 @@
 % Original short-cut fusion paper using foldr/build
 % Actually push-based, but inlining is inherently pull-based so ends up with worst of both.
 @inproceedings{gill1993short,
- author = {Gill, Andrew and Launchbury, John and Peyton Jones, Simon L.},
- title = {A short cut to deforestation},
- booktitle = {Proceedings of the conference on Functional programming languages and computer architecture},
- series = {FPCA '93},
- year = {1993},
- publisher = {ACM},
+  title={A short cut to deforestation},
+  author={Gill, Andrew and Launchbury, John and Peyton Jones, Simon L},
+  booktitle={Proceedings of the conference on Functional programming languages and computer architecture},
+  pages={223--232},
+  year={1993},
+  organization={ACM}
 }
 
 % -- H --
@@ -121,7 +128,6 @@
   title={Deriving structural hylomorphisms from recursive definitions},
   author={Hu, Zhenjiang and Iwasaki, Hideya and Takeichi, Masato},
   volume={31},
-  number={6},
   year={1996},
   publisher={ACM}
 }
@@ -201,7 +207,6 @@
   title={Principles of program design},
   author={Jackson, Michael A},
   volume={197},
-  number={5},
   year={1975},
   publisher={Academic press London}
 }
@@ -223,7 +228,10 @@
  author = {Kiselyov, Oleg and Biboudis, Aggelos and Palladinos, Nick and Smaragdakis, Yannis},
  title = {Stream Fusion, to Completeness},
  booktitle = {Proceedings of the 44th ACM SIGPLAN Symposium on Principles of Programming Languages},
- year = {2017}
+ year = {2017},
+ volume={52},
+ pages={285-299},
+ publisher={ACM}
 }
 
 
@@ -252,8 +260,11 @@
     author = {Ben Lippmeier and Manuel M. T. Chakravarty and Gabrielle Keller and Amos Robinson},
     title = {Data Flow Fusion with Series Expressions in {H}askell},
     year = {2013},
-    publisher = {},
-    booktitle={Proceedings of the 2013 Haskell symposium}
+    booktitle={Proceedings of the 2013 Haskell symposium},
+    publisher = {ACM},
+    volume={48},
+    pages={93--104},
+  journal={ACM SIGPLAN Notices}
 }
 
 % -- M --
@@ -291,13 +302,13 @@
 % -- P --
 
 % Like our own process fusion, Filter Fusion also statically interleaves the code of producer and consumer processes. Each process must have a single input and output channel, so common operators like zip, unzip, append, partition and so on are not supported. Given an adjacent producer and consumer pair, Filter Fusion alternately assigns control to the code of each. When the consumer needs input, control is passed to the producer, and when the producer produces its value control is passed back to the consumer. This simple scheduling algorithm works only for straight line pipelines of processes. Machine fusion provides a finer grained interleaving of code, which is nessesary to support branching dataflows that contain both splits and joins.
-@inproceedings{proebsting1996filter,
-  title={Filter fusion},
-  author={Proebsting, Todd A and Watterson, Scott A},
-  booktitle={POPL},
-  year={1996},
+@INPROCEEDINGS{proebsting1996filter,
+    author = {Todd A. Proebsting and Scott A. Watterson},
+    title = {Filter Fusion},
+    booktitle = {In Symposium on Principles of Programming Languages},
+    year = {1996},
+    pages = {119--130}
 }
-
 
 % -- Q --
 
@@ -325,21 +336,34 @@
 
 % Introduces a pull-based destroy/unfoldr that supports zips, explains that push / gill1993short doesn't
 @inproceedings{svenningsson2002shortcut,
-  title={Shortcut fusion for accumulating parameters \& zip-like functions},
-  author={Svenningsson, Josef},
-  booktitle={ACM SIGPLAN Notices},
-  year={2002},
+  author    = {Josef Svenningsson},
+  title     = {Shortcut fusion for accumulating parameters {\&} zip-like functions},
+  booktitle = {Proceedings of the Seventh {ACM} {SIGPLAN} International Conference
+               on Functional Programming {(ICFP} '02), Pittsburgh, Pennsylvania,
+               USA, October 4-6, 2002.},
+  pages     = {124--132},
+  year      = {2002},
+  url       = {https://doi.org/10.1145/581478.581491},
+  doi       = {10.1145/581478.581491},
+  timestamp = {Tue, 06 Nov 2018 16:59:24 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/icfp/Svenningsson02},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
 }
 
 % Support both pull and push arrays.
 % Rather than supporting arbitrary push arrays, they allow a limited set of combinators which can be easily implemented on push arrays (including those that can't be easily implemented as pull, for example append).
 @inproceedings{svensson2014defunctionalizing,
-  title={Defunctionalizing push arrays},
-  author={Svensson, Bo Joel and Svenningsson, Josef},
-  booktitle={Proceedings of the 3rd ACM SIGPLAN workshop on Functional high-performance computing},
-  year={2014},
+  author    = {Bo Joel Svensson and
+               Josef Svenningsson},
+  title     = {Defunctionalizing push arrays},
+  booktitle = {Proceedings of the 3rd {ACM} {SIGPLAN} workshop on Functional high-performance computing, ICFP 2014, Gothenburg, Sweden, September 4, 2014},
+  pages     = {43--52},
+  year      = {2014},
+  url       = {https://doi.org/10.1145/2636228.2636231},
+  doi       = {10.1145/2636228.2636231},
+  timestamp = {Tue, 06 Nov 2018 16:59:25 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/icfp/SvenssonS14}
 }
-
 
 % -- T --
 

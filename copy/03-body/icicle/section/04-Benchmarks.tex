@@ -65,6 +65,7 @@ Many of our data sets are stored as text files containing JSON values.
 The format for these JSON values is dictated by the type of each query's input table.
 For each fused set of queries, we generate C code that parses the input table, computes the result of the query, and writes the result to an output file.
 The generated parsing and output code is specific to the input and output types, as opposed to generic JSON parsing code that must dynamically allocate records with statically unknown fields.
+In the generated code, we also use data-only flattening~\cite{bergstrom2013data} as an efficient representation of structures such as arrays of sum types and tuples.
 
 
 

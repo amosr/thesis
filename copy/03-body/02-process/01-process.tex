@@ -667,6 +667,7 @@ Function \ti{outlabels} gets the set of output labels for an instruction, which 
 Function \ti{swaplabels} flips the order of the compound labels in an instruction.
 
 \subsection{Static deadlock detection}
+\label{process/static-deadlock}
 
 In the definition of \ti{tryStep}, clause (Blocked) applies when the source process is waiting for the other process to advance.
 If both processes are blocked waiting for each other, then the two processes are stuck.

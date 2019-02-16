@@ -138,20 +138,26 @@ $$
   \SourceStepXA{\Sigma}
     {\Ic@group@~e~\Ic@of@~e'}
     {\VFold
-      {\{\_~\Rightarrow~z\}}
+      {\{\}}
       {k'}
       {j'}}
 }{EGroup}
 \\
 \begin{aligned}
 \mbox{where }
-k' & = \lam{\store~m}
-(f~\store~\Rightarrow~k~\store~(m[f~\store])) \cup m
+k' = & \lam{\store~m}
+\begin{array}[t]{llll}
+ \Ic@let@&\ti{key}&& = f~s \\
+         &\ti{val}&|~ \ti{key} \in m & = m[\ti{key}] \\
+             &&|~ \mbox{otherwise} & = z \\
+  \Ic@in@&\multicolumn{3}{l}{m[\ti{key} \Rightarrow k~\store~\ti{val}]}
+\end{array}
 % \{ k_i~\Rightarrow~k~\store~v_i ~|~ k_i \Rightarrow v_i~\in~m~\wedge~k_i~=~f~\store \} \cup m)
 %        m[f~\store~\Rightarrow~k~\store~(m[f~\store])]
 \\
 j' & = \lam{m}
-        \{k_i~\Rightarrow~j~v_i~|~k_i~\Rightarrow~v_i~\in~m\}
+        \{\ti{key} \Rightarrow j~m[\ti{key}]~|~\ti{key}~\in~m\}
+%        \{k_i~\Rightarrow~j~v_i~|~k_i~\Rightarrow~v_i~\in~m\}
 \end{aligned}
 \end{gather*}
 

@@ -698,7 +698,7 @@ bench/Bench/PartitionAppend/Folderol.hs:18:8: warning:
 \end{lstlisting}
 
 If we try to compile \Hs/partitionAppendFailure/ with Folderol, we get the compile-time warning in \cref{l:bench:partitionAppendWarning}.
-This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering, and will instead be executed as a partially fused concurrent process network.
+This warning indicates that the program could not be fused into a single loop without introducing unbounded buffering, and will instead be executed as a partially fused concurrent process network with unbounded channels.
 The warning shows the dependencies between processes in the process network, with each process' input channels and output channels.
 The Template Haskell implementation does not have access to the variable names used by the original program, so communication channels are denoted by the placeholder names \Hs@C0@ to \Hs@C5@.
 The input process network shows a line for each source, sink and process.
@@ -709,6 +709,33 @@ The partially fused process network shows that the \Hs/append/ process has been 
 Some sort of buffering is inevitable for this process network, because \Hs@append@ requires all the \Hs@evens'@ first: all the even-valued elements need to be read from the input stream \Hs@x0@ before the odd-valued elements can be read by \Hs@append@.
 To implement this in a single, sequential, traversal of the input stream, we would need to read from the input stream \Hs@x0@, and if we see an odd-valued element, we would need to hold on to it until we were sure there were no even-valued elements left.
 
+% We discuss the kinds of programs that fusion failure in more detail in \cref{s:Benchmarks:FusionFailure}.
+\FigurePdfLabel{figs/depgraphs/partitionAppendFailure}{figs/dep/partitionAppendFailure}{Dependency graph for \Hs/partitionAppendFailure/}
+
+% Consider the dependency graph for \Hs/partitionAppendFailure/ shown in \cref{figs/dep/partitionAppendFailure}.
+As described in \cref{process/static-deadlock}, fusion failure for a pair of processes corresponds to a static approximation of deadlock, when executed concurrently with single-element channel buffers.
+For a deadlock to occur, two processes must have conflicting requirements on how a stream is used.
+\Cref{figs/dep/partitionAppendFailure} shows the dependency graph for \Hs/partitionAppendFailure/.
+The diamond in the dependency graph shows that the \Hs/append/ process has two different dependencies on the \Hs/xs/ input stream, via the \Hs/partition/ and \Hs/map/ processes.
+In this case deadlock occurs because the two dependencies have conflicting requirements on the input stream, as the \Hs/append/ process only reads the values from the \Hs/odds'/ stream once the \Hs/evens'/ stream has finished.
+
+\begin{haskell}[float,caption=List implementation of \Hs/append2/ program,label=l:bench:append2]
+append2 :: [a] -> [a] -> ([a],[a])
+append2 a b =
+  let ab = a ++ b
+      ba = b ++ a
+  in  (ab, ba)
+\end{haskell}
+
+Deadlocks can also occur when two distinct sets of processes have more than one input stream in common.
+An example of this kind of deadlock is the \Hs/append3/ program from \cref{ss:Fusing:a:network}, or the \Hs/append2/ program shown in \cref{l:bench:append2}.
+In this example, both \Hs/append/ processes read from both input streams, but the two streams are read from in different orders.
+Deadlocks require a mutual dependency between two sets of processes; as our process networks are acyclic, such interdependencies require two sets of processes to share multiple input streams, or to contain a diamond.
+Fusion always succeeds for network topologies with no interdependencies.
+This class of programs corresponds to those that can be expressed using the polarised streams from \cref{taxonomy/polarised}.
+For topologies that contain interdependencies, fusion may still succeed, but only when the fusion algorithm can statically determine the absence of deadlocks, and when the network fusion order heuristic described in \cref{ss:Fusing:a:network} chooses the correct order.
+
+When fusion fails, it may be possible to rewrite the program without introducing unbounded buffering.
 In the \Hs/partitionAppendFailure/ program, the input stream is backed by a real vector.
 We can, in fact, rewrite the program without introducing an unbounded buffer: we already have the buffer.
 To execute the program, we explicitly introduce another source to read from the vector and separate the \Hs/partition/ process into two \Hs/filter/ processes, as in \cref{l:bench:partitionAppend2Source}.
@@ -850,6 +877,9 @@ This method of representing the state as values may be applicable here, but maki
 Another method in which Esterel addressed the exponential blowup problem was by splitting the program into multiple smaller automata \citep{berry1992esterel}.
 We already perform a similar `splitting' when fusion fails, by falling back to dynamic scheduling of the partially fused processes with unbounded buffers, and we could also limit fusion to only processes below a certain size threshold.
 
+% \section{Fusion failure}
+% \label{s:Benchmarks:FusionFailure}
+% \cref{s:Benchmarks:ResultSize}
 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.

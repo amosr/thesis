@@ -246,7 +246,12 @@ The result fold's eject function performs all arguments' ejects and applies the 
 
 Rule (EFilter) first evaluates the predicate $e$ to a stream transformer $f$, and the body $e'$ to an aggregation. The result is a new aggregation where the update function applies the predicate stream transformer $f$ to the input element $s$ to yield a boolean flag which specifies whether the current aggregation state should be updated.
 
-Rule (EGroup) is similar to (EFilter), except that the stream transformer $f$ produces group keys rather than boolean flags, and we maintain a finite map of aggregation states for each key. In the result aggregation, the update function ($k'$) updates the appropriate accumulator in the map, and the eject function ($j'$) applies the original eject function to every accumulator in the map. 
+Rule (EGroup) is similar to (EFilter), except that the stream transformer $f$ produces group keys rather than boolean flags, and we maintain a finite map $m$ of aggregation states for each key.
+In the result aggregation, the update function $k'$ updates the appropriate accumulator in the map by first computing the key $\ti{key}$ using the stream transformer $f$.
+The update function then finds the aggregation state corresponding to the key in the map, or defaults to the zero aggregation state $z$ if the key does not exist in the map.
+The update function then updates the map with the new aggregation state by applying the original update function $k$ to the input stream $\store$ and the current key's aggregation state $\ti{val}$.
+We use the syntax $\ti{map}[\ti{key} \Rightarrow \ti{value}]$ to denote inserting or updating a map to associate a key with a value.
+The eject function $j'$ applies the original eject function $j$ to every accumulator value in the map $m$, while preserving the key. 
 
 % Rule EFold introduces recursion and memory to the streams.
 % It evaluates its initial to a pure value, $z'$, which is used as the initial state for the fold.

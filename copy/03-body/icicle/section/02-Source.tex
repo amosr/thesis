@@ -92,8 +92,14 @@ If we try to convert this computation to a single-pass streaming implementation,
 In Icicle, queries that would require unbounded buffering are statically outlawed by the type system, with one major caveat that we will discuss in a moment.
 Because Icicle is based on the push streams described in \cref{taxonomy/push}, the stream being processed (such as \Ic@xs@ above) is implicit in each query.
 Constructs such as \Ic@filter@ and \Ic@fold@ do not take the name of the input stream as an argument, but instead operate on the stream defined in the context.
-Icicle language constructs describe \emph{how elements from the stream should be aggregated}, but the order in which those elements are aggregated is implicit, rather than being definable by the body of the query.
+Icicle language constructs that define \Ic@Aggregate@ computations describe \emph{how elements from the stream should be aggregated}, but the order in which those elements are aggregated is implicit, rather than being definable by the body of the query.
 In the expression (\Ic@filter p of mean value@), the term (\Ic@mean value@) is applied to stream values which satisfy the predicate \Ic@p@, but the values to consider are supplied by the context.
+
+Similarly, Icicle language constructs that define \Ic@Element@ computations describe element-wise transformations of the input stream.
+If, as in our stocks example, the input table is a record containing fields \Ic@open@ and \Ic@close@, then \Ic@open@ denotes an \Ic@Element@ computation that, when applied to an element in the input stream, extracts the element's \Ic@open@ field.
+Also in the stocks example, the filter predicate (\Ic@open < close@) denotes an \Ic@Element@ computation that, when applied to an input element, extracts both fields from the input element and compares the two.
+Because all \Ic@Element@ computations over the same input table define a transformation of the same input stream element type, any two \Ic@Element@ computations in a query can be combined together without requiring any buffering.
+This \Ic@Element@ representation only works for length-preserving stream transformers; it cannot represent filtered streams, which is why we restrict filtering to only allow aggregation of the filtered stream as described above.
 
 Finally, our major caveat is that the \Ic@group@ construct we used in \cref{icicle:s:ElementsAndAggregates} uses space proportional to the number of distinct \emph{keys} in the input stream.
 For our applications, the keys are commonly company names, customer names, and days of the year.

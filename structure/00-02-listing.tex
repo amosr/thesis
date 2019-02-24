@@ -177,12 +177,31 @@
             {|}{{$\mid$}}1
   }[keywords,comments,strings]%
 
+\lstdefinelanguage{lucy}%
+  {morekeywords={let,and,if,then,pre,or,node,done,unless,run,end,rec,where,fun,else,not,open,match,automaton,continue,emit,when,fby,merge,reset,every,do,ntil,on,await,type,in,whenot},%
+   keepspaces,%
+   sensitive,%
+   morestring=[b]",%
+  % moredelim=**[is][\color{TemplateStage}]{@}{@},
+   % Single char doesn't work as a string because of primes
+   % morestring=[b]'%
+   % Nice symbols
+   literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {/=}{{$\ne$}}2
+            {|}{{$\mid$}}1
+  }[keywords,comments,strings]%
+
 \lstnewenvironment{icicle}[1][]{\lstset{language=icicle,#1}}{}
 \lstnewenvironment{icicle-core}[1][]{\lstset{language=icicle-core,#1}}{}
 \lstnewenvironment{haskell}[1][]{\lstset{language=Haskell,#1}}{}
 \lstnewenvironment{sql}[1][]{\lstset{language=sql,#1}}{}
 \lstnewenvironment{coq}[1][]{\lstset{language=coq,#1}}{}
 \lstnewenvironment{process}[1][]{\lstset{language=process,#1}}{}
+\lstnewenvironment{lucy}[1][]{\lstset{language=lucy,#1}}{}
 \lstnewenvironment{listing-c}[1][]{\lstset{language=C++,morekeywords={size_t},literate=,#1}}{}
 
 % \lstnewenvironment{icicle}{\noindent\minipage{\linewidth}\lstset{language=icicle}}{\endminipage}
@@ -224,3 +243,4 @@
 \def\lstiproc{\lstinline[language=process]}
 \def\Ic{\lstinline[language=icicle]}
 \def\IcC{\lstinline[language=icicle-core]}
+\def\Lucy{\lstinline[language=lucy]}

@@ -1,3 +1,5 @@
+(* Using clocks for filtering - but off by one. When we want to perform a fold over the filtered stream, we need to be careful about the `zero' state of the fold. In this program, the sub-process that consumes the filtered stream is only initialised on the first element, so it's kind of like you need to explicitly specify the state for zero elements, one element, and the general accumulator function. This version doesn't do that properly, effectively ignoring the first element of the filtered stream. *)
+
 type table = { popen : int; pclose : int }
 
 let parse_input k =

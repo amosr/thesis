@@ -12,25 +12,23 @@ let node count () = sum 1
 let node hold ydef c x = y where
   rec y = merge c x ((ydef -> pre y) whenot c)
 
-let node more input eject =
+let node more input =
  let clock gt = (input.popen > input.pclose)
- in (hold 0 gt (count (() when gt))) when eject
+ in hold 0 gt (count (() when gt))
 
-let node less input eject =
+let node less input =
  let clock lt = (input.popen < input.pclose)
- in (hold 0 lt (count (() when lt))) when eject
+ in hold 0 lt (count (() when lt))
 
-let node mean input eject =
+let node mean input =
  let clock gt = (input.popen > input.pclose)
  in let s = sum (input.popen when gt)
  in let c = count (() when gt)
- in let s' = hold 0 gt s
- in let c' = hold 0 gt c
- in let m = div (s' when eject) (c' when eject)
- in m
+ in let m = div s c
+ in hold 0 gt m
 
-let node all_queries input eject =
-  (more input eject, less input eject, mean input eject)
+let node all_queries input =
+  (more input, less input, mean input)
 
 let parse_input k =
 	match k with
@@ -39,22 +37,15 @@ let parse_input k =
   |  _ -> {popen=0;pclose=0}
 	end
 
-let node print_when c i =
-  merge c (print_int i) (() whenot c)
-
 let node main () =
   let line = read_line () in
 	let i = parse_input line in
-  let clock eject = true in
-	let (imore,iless,imean) = all_queries i eject in
+	let (imore,iless,imean) = all_queries i in
 	let icount = count () in
-    print_string line;
+	  print_int imore; 
     print_string " ";
-	  print_when eject imore; 
+	  print_int iless; 
     print_string " ";
-	  print_when eject iless; 
-    print_string " ";
-	  print_when eject imean;
+	  print_int imean;
     print_string " ";
 		print_int icount
-

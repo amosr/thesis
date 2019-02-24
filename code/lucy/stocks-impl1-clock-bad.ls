@@ -1,3 +1,4 @@
+(* First attempt at using clocks for filtering. This program doesn't typecheck because it tries to cast expressions to clocks. *)
 type table = { popen : int; pclose : int }
 
 (* This works: *)

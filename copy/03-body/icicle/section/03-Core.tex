@@ -121,9 +121,9 @@ We discuss fusion-preventing dependencies further in \cref{clustering}.
 After concatenating the plans, we merge the filter blocks for \IcC@more@ and \IcC@mean@, as both use the same predicate.
 When each query was expressed separately, we were free to transform each individual query without affecting the others.
 Now the code that implements each query is interspersed, but the stages are expressed separately, so we are free to rearrange the bindings in each stage without affecting the other stages.
-The result of fusing the three query plans is as follows:
+The result of fusing the three query plans is shown in \cref{icicle:fig:core:stocks_query_plan}.
 
-\begin{icicle-core}
+\begin{icicle-core}[float,caption=Query plan for all three stocks queries,label=icicle:fig:core:stocks_query_plan]
 plan stocks { open : Int; close : Int; }
 folds {
   filter open > close {
@@ -139,7 +139,7 @@ return { more    : Int = more_c;
 \end{icicle-core}
 
 
-We can now use common subexpression elimination to remove the duplicate count, \IcC@mean_c@, as its binding is alpha-equivalent to the binding for \IcC@more_c@.
+With the fused query plan in \cref{icicle:fig:core:stocks_query_plan}, we can now use common subexpression elimination to remove the duplicate count, \IcC@mean_c@, as its binding is alpha-equivalent to the binding for \IcC@more_c@.
 In the after section, the reference to \IcC@mean_c@ is replaced by \IcC@more_c@.
 
 \begin{haskell}[float,caption=Push implementation of queries after inlining combinators,label=icicle:fig:core:push_query]

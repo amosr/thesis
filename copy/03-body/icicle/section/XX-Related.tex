@@ -19,46 +19,60 @@ type table = { open_price : int; close_price : int }
 
 let node more input =
  let clock gt = (input.open_price > input.close_price)
- in let c = count (() when gt)
+ in let c     = count (() when gt)
  in hold 0 gt c
 
 let node less input =
  let clock lt = (input.open_price < input.close_price)
- in let c = count (() when lt)
+ in let c     = count (() when lt)
  in hold 0 lt c
 
 let node mean input =
  let clock gt = (input.open_price > input.close_price)
- in let s = sum (input.open_price when gt)
- in let c = count (() when gt)
- in let m = div s c
+ in let s     = sum (input.open_price when gt)
+ in let c     = count (() when gt)
+ in let m     = div s c
  in hold 0 gt m
 \end{lucy}
 
-\Cref{icicle:fig:related:lucy:stocks} shows the three \Lucy/stocks/ example queries implemented in the synchronous data flow language Lucid Synchrone.
+\Cref{icicle:fig:related:lucy:stocks} shows the three \Lucy/stocks/ example queries implemented in the synchronous data flow language Lucid Synchrone \citep{caspi1995functional}.
 The \Lucy/more/ query counts the number of elements where the open price is greater than the close price by defining a new clock \Lucy/gt/.
+The syntax \Lucy/let node more/ specifies that \Lucy/more/ is a stream function.
 The \Lucy/c/ binding counts the number of elements that satisfy the predicate by restricting the unit argument of the \Lucy/count/ function to the clock \Lucy/gt/, using the syntax \Lucy/(() when gt)/.
 As the argument to \Lucy/count/ is restricted to the clock \Lucy/gt/, the count will only increment when the clock is true.
 If we had instead restricted the result of \Lucy/count/ using the syntax \Lucy/((count ()) when gt)/, the count would be incremented for each input element, but the result would only be sampled when the predicate was true.
-The \Lucy/c/ binding is only defined when the predicate is true; the \Lucy/hold/ function returns a stream that is always defined, by sampling the most recent value of \Lucy/c/, or using the default value \Lucy/0/ if no value of \Lucy/c/ is available.
+The binding \Lucy/c/ only contains a value when its clock \Lucy/gt/ is true; the \Lucy/hold/ function returns a stream that is always defined, by sampling the most recent value of \Lucy/c/, or using the default value \Lucy/0/ if no previous value of \Lucy/c/ is available.
+This operation is sometimes known as \emph{sample and hold}.
 
-Lucid Synchrone does not eliminate the common subexpressions in this example; subexpressions in Lucid Synchrone can perform effects and removing them may change the semantics of the program.
-TODO: however, the above version of the \Lucy/mean/ query performs the division on every iteration. For more complex queries, performing the eject function on every iteration could be a significant amount of work.
-To solve this, we can encode another clock denoting when to perform the ejection, as follows:
+The above implementation of the \Lucy/mean/ query performs the division on every iteration.
+In the Icicle query plan from \cref{icicle:fig:core:stocks_query_plan}, this division was performed in the \IcC@after@ stage, and so was only performed at the end of the input stream.
+For folds, this \IcC@after@ stage corresponds to an \emph{eject} function.
+For more complex queries, performing the eject function on every iteration could be a significant amount of work.
+We can modify the \Lucy/mean/ query to take an \Lucy/eject/ clock that dictates when to perform the division as follows:
 
 \begin{lucy}
 let node mean input eject =
  let clock gt = (input.popen > input.pclose)
- in let s = sum (input.popen when gt)
- in let c = count (() when gt)
- in let s' = hold 0 gt s
- in let c' = hold 0 gt c
- in let m = div (s' when eject) (c' when eject)
+ in let s     = sum (input.popen when gt)
+ in let c     = count (() when gt)
+ in let s'    = hold 0 gt s
+ in let c'    = hold 0 gt c
+ in let m     = div (s' when eject) (c' when eject)
  in m
 \end{lucy}
 
-TODO: talk about the code generation and compare to Icicle.
+For each stream function, the Lucid Synchrone compiler generates an OCaml function that can be called on every clock cycle.
+Each generated function takes arguments denoting the current element of each input stream, and a boolean for each clock that describes whether the clock is enabled for the current cycle.
+Each generated function also takes a reference to a heap object, in which the function stores the current state of accumulator values, and a boolean describing whether to reset the accumulator state.
+The \Lucy/sum/ function has as its accumulator state a boolean denoting whether it has been initialised, and the current running sum.
+The \Lucy/mean/ function has as its accumulator state four references to the states of each called stream function: \Lucy/sum/, \Lucy/count/, and the two calls to \Lucy/hold/.
+The \Lucy/div/ function is not a stream function, and thus does not require accumulator state.
+At every iteration, each stream function must load its state from memory, check whether to reset the state, and check whether the clocks are active, before it can perform the computation.
+The Lucid Synchrone compiler also does not perform common subexpression elimination; subexpressions in Lucid Synchrone can perform effects, and removing them may change the semantics of the program.
 
+In comparison, Icicle performs whole program optimisation on the set of queries to produce a single query plan.
+The resulting query plan can be converted into a single loop with local variables as accumulators, and without needing to check clock or reset booleans on each iteration.
+As all stream operations are either length-preserving maps or aggregations, all streams have the same clock as the input stream, and we do not need runtime clock checks.
 
 Shortcut fusion techniques such as foldr/build~\cite{gill1993short} and stream fusion~\cite{coutts2007stream} rely on inlining to expose fusion opportunities.
 In Haskell compilers such as GHC, the decision of when to inline is made by internal compiler heuristics, which makes it difficult for the programmer to predict when fusion will occur.

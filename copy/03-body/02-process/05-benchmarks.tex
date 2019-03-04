@@ -859,6 +859,11 @@ When coordination is not required, the subroutine can be called as-is.
 Currently, all instructions are continuation-passing-style and the processes do not require a call-stack.
 To ensure subroutines can be executed with a statically bounded call-stack, subroutines must be non-recursive, but it may be possible to allow subroutines to perform loops and call other subroutines so long as there is no mutual recursion.
 
+The Vector library's implementation of stream fusion has faced similar problems with exponential blowup, as it relies on the constructor specialisation optimisation \citep{peyton2007call} to generate efficient code.
+Constructor specialisation duplicates the body of a function for each statically known call pattern; if there are many similar call patterns, parts of the intermediate code can be duplicated many times.
+In practice, this is solved by limiting the amount of constructor specialisation according to size-based heuristics.
+This heuristic is a trade-off between the efficiency and the size of the generated code.
+
 Other compilation methods based on the product of finite automata, such as those used by the synchronous language Esterel \citep{berry2000foundations}, have faced similar problems related to exponential blowup of program size.
 Exponential blowup is more common in Esterel, where a program reading from two input channels can observe the order that the two inputs may arrive.
 Because an Esterel program can, in general, act differently depending on the order that two inputs arrive, all different possible orders must be preserved in the product of two programs.
@@ -883,11 +888,15 @@ We already perform a similar `splitting' when fusion fails, by falling back to d
 
 \section{Conclusion}
 In the benchmarks, we saw that Folderol was always competitive with the hand-fused program, and in all but a few cases, faster than the other programs.
+We believe that these results are representative of the relationship between Folderol programs and the streaming libraries, because the streaming libraries perform a restricted form of fusion compared to Folderol.
 For array computations there is some extra code required to convert between vectors and streams.
 There is also some extra wrapping with Template Haskell splices and quasiquotes, but this is fairly minor, and the required changes are more or less mechanical and type-driven.
 
 Another benefit, aside from performance, is not having to inspect the compiler's intermediate representation or generated code to know whether whether fusion has worked or failed.
 If fusion succeeds, we know it has succeeded.
 If fusion fails, we are told which parts of the process network were able to be fused, and which parts were not.
-These explicit fusion failures make it significantly easier to track down performance issues due to non-fusion.
+In our examples, these explicit fusion failures make it significantly easier to track down performance issues due to non-fusion.
+Further experience using Folderol is required to determine whether these failure diagnostics remain readable for practical-sized programs.
+If these failure diagnostics prove to be unwieldy, another option may be static analysis of fusibility; however, to be completely accurate, such a static analysis would require knowledge of the internal state machine of each process.
+Such an analysis may be just as complex as the fusion algorithm itself.
 

@@ -84,6 +84,8 @@ filterLeft xs
 
 The size scheme of \Hs@filterLeft@ shows that it works for input arrays of all sizes.
 The first result array has the same size as the input, and the second has some statically unknown size.
+Although the definition of the \Hs/filter/ function ensures that the result array at most as long as its input array, this information is not encoded in the size scheme.
+The relationship between the size of the input array and the output array is lost, as our size inference formulation only supports equality contraints and does not include any kind of less-than-or-equal constraints.
 
 Finally, note that size schemes form only one aspect of the type information that would be expressible in a full dependently typed language.
 For example, in Coq or Agda we could write something like:
@@ -102,7 +104,6 @@ In our situation, we need automatic type generalization, but for a first-order l
 The rules for constraint generation are shown in \cref{clustering:f:ConstraintGeneration}.
 The first judgment form is written as ($\SizeL{\Gamma_1}{\textit{lets}}{\Gamma_2}{C}$) and reads: ``under environment $\Gamma_1$, the bindings in $\textit{lets}$ produce the result environment $\Gamma_2$ and size constraints $C$''.
 
-\pagebreak
 The second judgment form ($\SizeB{\Gamma_1}{zs}{b}{\Gamma_2}{C}$) performs constraint generation for a single binding and reads: ``under environment~$\Gamma_1$, array or scalar variable $zs$ binds the result of combinator application $b$, producing a result environment $\Gamma_2$ and size constraints $C$''.
 The environment ($\Gamma$) has the following grammar:
 $$

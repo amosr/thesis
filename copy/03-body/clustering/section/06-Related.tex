@@ -24,8 +24,21 @@ Recent literature on array fusion for imperative languages largely focuses on th
 The polyhedral model is an algebraic representation imperative loop nests and transformations on them, including fusion transformations.
 Polyhedral systems \cite{pouchet2011polyhedral} are able to express all possible distinct loop transformations where the array indices, conditionals and loop bounds are affine functions of the surrounding loop indices.
 However, the polyhedral model is not applicable to (or intended for) one-dimensional filter-like operations where the size of the result array depends on the source data.
-Recent work extends the polyhedral model to support arbitrary indexing~\cite{venkat2014polyhedral}, as well as conditional control flow that is predicated on arbitrary (ie, non-affine) functions of the loop indices~\cite{benabderrahmane2010polyhedral}.
-However, the indices used to write into the destination array must still be computed with affine functions. 
+The polyhedral model has been extended to support arbitrary indexing~\cite{venkat2014polyhedral}, as well as conditional control flow that is predicated on arbitrary (ie, non-affine) functions of the loop indices~\cite{benabderrahmane2010polyhedral}.
+In both of these extensions, the indices used to write into the destination array must still be computed with affine functions. 
+In the loop that performs array filtering from \cref{figs/clustering/sumPartition-c}, the index into the destination array is not affine.
+\citet{zhao2018polyhedral} have extended the polyhedral model to allow data-dependent upper bounds on loops by overapproximating the iteration space.
+In this extension, the loop bound must still be known before evaluation of the loop can start.
+In our array filtering example, the length of the result of the filter operation is not known until after the entire input array has been read.
+The fact that the length is monotonically increasing in the filter operation is crucial to understanding why the two can be fused, but this fact is not captured by the polyhedral model.
+
+To make use of the polyhedral model, we could implement a different form of array filtering that returns an array of booleans of the same length as the input array.
+Each boolean would denote whether the element is considered to be in the array.
+This implementation of filter would allow fusion for our examples.
+However, this implementation of filter has different cost characteristics when fusion does not occur.
+For a highly selective filter that discards most of the input array, any operations over the result of the filter will still have to loop through the entire inputs and test the corresponding boolean.
+Furthermore, operations like constant-time indexing are not supported by this representation.
+
 
 Ultimately, the job of an array fusion system is to make the program go as fast as possible on the available hardware.
 Although the cost metrics of ``optimal'' fusion systems try to model the performance behavior of this hardware, it is not practical to encode the intricacies of all available hardware in a single compiler implementation.

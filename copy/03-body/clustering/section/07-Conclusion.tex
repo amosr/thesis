@@ -35,6 +35,8 @@ The \Hs@length@ combinator is unique, as it does not require the input array to 
 For example, finding the length of the output of a filter can only be done after the filter is computed, while finding the length of the output of a map can often be done before the map is computed.
 Once \Hs@length@ is implemented, functions such as \Hs@reverse@ can be implemented as a \Hs@generate@ followed by a \Hs@gather@.
 
+In future work, multiple-dimensional arrays could be supported by implementing segmented streaming operations for operating on nested streams.
+
 % For this work to be useful for Data Parallel Haskell, more combinators are required such as segmented fold and segmented map, which operate on segmented representations of nested arrays.
 % Rate inference will have to be adapted to handle segmented arrays, possibly using an inner and outer rates.
 % For example, segmented fold takes a segmented array of inner and outer rate, and returns a single array of the outer rate.

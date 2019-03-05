@@ -281,6 +281,13 @@ They are ranked in order of importance --- so we prefer to minimize the number o
 However, minimizing one component does not necessarily minimize any other.
 For example, as the fused program executes multiple array operations at the same time, in some cases the clustering that requires the least number of array reads and writes uses more intermediate arrays than strictly necessary.
 
+As this cost model simply counts the number of intermediate arrays, the cost model assumes that the arrays are close enough in size that the difference is not significant.
+One possible extension would be to add size hints to each array, and scale each array's cost by its expected size.
+We do not assign any cost to the worker functions, because each worker function will be called the same number of times regardless of the clustering.
+This simplification ignores the locality benefits of fusion, as two worker functions performed in the same cluster will often operate over the same input value, or share work in some way.
+For datasets sourced from network or disk, the cost of reading the data can be several orders of magnitudes larger than any locality benefits.
+
+
 We encode the ordering of the components of the cost model as different weights in the objective function.
 First, note that if the program graph contains $N$ combinators (nodes) then there are at most $N$ opportunities for fusion, and at most $N$ intermediate arrays.
 We then encode the relative cost of loop overhead as weight $1$, the cost of an intermediate array as weight $N$, and the cost of an array read or write as weight $N^2$.

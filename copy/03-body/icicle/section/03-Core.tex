@@ -181,14 +181,15 @@ With the intermediate representation of Icicle we can use a common subexpression
 \subsection{A more complicated example}
 
 The previous queries were relatively simple to translate to the intermediate language, but the \Hs/meanOfLatest/ query from \cref{icicle:s:ElementsAndAggregates} is a bit more involved.
-That query, again, is:
+The \Hs/meanOfLatest/ query is shown again in \cref{icicle:fig:core:meanOfLatest}.
 
-\begin{icicle}
-  table kvs { key : Date; value : Int } 
-  query meanOfLatest
-   = let k    = last  key in
-     let avgs = group key of mean value in
-     lookup k avgs
+\begin{icicle}[float,caption=Icicle implementation of \Hs/meanOfLatest/ (repeated),label=icicle:fig:core:meanOfLatest]
+table kvs { key : Date; value : Int } 
+
+query meanOfLatest
+ = let k    = last  key in
+   let avgs = group key of mean value in
+   lookup k avgs
 \end{icicle}
 
 To convert \Hs/meanOfLatest/ to a query plan, we must first define the \IcC@mean@ and \IcC@last@ functions used in the query.
@@ -211,6 +212,7 @@ function last (d : Element Date)
 % \end{icicle}
 
 
+\pagebreak
 Inlining these two functions into the \Hs/meanOfLatest/ query yields the following:
 % This is guaranteed to terminate because no recursion is allowed in function definitions.
 \begin{icicle}

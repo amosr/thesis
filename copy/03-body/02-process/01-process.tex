@@ -717,21 +717,33 @@ Theorem Soundness (P1 : Program L1 C V1) (P2  : Program L2 C V2)
   /\ EvalNOriginal Var2 P2 P1 is2 ss h l2.
 \end{coq}
 
-The @Soundness@ theorem uses @EvalN@ to evaluate the fused program, and @EvalNOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
+The @Soundness@ theorem uses the relational predicate @EvalN@ to evaluate the fused program, and the predicate @EvalNOriginal@ ensures that the original program evaluates with that program's subset of the result heap, using @Var1@ and @Var2@ to extract the variables.
 The @Streams@ type corresponds to the channel value map used to accumulate stream elements while feeding a process network (\cref{fig:Process:Eval:Feed}), and the @Heap@ type corresponds to the value store used while advancing a single process (\cref{fig:Process:Eval:Shake}).
 
 % Care must be taken to remove stream values that the other process has pulled but this one has not yet.
 %%% AR: Really would like to say something about this but no room to explain properly
 % For shared inputs when one program has pulled, the other program must be evaluated with the other value removed from the end of the stream.
 
-To aid mechanisation, the Coq formalisation has some differences from the system presented earlier in this chapter.
-Most importantly, the processes in the Coq formalisation operate on infinite streams.
+
+The Coq formalisation has some differences and simplifications from the system presented earlier in this chapter.
+The most important difference is that the processes in the Coq formalisation operate on infinite streams, whereas our earlier presentation used finite streams.
 This simplification means that \Hs@pull@ instructions take only one output label rather than two, and we do not need the \Hs@close@ or \Hs@exit@ instructions.
-The processes on infinite streams can still compute the same result by encoding the end of the stream with a sentinel value; however, the infinite-stream fusion algorithm does not reason about values, and therefore cannot statically determine whether an infinite stream has `finished'.
+In the earlier presentation of fusion, the \Hs/close/ instruction performed fundamentally the same communication as the \Hs/push/ instruction, except that it sent a `close' message instead of a `push' message.
+The earlier presentation of the fusion algorithm used the same static input states of the processes to fuse both forms of communication, so in this sense the \Hs/push/ instruction is representative of the communication involved in the \Hs/close/ instruction.
+Removing the \Hs/close/ instruction from the formalisation does not limit the processes that can be expressed, as finite streams can be represented by pushing a sentinel value that represents the end of the stream.
+However, the infinite-stream fusion algorithm does not statically reason about pushed and pulled values, and cannot statically determine whether an infinite stream has `finished'.
+Therefore, the infinite-stream fusion algorithm may fail for some processes that use infinite encodings of finite-streams, while the finite-stream presentation would succeed.
+In the earlier presentation of fusion, the \Hs/exit/ instruction performed no direct communication between the two processes, and the corresponding clause in the fusion algorithm was straightforward.
+For processes that operate over infinite streams, the \Hs/exit/ instruction is not required as processes can just continue to pull from the input stream.
+The algorithm is conceptually the same despite this simplification to use infinite streams.
+
 The Coq formalisation also uses a separate \Hs@update@ instruction to modify variables in the local heap, rather than attaching heap updates to the \Next~ label of every instruction.
 Performing this desugaring makes the low-level lemmas easier to prove, but we find attaching the updates to each instruction makes for an easier exposition.
 Having a separate \Hs@update@ instruction causes the fusion definition to be slightly more complicated, as two output instructions must be emitted when performing a push or pull followed by an update.
+
 The following datatype defines the available instructions in the formalisation:
+
+\pagebreak
 \begin{coq}
 Inductive Instruction : Type :=
   | Pull    : ScalarV -> ChanV           -> Label -> Instruction
